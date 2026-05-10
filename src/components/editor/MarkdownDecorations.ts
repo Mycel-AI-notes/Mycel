@@ -22,6 +22,31 @@ class WikilinkWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
+class LinkWidget extends WidgetType {
+  constructor(private label: string, private href: string) { super(); }
+  eq(other: LinkWidget) { return this.label === other.label && this.href === other.href; }
+  toDOM() {
+    const a = document.createElement('a');
+    a.className = 'cm-md-link';
+    a.textContent = this.label;
+    a.href = this.href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    return a;
+  }
+  ignoreEvent() { return false; }
+}
+
+class HRWidget extends WidgetType {
+  eq() { return true; }
+  toDOM() {
+    const div = document.createElement('div');
+    div.className = 'cm-md-hr-widget';
+    return div;
+  }
+  ignoreEvent() { return false; }
+}
+
 class CheckboxWidget extends WidgetType {
   constructor(private checked: boolean, private togglePos: number) { super(); }
   eq(other: CheckboxWidget) {
@@ -50,7 +75,7 @@ function cursorOnLine(sel: EditorSelection, lf: number, lt: number): boolean {
 }
 
 function cursorInSpan(sel: EditorSelection, from: number, to: number): boolean {
-  return sel.ranges.some((r) => r.from < to && r.to > from);
+  return sel.ranges.some((r) => r.from <= to && r.to >= from);
 }
 
 const HIDE = Decoration.replace({});
@@ -67,9 +92,22 @@ function buildDecorations(view: EditorView): DecorationSet {
   const lineDecos: LineDeco[] = [];
   const spanDecos: SpanDeco[] = [];
 
-  const hide = (from: number, to: number) => spanDecos.push({ from, to, deco: HIDE });
-  const mark = (from: number, to: number, cls: string) =>
-    spanDecos.push({ from, to, deco: Decoration.mark({ class: cls }) });
+  const hide = (from: number, to: number) => {
+    if (to > from) spanDecos.push({ from, to, deco: HIDE });
+  };
+  const mark = (from: number, to: number, cls: string) => {
+    if (to > from) spanDecos.push({ from, to, deco: Decoration.mark({ class: cls }) });
+  };
+
+  const wrapInline = (mf: number, mt: number, n: number, cls: string) => {
+    if (cursorInSpan(sel, mf, mt)) {
+      mark(mf, mt, cls);
+    } else {
+      hide(mf, mf + n);
+      mark(mf + n, mt - n, cls);
+      hide(mt - n, mt);
+    }
+  };
 
   for (const { from, to } of view.visibleRanges) {
     let pos = from;
@@ -78,37 +116,32 @@ function buildDecorations(view: EditorView): DecorationSet {
       const { text, from: lf, to: lt } = line;
       const onLine = cursorOnLine(sel, lf, lt);
 
-      // ── Headings ──────────────────────────────────────────────────────────
       const hm = text.match(/^(#{1,6}) /);
       if (hm) {
         const level = hm[1].length;
         lineDecos.push({ pos: lf, deco: Decoration.line({ class: `cm-md-h cm-md-h${level}` }) });
-        if (!onLine) {
-          // hide "## " prefix (level chars + 1 space)
-          hide(lf, lf + level + 1);
+        if (!onLine) hide(lf, lf + level + 1);
+        pos = lt + 1;
+        continue;
+      }
+
+      if (/^\s*-{3,}\s*$/.test(text) && text.trim().length >= 3) {
+        if (!onLine && lt > lf) {
+          spanDecos.push({
+            from: lf,
+            to: lt,
+            deco: Decoration.replace({ widget: new HRWidget() }),
+          });
         }
         pos = lt + 1;
         continue;
       }
 
-      // ── HR ────────────────────────────────────────────────────────────────
-      if (/^-{3,}\s*$/.test(text)) {
-        // Only style as HR when cursor is off-line; otherwise show plain dashes
-        // so they're editable.
-        if (!onLine) {
-          lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-hr' }) });
-        }
-        pos = lt + 1;
-        continue;
-      }
-
-      // ── Blockquote ────────────────────────────────────────────────────────
       if (text.startsWith('> ')) {
         lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-blockquote' }) });
         if (!onLine) hide(lf, lf + 2);
       }
 
-      // ── Checkbox ──────────────────────────────────────────────────────────
       if (!onLine) {
         const cbm = text.match(/^(\s*[-*+] )(\[[ x]\])/i);
         if (cbm) {
@@ -122,60 +155,45 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
-      // ── Bold **text** ─────────────────────────────────────────────────────
-      for (const m of text.matchAll(/\*\*(.+?)\*\*/g)) {
+      for (const m of text.matchAll(/`([^`\n]+)`/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        wrapInline(mf, mt, 1, 'cm-md-code');
+      }
+
+      for (const m of text.matchAll(/\*\*([^\n*][^\n]*?)\*\*/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        wrapInline(mf, mt, 2, 'cm-md-bold');
+      }
+
+      for (const m of text.matchAll(/(?<![*\w])\*(?!\*)([^\n*]+?)\*(?![*\w])/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        wrapInline(mf, mt, 1, 'cm-md-italic');
+      }
+
+      for (const m of text.matchAll(/~~([^\n]+?)~~/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        wrapInline(mf, mt, 2, 'cm-md-strike');
+      }
+
+      for (const m of text.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)\)/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
         if (cursorInSpan(sel, mf, mt)) {
-          mark(mf, mt, 'cm-md-bold');
+          mark(mf, mt, 'cm-md-link-mark');
         } else {
-          hide(mf, mf + 2);
-          mark(mf + 2, mt - 2, 'cm-md-bold');
-          hide(mt - 2, mt);
+          spanDecos.push({
+            from: mf,
+            to: mt,
+            deco: Decoration.replace({ widget: new LinkWidget(m[1], m[2]) }),
+          });
         }
       }
 
-      // ── Italic *text* ─────────────────────────────────────────────────────
-      for (const m of text.matchAll(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g)) {
-        const mf = lf + m.index!;
-        const mt = mf + m[0].length;
-        if (cursorInSpan(sel, mf, mt)) {
-          mark(mf, mt, 'cm-md-italic');
-        } else {
-          hide(mf, mf + 1);
-          mark(mf + 1, mt - 1, 'cm-md-italic');
-          hide(mt - 1, mt);
-        }
-      }
-
-      // ── Strikethrough ~~text~~ ────────────────────────────────────────────
-      for (const m of text.matchAll(/~~(.+?)~~/g)) {
-        const mf = lf + m.index!;
-        const mt = mf + m[0].length;
-        if (cursorInSpan(sel, mf, mt)) {
-          mark(mf, mt, 'cm-md-strike');
-        } else {
-          hide(mf, mf + 2);
-          mark(mf + 2, mt - 2, 'cm-md-strike');
-          hide(mt - 2, mt);
-        }
-      }
-
-      // ── Inline code `text` ────────────────────────────────────────────────
-      for (const m of text.matchAll(/`([^`]+)`/g)) {
-        const mf = lf + m.index!;
-        const mt = mf + m[0].length;
-        if (cursorInSpan(sel, mf, mt)) {
-          mark(mf, mt, 'cm-md-code');
-        } else {
-          hide(mf, mf + 1);
-          mark(mf + 1, mt - 1, 'cm-md-code');
-          hide(mt - 1, mt);
-        }
-      }
-
-      // ── Wikilinks [[label]] ──────────────────────────────────────────────
-      for (const m of text.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
+      for (const m of text.matchAll(/\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
         if (!cursorInSpan(sel, mf, mt)) {
@@ -188,9 +206,14 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  spanDecos.sort((a, b) => a.from !== b.from ? a.from - b.from : b.to - a.to);
+  spanDecos.sort((a, b) => {
+    if (a.from !== b.from) return a.from - b.from;
+    const ar = a.deco.startSide < 0 ? 0 : 1;
+    const br = b.deco.startSide < 0 ? 0 : 1;
+    if (ar !== br) return ar - br;
+    return b.to - a.to;
+  });
 
-  // Drop overlapping replace decorations (marks always pass through)
   const safeSpans: SpanDeco[] = [];
   let replaceEnd = -1;
   for (const s of spanDecos) {
@@ -198,11 +221,12 @@ function buildDecorations(view: EditorView): DecorationSet {
     if (isReplace) {
       if (s.from < replaceEnd) continue;
       replaceEnd = s.to;
+    } else {
+      if (s.from < replaceEnd && s.to <= replaceEnd) continue;
     }
     safeSpans.push(s);
   }
 
-  // Merge line decos and span decos in position order
   let li = 0;
   let si = 0;
   while (li < lineDecos.length || si < safeSpans.length) {
@@ -248,7 +272,6 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   },
   '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 32px' },
 
-  // Headings — Obsidian-like: bigger + bolder
   '.cm-md-h':  { fontWeight: '700', color: 'var(--color-text-primary)' },
   '.cm-md-h1': { fontSize: '2em',    lineHeight: '1.25' },
   '.cm-md-h2': { fontSize: '1.6em',  lineHeight: '1.3' },
@@ -257,17 +280,12 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-md-h5': { fontSize: '1em' },
   '.cm-md-h6': { fontSize: '0.9em', color: 'var(--color-text-muted)' },
 
-  '.cm-md-hr': {
-    position: 'relative',
-    color: 'transparent',
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      left: '32px',
-      right: '32px',
-      top: '50%',
-      borderTop: '1px solid var(--color-border)',
-    },
+  '.cm-md-hr-widget': {
+    display: 'inline-block',
+    width: '100%',
+    height: '1px',
+    backgroundColor: 'var(--color-border)',
+    verticalAlign: 'middle',
   },
 
   '.cm-md-blockquote': {
@@ -284,9 +302,17 @@ export const markdownPreviewTheme = EditorView.baseTheme({
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '0.875em',
     backgroundColor: 'var(--color-surface-2)',
+    color: 'var(--color-text-primary)',
     borderRadius: '3px',
-    padding: '1px 4px',
+    padding: '1px 5px',
   },
+
+  '.cm-md-link': {
+    color: 'var(--color-accent)',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+  },
+  '.cm-md-link-mark': { color: 'var(--color-accent)' },
 
   '.cm-wikilink': {
     color: 'var(--color-accent)',
