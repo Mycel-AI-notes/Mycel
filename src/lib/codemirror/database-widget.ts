@@ -83,16 +83,39 @@ class DatabaseWidget extends WidgetType {
     );
   }
 
+  // CM6 uses these to lay out the block before measurement. Without them the
+  // editor sees a 0-height widget and throws "No tile at position N" when the
+  // user clicks near it.
+  get estimatedHeight() {
+    return 280;
+  }
+
+  get lineBreaks() {
+    return 0;
+  }
+
   toDOM(): HTMLElement {
     const container = document.createElement('div');
     container.className = 'cm-db-widget';
     container.contentEditable = 'false';
+    // Stable placeholder so CM6 can measure even before React mounts
+    container.style.minHeight = '120px';
 
+    // Mount React on the next microtask: by then CM6 has placed the container
+    // in the DOM, avoiding measurement against an unmounted shell.
     const dbPath = resolveDbPath(this.notePath, this.source);
+    const viewId = this.viewId;
+    queueMicrotask(() => {
+      if (!container.isConnected || this.root) return;
+      try {
+        const root = createRoot(container);
+        this.root = root;
+        root.render(createElement(DatabaseView, { dbPath, viewId }));
+      } catch (err) {
+        console.error('Failed to mount database widget', err);
+      }
+    });
 
-    const root = createRoot(container);
-    this.root = root;
-    root.render(createElement(DatabaseView, { dbPath, viewId: this.viewId }));
     return container;
   }
 
