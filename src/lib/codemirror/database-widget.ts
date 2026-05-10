@@ -2,19 +2,17 @@ import {
   Decoration,
   DecorationSet,
   EditorView,
-  ViewPlugin,
-  ViewUpdate,
   WidgetType,
 } from '@codemirror/view';
-import { RangeSetBuilder } from '@codemirror/state';
+import { EditorState, RangeSetBuilder, StateField } from '@codemirror/state';
 import { createRoot, Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { DatabaseView } from '@/components/database/DatabaseView';
 import { parseDbBlock, resolveDbPath } from '@/lib/database/resolve';
 
 export interface DbBlockMatch {
-  fenceFrom: number; // start of opening ```
-  fenceTo: number; // end of closing ``` line
+  fenceFrom: number;
+  fenceTo: number;
   contentStart: number;
   contentEnd: number;
   source: string;
@@ -24,8 +22,8 @@ export interface DbBlockMatch {
 const DB_FENCE_OPEN = /^```db\s*$/;
 const FENCE_CLOSE = /^```\s*$/;
 
-function findDbBlocks(view: EditorView): DbBlockMatch[] {
-  const { doc } = view.state;
+function findDbBlocks(state: EditorState): DbBlockMatch[] {
+  const doc = state.doc;
   const out: DbBlockMatch[] = [];
   let line = 1;
   while (line <= doc.lines) {
@@ -99,7 +97,6 @@ class DatabaseWidget extends WidgetType {
   }
 
   destroy() {
-    // Defer to avoid React warning about unmounting during render
     if (this.root) {
       const r = this.root;
       this.root = undefined;
@@ -112,17 +109,14 @@ class DatabaseWidget extends WidgetType {
   }
 }
 
-function buildDecorations(view: EditorView, notePath: string): DecorationSet {
+function buildDecorations(state: EditorState, notePath: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const blocks = findDbBlocks(view);
-  const sel = view.state.selection.main;
+  const blocks = findDbBlocks(state);
+  const sel = state.selection.main;
 
   for (const b of blocks) {
     const cursorInBlock = sel.from <= b.fenceTo && sel.to >= b.fenceFrom;
-    if (cursorInBlock) {
-      // Show raw fence so the user can edit it
-      continue;
-    }
+    if (cursorInBlock) continue;
     builder.add(
       b.fenceFrom,
       b.fenceTo,
@@ -136,27 +130,23 @@ function buildDecorations(view: EditorView, notePath: string): DecorationSet {
   return builder.finish();
 }
 
+// Block decorations cannot live in a ViewPlugin; CodeMirror requires a
+// StateField for them. The field also drives atomicRanges so the cursor skips
+// past the rendered widget instead of landing inside it.
 export function databaseWidgetPlugin(notePath: string) {
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-      constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, notePath);
+  return StateField.define<DecorationSet>({
+    create: (state) => buildDecorations(state, notePath),
+    update(deco, tr) {
+      if (tr.docChanged || tr.selection) {
+        return buildDecorations(tr.state, notePath);
       }
-      update(update: ViewUpdate) {
-        if (update.docChanged || update.selectionSet || update.viewportChanged) {
-          this.decorations = buildDecorations(update.view, notePath);
-        }
-      }
+      return deco.map(tr.changes);
     },
-    {
-      decorations: (v) => v.decorations,
-      provide: (plugin) =>
-        EditorView.atomicRanges.of((view) => {
-          return view.plugin(plugin)?.decorations ?? Decoration.none;
-        }),
-    },
-  );
+    provide: (field) => [
+      EditorView.decorations.from(field),
+      EditorView.atomicRanges.of((view) => view.state.field(field, false) ?? Decoration.none),
+    ],
+  });
 }
 
 export const databaseWidgetTheme = EditorView.baseTheme({
