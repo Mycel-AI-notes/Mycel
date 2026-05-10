@@ -53,7 +53,7 @@ pub struct GraphData {
 
 fn url_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"https?://([^/\s<>\")\]]+)").unwrap())
+    RE.get_or_init(|| Regex::new(r#"https?://([^/\s<>")\]]+)"#).unwrap())
 }
 
 fn parent_folder(rel: &str) -> String {
