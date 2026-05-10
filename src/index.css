@@ -2,62 +2,155 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light theme */
+/*
+ * Mycel — Design Palette v1
+ * Calm dark workspace · bio-tech accents · research software · organic intelligence.
+ * Visual reference: Obsidian × Linear × biology lab.
+ */
+
+/* Light theme — kept as soft variant of the same identity (not the primary mode). */
 :root {
-  --color-surface-0: #ffffff;
-  --color-surface-1: #f8f8f8;
-  --color-surface-2: #efefef;
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #4a4a4a;
-  --color-text-muted: #9a9a9a;
-  --color-accent: #6366f1;
-  --color-border: #e5e5e5;
+  --color-surface-0:        #ffffff;
+  --color-surface-1:        #f7f8f5;
+  --color-surface-2:        #eef1ea;
+  --color-surface-hover:    #e4e9da;
+
+  --color-text-primary:     #1a1f1a;
+  --color-text-secondary:   #4a544a;
+  --color-text-muted:       #7a8275;
+  --color-text-disabled:    #a8aea2;
+
+  --color-accent:           #5C7012;
+  --color-accent-bright:    #97B91E;
+  --color-accent-muted:     #6f8516;
+  --color-accent-deep:      #3f4d0c;
+
+  --color-border:           #d9dccf;
+  --color-border-strong:    #b9bea9;
+
+  --color-success:          #2fa372;
+  --color-warning:          #d68f1a;
+  --color-error:            #d94a4a;
+  --color-info:             #3a82d6;
+
+  --color-graph-active:     #97B91E;
+  --color-graph-connected:  #A7D129;
+  --color-graph-inactive:   #c5cbb6;
+  --color-graph-edge:       #d2d7c4;
+  --color-graph-edge-glow:  #97B91E;
+
+  --color-wikilink:         #5C7012;
+  --color-wikilink-broken:  #c0382b;
+  --color-tag:              #2f7a8a;
+  --color-embedding:        #2faf6c;
+
+  --color-search-bg:        #f1f4ec;
+  --color-search-selected:  #e2e8d4;
+  --color-semantic-glow:    rgba(151, 185, 30, 0.18);
+
+  --color-code-bg:          #eef1ea;
+  --color-inline-code:      #5C7012;
+
+  --color-selection:        rgba(151, 185, 30, 0.22);
+  --color-active-line:      rgba(0, 0, 0, 0.03);
+
+  --shadow-glow:            0 0 24px rgba(151, 185, 30, 0.18);
+
+  color-scheme: light;
 }
 
-/* Dark theme */
+/* Dark theme — the primary Mycel surface. */
 .dark {
-  --color-surface-0: #1c1c1c;
-  --color-surface-1: #141414;
-  --color-surface-2: #242424;
-  --color-text-primary: #e8e8e8;
-  --color-text-secondary: #a0a0a0;
-  --color-text-muted: #606060;
-  --color-accent: #818cf8;
-  --color-border: #2a2a2a;
+  --color-surface-0:        #090B0F;
+  --color-surface-1:        #11151B;
+  --color-surface-2:        #171C24;
+  --color-surface-hover:    #1E2530;
+
+  --color-text-primary:     #F3F5F7;
+  --color-text-secondary:   #B5BDC9;
+  --color-text-muted:       #7C8798;
+  --color-text-disabled:    #596170;
+
+  --color-accent:           #C8F52A;
+  --color-accent-bright:    #D7FF3F;
+  --color-accent-muted:     #97B91E;
+  --color-accent-deep:      #5C7012;
+
+  --color-border:           #232A36;
+  --color-border-strong:    #313A49;
+
+  --color-success:          #3DD68C;
+  --color-warning:          #FFB84D;
+  --color-error:            #FF6B6B;
+  --color-info:             #58A6FF;
+
+  --color-graph-active:     #D7FF3F;
+  --color-graph-connected:  #A7D129;
+  --color-graph-inactive:   #3A4453;
+  --color-graph-edge:       #2A3240;
+  --color-graph-edge-glow:  #C8F52A;
+
+  --color-wikilink:         #B8F542;
+  --color-wikilink-broken:  #FF7B72;
+  --color-tag:              #8BE9FD;
+  --color-embedding:        #8BFFB0;
+
+  --color-search-bg:        #121720;
+  --color-search-selected:  #1B2330;
+  --color-semantic-glow:    rgba(200, 245, 42, 0.18);
+
+  --color-code-bg:          #0F1319;
+  --color-inline-code:      #D7FF3F;
+
+  --color-selection:        rgba(200, 245, 42, 0.18);
+  --color-active-line:      rgba(200, 245, 42, 0.04);
+
+  --shadow-glow:            0 0 24px rgba(200, 245, 42, 0.18);
+
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+html, body {
   background: var(--color-surface-1);
   color: var(--color-text-primary);
 }
 
-/* Scrollbar styling */
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--color-selection);
+  color: var(--color-text-primary);
+}
+
+/* Scrollbar — thin, organic, low-noise. */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: var(--color-border-strong);
 }
 
 /* CodeMirror overrides */
 .cm-editor {
   height: 100%;
+  background: var(--color-surface-1);
 }
 .cm-editor.cm-focused {
   outline: none;
@@ -83,19 +176,27 @@ body {
 .prose-mycel h3 { font-size: 1.25em; }
 .prose-mycel h4 { font-size: 1.1em; }
 .prose-mycel p { margin: 0.75em 0; }
-.prose-mycel a { color: var(--color-accent); text-decoration: underline; }
+.prose-mycel a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+.prose-mycel a:hover { color: var(--color-accent-bright); }
 .prose-mycel strong { font-weight: 700; }
 .prose-mycel em { font-style: italic; }
 .prose-mycel del { opacity: 0.6; text-decoration: line-through; }
 .prose-mycel code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.875em;
-  background: var(--color-surface-2);
+  background: var(--color-code-bg);
+  color: var(--color-inline-code);
   border-radius: 3px;
   padding: 1px 5px;
 }
 .prose-mycel pre {
-  background: var(--color-surface-2);
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 16px;
   overflow-x: auto;
@@ -103,6 +204,7 @@ body {
 }
 .prose-mycel pre code {
   background: none;
+  color: var(--color-text-primary);
   padding: 0;
   font-size: 0.875em;
 }

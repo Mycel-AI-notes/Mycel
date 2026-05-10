@@ -34,14 +34,14 @@ export function VaultPicker() {
         <button
           onClick={handlePickFolder}
           disabled={loading}
-          className="w-full py-3 px-4 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+          className="w-full py-3 px-4 rounded-lg bg-accent text-surface-0 font-medium hover:bg-accent-bright shadow-glow-sm hover:shadow-glow transition-all disabled:opacity-50 disabled:shadow-none"
         >
           {loading ? 'Opening…' : 'Open or Create Vault Folder'}
         </button>
       </div>
 
       {error && (
-        <p className="text-red-400 text-sm text-center max-w-sm">{error}</p>
+        <p className="text-error text-sm text-center max-w-sm">{error}</p>
       )}
 
       <p className="text-text-muted text-xs text-center max-w-xs">

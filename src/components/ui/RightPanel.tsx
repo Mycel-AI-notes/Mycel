@@ -97,7 +97,10 @@ export function RightPanel() {
         {rightPanelTab === 'tags' && note && (
           <div className="flex flex-wrap gap-1">
             {[...(note.parsed.meta.tags ?? []), ...note.parsed.tags].map((tag, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs">
+              <span
+                key={i}
+                className="px-2 py-0.5 rounded-full border border-tag/30 bg-tag/10 text-tag text-xs"
+              >
                 #{tag}
               </span>
             ))}

@@ -69,9 +69,9 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
     <div>
       <div
         className={clsx(
-          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none',
-          'hover:bg-white/8 dark:hover:bg-white/5',
-          isActive && 'bg-accent/15 text-accent',
+          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors',
+          'hover:bg-surface-hover',
+          isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -83,9 +83,9 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
               {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </span>
             {expanded ? (
-              <FolderOpen size={14} className="shrink-0 text-yellow-500/80" />
+              <FolderOpen size={14} className="shrink-0 text-accent-muted/90" />
             ) : (
-              <Folder size={14} className="shrink-0 text-yellow-500/80" />
+              <Folder size={14} className="shrink-0 text-accent-deep" />
             )}
           </>
         ) : (
@@ -116,7 +116,7 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
           <span className="hidden group-hover:flex items-center gap-0.5">
             <button
               onClick={startRename}
-              className="p-0.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+              className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
               title="Rename"
             >
               <Pencil size={11} />
@@ -124,7 +124,7 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
             {!entry.is_dir && (
               <button
                 onClick={handleDelete}
-                className="p-0.5 rounded hover:bg-red-500/20 text-text-muted hover:text-red-400"
+                className="p-0.5 rounded hover:bg-error/15 text-text-muted hover:text-error"
                 title="Delete"
               >
                 <Trash2 size={11} />
@@ -194,14 +194,14 @@ export function FileTree() {
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => startCreate('note')}
-            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
             title="New note"
           >
             <FilePlus size={14} />
           </button>
           <button
             onClick={() => startCreate('folder')}
-            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
             title="New folder"
           >
             <FolderPlus size={14} />

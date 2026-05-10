@@ -87,11 +87,11 @@ export function QuickSwitcher({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/55"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-surface-0 rounded-xl shadow-2xl border border-border overflow-hidden"
+        className="w-full max-w-lg bg-surface-2 rounded-xl shadow-glow border border-border-strong overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
@@ -118,8 +118,8 @@ export function QuickSwitcher({ onClose }: Props) {
                 className={clsx(
                   'w-full flex items-center gap-3 px-4 py-2 text-left',
                   i === selected
-                    ? 'bg-accent/10 text-text-primary'
-                    : 'text-text-secondary hover:bg-surface-1',
+                    ? 'bg-accent/12 text-text-primary border-l-2 border-accent'
+                    : 'text-text-secondary hover:bg-surface-hover border-l-2 border-transparent',
                 )}
               >
                 <FileText size={14} className="shrink-0 text-text-muted" />
