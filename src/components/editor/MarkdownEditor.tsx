@@ -11,46 +11,102 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 
 const themeCompartment = new Compartment();
 
-const lightTheme = EditorView.theme(
-  {
-    '&': {
-      backgroundColor: 'var(--color-surface-1)',
-      color: 'var(--color-text-primary)',
-      height: '100%',
-      fontFamily: "'Inter', system-ui, sans-serif",
-      fontSize: '16px',
+/**
+ * Mycel editor theme — calm dark workspace with acid-moss accents.
+ * Reads colors from CSS custom properties so the theme follows the
+ * active light/dark palette declared in `index.css`.
+ */
+const mycelEditorTheme = (dark: boolean) =>
+  EditorView.theme(
+    {
+      '&': {
+        backgroundColor: 'var(--color-surface-1)',
+        color: 'var(--color-text-primary)',
+        height: '100%',
+        fontFamily: "'Inter', system-ui, sans-serif",
+        fontSize: '16px',
+      },
+      '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
+      '.cm-content': { caretColor: 'var(--color-accent)' },
+      '.cm-activeLine': { backgroundColor: 'var(--color-active-line)' },
+      '.cm-activeLineGutter': {
+        backgroundColor: 'var(--color-active-line)',
+        color: 'var(--color-text-secondary)',
+      },
+      '.cm-gutters': {
+        backgroundColor: 'var(--color-surface-1)',
+        borderRight: '1px solid var(--color-border)',
+        color: 'var(--color-text-muted)',
+      },
+      '.cm-cursor': { borderLeftColor: 'var(--color-accent)' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':
+        { backgroundColor: 'var(--color-selection)' },
+      '.cm-tooltip': {
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-text-primary)',
+      },
+      '.cm-tooltip-autocomplete': {
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '6px',
+        boxShadow: 'var(--shadow-glow)',
+      },
+      '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+        backgroundColor: 'var(--color-surface-hover)',
+        color: 'var(--color-text-primary)',
+      },
+      '.cm-completionLabel': { color: 'var(--color-text-primary)' },
+      '.cm-completionDetail': { color: 'var(--color-text-muted)', fontSize: '11px' },
+      '.cm-completionMatchedText': {
+        color: 'var(--color-accent)',
+        textDecoration: 'none',
+        fontWeight: '600',
+      },
+      '.cm-panels': {
+        backgroundColor: 'var(--color-surface-0)',
+        color: 'var(--color-text-secondary)',
+      },
+      '.cm-searchMatch': { backgroundColor: 'var(--color-semantic-glow)' },
+      '.cm-searchMatch.cm-searchMatch-selected': {
+        backgroundColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
+      },
+      '.cm-selectionMatch': {
+        backgroundColor: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
+      },
     },
-    '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
-    '.cm-content': { caretColor: 'var(--color-accent)' },
-    '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.03)' },
-    '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.03)' },
-    '.cm-gutters': {
-      backgroundColor: 'var(--color-surface-1)',
-      borderRight: '1px solid var(--color-border)',
-      color: 'var(--color-text-muted)',
-    },
-    '.cm-cursor': { borderLeftColor: 'var(--color-accent)' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    },
-    '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--color-surface-0)',
-      border: '1px solid var(--color-border)',
-      borderRadius: '6px',
-    },
-    '.cm-completionLabel': { color: 'var(--color-text-primary)' },
-    '.cm-completionDetail': { color: 'var(--color-text-muted)', fontSize: '11px' },
-  },
-  { dark: false },
-);
+    { dark },
+  );
+
+const mycelHighlightStyle = HighlightStyle.define([
+  { tag: t.heading, color: 'var(--color-text-primary)', fontWeight: '700' },
+  { tag: t.strong, fontWeight: '700' },
+  { tag: t.emphasis, fontStyle: 'italic' },
+  { tag: t.link, color: 'var(--color-accent)', textDecoration: 'underline' },
+  { tag: t.url, color: 'var(--color-info)' },
+  { tag: t.keyword, color: 'var(--color-accent-bright)' },
+  { tag: [t.string, t.special(t.string)], color: 'var(--color-embedding)' },
+  { tag: t.comment, color: 'var(--color-text-muted)', fontStyle: 'italic' },
+  { tag: t.number, color: 'var(--color-warning)' },
+  { tag: t.bool, color: 'var(--color-warning)' },
+  { tag: [t.variableName, t.propertyName], color: 'var(--color-text-primary)' },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: 'var(--color-accent-bright)' },
+  { tag: [t.typeName, t.className], color: 'var(--color-tag)' },
+  { tag: t.tagName, color: 'var(--color-accent)' },
+  { tag: t.attributeName, color: 'var(--color-accent-muted)' },
+  { tag: t.operator, color: 'var(--color-text-secondary)' },
+  { tag: t.punctuation, color: 'var(--color-text-muted)' },
+  { tag: t.invalid, color: 'var(--color-error)' },
+  { tag: t.monospace, color: 'var(--color-inline-code)' },
+]);
 
 interface Props {
   path: string;
@@ -105,7 +161,10 @@ export function MarkdownEditor({ path }: Props) {
         markdownPreviewTheme,
         wikilinkAutocomplete,
         themeCompartment.of(
-          isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
+          [
+            mycelEditorTheme(isDark),
+            syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
+          ],
         ),
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
@@ -129,9 +188,10 @@ export function MarkdownEditor({ path }: Props) {
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: themeCompartment.reconfigure(
-        isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
-      ),
+      effects: themeCompartment.reconfigure([
+        mycelEditorTheme(isDark),
+        syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
+      ]),
     });
   }, [isDark]);
 
@@ -148,7 +208,7 @@ export function MarkdownEditor({ path }: Props) {
         <span className="text-xs text-text-muted font-mono">{path}</span>
         <button
           onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-          className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
+          className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
           title="Save (Ctrl/Cmd+S)"
         >
           Save

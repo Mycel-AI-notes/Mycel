@@ -61,7 +61,7 @@ export default function App() {
       <header className="flex items-center px-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2">
         <button
           onClick={toggleSidebar}
-          className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+          className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
           title="Toggle sidebar"
         >
           {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -81,7 +81,7 @@ export default function App() {
         <div className="flex items-center gap-1">
           <button
             onClick={openDailyNote}
-            className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             title="Daily note (Cmd+D)"
           >
             <CalendarDays size={16} />
@@ -89,7 +89,7 @@ export default function App() {
 
           <button
             onClick={toggleRightPanel}
-            className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             title="Toggle right panel"
           >
             {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
