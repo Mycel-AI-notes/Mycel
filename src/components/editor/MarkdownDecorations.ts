@@ -308,7 +308,7 @@ export const markdownPreviewTheme = EditorView.baseTheme({
     fontFamily: "'Inter', system-ui, sans-serif",
     boxSizing: 'border-box',
   },
-  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 16px' },
+  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 24px' },
 
   '.cm-md-h':  { fontWeight: '700', color: 'var(--color-text-primary)' },
   '.cm-md-h1': { fontSize: '2em',    lineHeight: '1.25' },
