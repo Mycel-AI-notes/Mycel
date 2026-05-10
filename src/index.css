@@ -717,18 +717,14 @@ body {
   transform: rotate(180deg);
 }
 .db-select-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 100;
-  min-width: 100%;
+  /* Position is applied inline by the component (fixed + body-portal),
+     so escaping ancestor overflow:hidden / overflow:auto clipping. */
   max-height: 240px;
   overflow-y: auto;
   background: var(--color-surface-0);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   padding: 4px 0;
 }
 .db-select-option {

@@ -1,4 +1,5 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 export interface SelectOption<T extends string> {
@@ -16,6 +17,12 @@ interface Props<T extends string> {
   disabled?: boolean;
 }
 
+interface AnchorPos {
+  top: number;
+  left: number;
+  width: number;
+}
+
 export function Select<T extends string>({
   value,
   options,
@@ -26,12 +33,41 @@ export function Select<T extends string>({
   disabled,
 }: Props<T>) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<AnchorPos | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Re-position the floating list every time it opens, every frame the
+  // window scrolls or resizes. Using fixed positioning + portal escapes
+  // ancestor `overflow:hidden` / `overflow:auto` clipping, which was the
+  // root cause of the dropdown getting cut off inside modals and popovers.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      setPos(null);
+      return;
+    }
+    const update = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener('resize', update);
+    // capture-phase scroll listener catches scrolls in any nested scroll
+    // container, not just the viewport.
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (listRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -41,12 +77,12 @@ export function Select<T extends string>({
 
   return (
     <div
-      ref={ref}
       className={`db-select ${className ?? ''}`}
       style={{ width }}
       data-disabled={disabled || undefined}
     >
       <button
+        ref={triggerRef}
         type="button"
         className={`db-select-trigger ${open ? 'is-open' : ''}`}
         disabled={disabled}
@@ -64,25 +100,39 @@ export function Select<T extends string>({
           className={`db-select-chevron ${open ? 'is-open' : ''}`}
         />
       </button>
-      {open && (
-        <div className="db-select-list" role="listbox">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="option"
-              aria-selected={o.value === value}
-              className={`db-select-option ${o.value === value ? 'is-active' : ''}`}
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={listRef}
+            className="db-select-list"
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.width,
+              zIndex: 1000,
+            }}
+          >
+            {options.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={o.value === value}
+                className={`db-select-option ${o.value === value ? 'is-active' : ''}`}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
