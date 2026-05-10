@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Filter, ArrowUpDown, Columns } from 'lucide-react';
+import { Plus, Filter, ArrowUpDown, Columns, Settings } from 'lucide-react';
 import type { ColumnDef, SortDef, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
 
@@ -8,10 +8,12 @@ interface Props {
   view: ViewDef;
   filterCount: number;
   filtersOpen: boolean;
+  pagesDir: string | null;
   onAddRow: () => void;
   onToggleFilters: () => void;
   onSortChange: (sort: SortDef | null) => void;
   onColumnsChange: (visibleColumns: string[]) => void;
+  onPagesDirChange: (dir: string | null) => void;
 }
 
 function ColumnsPopover({
@@ -127,18 +129,82 @@ function SortPopover({
   );
 }
 
+function SettingsPopover({
+  pagesDir,
+  onChange,
+  onClose,
+}: {
+  pagesDir: string | null;
+  onChange: (dir: string | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState(pagesDir ?? '');
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  function commit() {
+    const trimmed = draft.trim().replace(/^\/+|\/+$/g, '');
+    onChange(trimmed || null);
+    onClose();
+  }
+
+  return (
+    <div ref={ref} className="db-popover db-settings-popover">
+      <div className="db-popover-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+          Pages folder (relative to vault)
+        </label>
+        <input
+          autoFocus
+          value={draft}
+          placeholder="leave empty for default"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') onClose();
+          }}
+          style={{
+            padding: '6px 8px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            background: 'var(--color-surface-1)',
+            color: 'var(--color-text-primary)',
+            fontSize: 12,
+          }}
+        />
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+          Default: subfolder named after the database file.
+        </span>
+      </div>
+      <button className="db-popover-item" onClick={commit}>
+        Save
+      </button>
+    </div>
+  );
+}
+
 export function DatabaseToolbar({
   schema,
   view,
   filterCount,
   filtersOpen,
+  pagesDir,
   onAddRow,
   onToggleFilters,
   onSortChange,
   onColumnsChange,
+  onPagesDirChange,
 }: Props) {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="db-toolbar">
@@ -177,6 +243,22 @@ export function DatabaseToolbar({
             visible={view.visible_columns}
             onChange={onColumnsChange}
             onClose={() => setColumnsOpen(false)}
+          />
+        )}
+      </div>
+      <div className="db-popover-anchor" style={{ marginLeft: 'auto' }}>
+        <button
+          className="db-btn"
+          title="Database settings"
+          onClick={() => setSettingsOpen((v) => !v)}
+        >
+          <Settings size={12} />
+        </button>
+        {settingsOpen && (
+          <SettingsPopover
+            pagesDir={pagesDir}
+            onChange={onPagesDirChange}
+            onClose={() => setSettingsOpen(false)}
           />
         )}
       </div>

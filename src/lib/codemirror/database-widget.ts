@@ -98,11 +98,17 @@ class DatabaseWidget extends WidgetType {
     const container = document.createElement('div');
     container.className = 'cm-db-widget';
     container.contentEditable = 'false';
-    // Stable placeholder so CM6 can measure even before React mounts
     container.style.minHeight = '120px';
 
-    // Mount React on the next microtask: by then CM6 has placed the container
-    // in the DOM, avoiding measurement against an unmounted shell.
+    // Block CodeMirror from interpreting clicks inside the widget as a cursor
+    // movement into the underlying ```db block. Without this, CM6 sets the
+    // selection to a position inside the fence range, the StateField sees the
+    // cursor inside the block, and the widget collapses back to raw fence.
+    const stop = (e: Event) => e.stopPropagation();
+    container.addEventListener('mousedown', stop);
+    container.addEventListener('mouseup', stop);
+    container.addEventListener('click', stop);
+
     const dbPath = resolveDbPath(this.notePath, this.source);
     const viewId = this.viewId;
     queueMicrotask(() => {

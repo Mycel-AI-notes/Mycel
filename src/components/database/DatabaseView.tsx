@@ -170,13 +170,25 @@ export function DatabaseView({ dbPath, viewId }: Props) {
   const handleAddColumn = useCallback(
     async (columnId: string, def: ColumnDef) => {
       if (!db) return;
+      if (db.schema[columnId]) {
+        alert(`Column "${columnId}" already exists`);
+        return;
+      }
+      const nextSchema = { ...db.schema, [columnId]: def };
+      const nextViews: Record<string, ViewDef> = {};
+      for (const [vid, vdef] of Object.entries(db.views)) {
+        nextViews[vid] = vdef.visible_columns.includes(columnId)
+          ? vdef
+          : { ...vdef, visible_columns: [...vdef.visible_columns, columnId] };
+      }
+      setDb({ ...db, schema: nextSchema, views: nextViews });
+      setAddColumnOpen(false);
       try {
         await dbApi.addColumn(dbPath, columnId, def);
-        setAddColumnOpen(false);
-        reload();
       } catch (err) {
         console.error(err);
         alert(String(err));
+        reload();
       }
     },
     [db, dbPath, reload],
@@ -202,11 +214,28 @@ export function DatabaseView({ dbPath, viewId }: Props) {
   const handleDeleteColumn = useCallback(
     async (columnId: string) => {
       if (!db) return;
+      const nextSchema = { ...db.schema };
+      delete nextSchema[columnId];
+      const nextViews: Record<string, ViewDef> = {};
+      for (const [vid, vdef] of Object.entries(db.views)) {
+        nextViews[vid] = {
+          ...vdef,
+          visible_columns: vdef.visible_columns.filter((c) => c !== columnId),
+          filters: vdef.filters.filter((f) => f.field !== columnId),
+          sort: vdef.sort && vdef.sort.field === columnId ? null : vdef.sort,
+        };
+      }
+      const nextRows = db.rows.map((r) => {
+        if (!(columnId in r)) return r;
+        const { [columnId]: _drop, ...rest } = r;
+        return rest as typeof r;
+      });
+      setDb({ ...db, schema: nextSchema, views: nextViews, rows: nextRows });
       try {
         await dbApi.deleteColumn(dbPath, columnId);
-        reload();
       } catch (err) {
         console.error(err);
+        reload();
       }
     },
     [db, dbPath, reload],
@@ -305,10 +334,22 @@ export function DatabaseView({ dbPath, viewId }: Props) {
         view={view}
         filterCount={view.filters.length}
         filtersOpen={filtersOpen}
+        pagesDir={db.pages_dir ?? null}
         onAddRow={handleAddRow}
         onToggleFilters={() => setFiltersOpen((v) => !v)}
         onSortChange={handleSortChange}
         onColumnsChange={handleColumnsChange}
+        onPagesDirChange={async (dir) => {
+          if (!db) return;
+          const next = { ...db, pages_dir: dir };
+          setDb(next);
+          try {
+            await dbApi.write(dbPath, next);
+          } catch (err) {
+            console.error(err);
+            reload();
+          }
+        }}
       />
       {filtersOpen && (
         <DatabaseFilterPanel

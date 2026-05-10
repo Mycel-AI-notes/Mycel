@@ -532,6 +532,19 @@ body {
   color: var(--color-text-primary);
   border-color: var(--color-text-muted);
 }
+.db-pagelink-hint {
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+}
+.db-pagelink-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--color-surface-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
 
 .db-wikilink {
   color: var(--color-accent);

@@ -56,6 +56,7 @@ export interface Row {
 
 export interface Database {
   version: number;
+  pages_dir?: string | null;
   schema: Record<string, ColumnDef>;
   views: Record<string, ViewDef>;
   rows: Row[];

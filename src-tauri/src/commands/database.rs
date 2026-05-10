@@ -80,6 +80,12 @@ pub struct Row {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Database {
     pub version: u32,
+    /// Directory (relative to vault root, or relative to the .db.json) where
+    /// pages created from rows should be stored. When `None`, pages go into a
+    /// subfolder named after the .db.json file (e.g. `books.db.json` →
+    /// `books/`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages_dir: Option<String>,
     #[serde(default)]
     pub schema: IndexMap<String, ColumnDef>,
     #[serde(default)]
@@ -95,6 +101,7 @@ impl Default for Database {
     fn default() -> Self {
         Self {
             version: 1,
+            pages_dir: None,
             schema: IndexMap::new(),
             views: IndexMap::new(),
             rows: Vec::new(),
@@ -349,6 +356,39 @@ pub async fn db_update_view(
     write_db(&abs, &db)?;
     emit_changed(&app, &path);
     Ok(())
+}
+
+/// Compute the default directory (vault-relative) where pages from a database
+/// should be stored. Honors `pages_dir` from the file; otherwise falls back to
+/// `<db-dir>/<db-stem>/`.
+#[tauri::command]
+pub async fn db_pages_dir(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let root = vault_root(&state).await?;
+    let abs = root.join(&path);
+    let db = read_db(&abs)?;
+    Ok(resolve_pages_dir(&path, db.pages_dir.as_deref()))
+}
+
+fn resolve_pages_dir(db_path: &str, pages_dir: Option<&str>) -> String {
+    if let Some(custom) = pages_dir {
+        let trimmed = custom.trim().trim_matches('/');
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    let db_path = db_path.replace('\\', "/");
+    let file = db_path.rsplit('/').next().unwrap_or(&db_path);
+    let stem = file.trim_end_matches(".db.json");
+    let dir_prefix = if let Some(idx) = db_path.rfind('/') {
+        &db_path[..idx]
+    } else {
+        ""
+    };
+    if dir_prefix.is_empty() {
+        stem.to_string()
+    } else {
+        format!("{dir_prefix}/{stem}")
+    }
 }
 
 #[tauri::command]
