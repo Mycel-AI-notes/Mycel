@@ -6,10 +6,12 @@ import {
   Columns,
   Settings,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { ColumnDef, FilterDef, SortDef, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
 import { operatorsFor } from '@/lib/database/filtering';
+import { Select } from './Select';
 
 interface Props {
   schema: Record<string, ColumnDef>;
@@ -90,34 +92,31 @@ function SortPopover({
   const ref = useRef<HTMLDivElement>(null);
   usePopoverClose(ref, onClose);
 
+  const fieldOptions = [
+    { value: '', label: <span style={{ color: 'var(--color-text-muted)' }}>None</span> },
+    ...Object.entries(schema).map(([id, def]) => ({ value: id, label: def.label })),
+  ];
+
   return (
     <div ref={ref} className="db-popover db-sort-popover">
-      <div className="db-popover-row">
-        <select
+      <div className="db-popover-row" style={{ gap: 6 }}>
+        <Select
           value={sort?.field ?? ''}
-          onChange={(e) => {
-            const v = e.target.value;
+          options={fieldOptions}
+          onChange={(v) => {
             if (!v) onChange(null);
             else onChange({ field: v, dir: sort?.dir ?? 'asc' });
           }}
-        >
-          <option value="">—</option>
-          {Object.entries(schema).map(([id, def]) => (
-            <option key={id} value={id}>
-              {def.label}
-            </option>
-          ))}
-        </select>
-        <select
+        />
+        <Select<'asc' | 'desc'>
           value={sort?.dir ?? 'asc'}
           disabled={!sort}
-          onChange={(e) =>
-            sort && onChange({ ...sort, dir: e.target.value as 'asc' | 'desc' })
-          }
-        >
-          <option value="asc">Asc</option>
-          <option value="desc">Desc</option>
-        </select>
+          options={[
+            { value: 'asc', label: 'Ascending' },
+            { value: 'desc', label: 'Descending' },
+          ]}
+          onChange={(dir) => sort && onChange({ ...sort, dir })}
+        />
       </div>
       {sort && (
         <button
@@ -175,12 +174,17 @@ function FiltersModal({
             const col = schema[f.field];
             const ops = col ? operatorsFor(col.type) : [];
             const opDef = ops.find((o) => o.op === f.op) ?? ops[0];
+            const fieldOptions = columnIds.map((cid) => ({
+              value: cid,
+              label: schema[cid].label,
+            }));
+            const opOptions = ops.map((o) => ({ value: o.op, label: o.label }));
             return (
               <div key={idx} className="db-filter-row">
-                <select
+                <Select
                   value={f.field}
-                  onChange={(e) => {
-                    const newField = e.target.value;
+                  options={fieldOptions}
+                  onChange={(newField) => {
                     const newOps = operatorsFor(schema[newField].type);
                     update(idx, {
                       field: newField,
@@ -188,40 +192,25 @@ function FiltersModal({
                       value: '',
                     });
                   }}
-                >
-                  {columnIds.map((cid) => (
-                    <option key={cid} value={cid}>
-                      {schema[cid].label}
-                    </option>
-                  ))}
-                </select>
-                <select
+                />
+                <Select<FilterDef['op']>
                   value={f.op}
-                  onChange={(e) =>
-                    update(idx, { op: e.target.value as FilterDef['op'] })
-                  }
-                >
-                  {ops.map((o) => (
-                    <option key={o.op} value={o.op}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  options={opOptions}
+                  onChange={(op) => update(idx, { op })}
+                />
                 {opDef?.needsValue && col?.type === 'select' && (
-                  <select
+                  <Select
                     value={String(f.value ?? '')}
-                    onChange={(e) => update(idx, { value: e.target.value })}
-                  >
-                    <option value="">—</option>
-                    {(col.options ?? []).map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: <span style={{ color: 'var(--color-text-muted)' }}>—</span> },
+                      ...(col.options ?? []).map((o) => ({ value: o, label: o })),
+                    ]}
+                    onChange={(v) => update(idx, { value: v })}
+                  />
                 )}
                 {opDef?.needsValue && col?.type !== 'select' && (
                   <input
+                    className="db-filter-input"
                     type={
                       col?.type === 'number'
                         ? 'number'
@@ -231,6 +220,7 @@ function FiltersModal({
                     }
                     value={String(f.value ?? '')}
                     onChange={(e) => update(idx, { value: e.target.value })}
+                    placeholder="value"
                   />
                 )}
                 <button
@@ -238,7 +228,7 @@ function FiltersModal({
                   onClick={() => remove(idx)}
                   title="Remove"
                 >
-                  ×
+                  <X size={12} />
                 </button>
               </div>
             );

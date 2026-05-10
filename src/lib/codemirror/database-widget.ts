@@ -2,9 +2,16 @@ import {
   Decoration,
   DecorationSet,
   EditorView,
+  GutterMarker,
   WidgetType,
+  gutterLineClass,
 } from '@codemirror/view';
-import { EditorState, RangeSetBuilder, StateField } from '@codemirror/state';
+import {
+  EditorState,
+  RangeSet,
+  RangeSetBuilder,
+  StateField,
+} from '@codemirror/state';
 import { createRoot, Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { DatabaseView } from '@/components/database/DatabaseView';
@@ -179,19 +186,54 @@ function buildDecorations(state: EditorState, notePath: string): DecorationSet {
 // Block decorations cannot live in a ViewPlugin; CodeMirror requires a
 // StateField for them. The field also drives atomicRanges so the cursor skips
 // past the rendered widget instead of landing inside it.
+//
+// Returns an array because we also expose gutter classes for the lines the
+// widget occupies so the gutter (line numbers + active-line highlight) can be
+// hidden — otherwise the gutter flickers behind the widget every time it
+// re-renders.
+const fenceGutterMarker = new (class extends GutterMarker {
+  elementClass = 'cm-db-fence-gutter';
+})();
+
+function buildGutterMarkers(state: EditorState): RangeSet<GutterMarker> {
+  const builder = new RangeSetBuilder<GutterMarker>();
+  const blocks = findDbBlocks(state);
+  for (const b of blocks) {
+    const startLine = state.doc.lineAt(b.fenceFrom);
+    const endLine = state.doc.lineAt(b.fenceTo);
+    for (let n = startLine.number; n <= endLine.number; n++) {
+      const ln = state.doc.line(n);
+      builder.add(ln.from, ln.from, fenceGutterMarker);
+    }
+  }
+  return builder.finish();
+}
+
 export function databaseWidgetPlugin(notePath: string) {
-  return StateField.define<DecorationSet>({
+  const decorationsField = StateField.define<DecorationSet>({
     create: (state) => buildDecorations(state, notePath),
     update(deco, tr) {
-      // Selection alone doesn't affect what we render — only doc edits do.
       if (tr.docChanged) return buildDecorations(tr.state, notePath);
       return deco.map(tr.changes);
     },
     provide: (field) => [
       EditorView.decorations.from(field),
-      EditorView.atomicRanges.of((view) => view.state.field(field, false) ?? Decoration.none),
+      EditorView.atomicRanges.of(
+        (view) => view.state.field(field, false) ?? Decoration.none,
+      ),
     ],
   });
+
+  const gutterField = StateField.define<RangeSet<GutterMarker>>({
+    create: (state) => buildGutterMarkers(state),
+    update(rs, tr) {
+      if (tr.docChanged) return buildGutterMarkers(tr.state);
+      return rs.map(tr.changes);
+    },
+    provide: (field) => gutterLineClass.from(field),
+  });
+
+  return [decorationsField, gutterField];
 }
 
 export const databaseWidgetTheme = EditorView.baseTheme({
@@ -201,5 +243,11 @@ export const databaseWidgetTheme = EditorView.baseTheme({
     borderRadius: '6px',
     overflow: 'hidden',
     backgroundColor: 'var(--color-surface-0)',
+  },
+  // Hide gutter (line number + active-line highlight) for lines under a
+  // database widget. Without this they flicker every time the widget
+  // re-renders or the table changes height.
+  '.cm-db-fence-gutter': {
+    visibility: 'hidden',
   },
 });

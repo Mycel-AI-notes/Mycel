@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ColumnDef, ColumnType } from '@/types/database';
+import { Select } from './Select';
 
 interface Props {
   existingIds: Set<string>;
@@ -79,17 +80,11 @@ export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
           }}
         />
         <label className="db-settings-label">Type</label>
-        <select
-          className="db-settings-input"
+        <Select<ColumnType>
           value={type}
-          onChange={(e) => setType(e.target.value as ColumnType)}
-        >
-          {TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+          options={TYPES.map((t) => ({ value: t.value, label: t.label }))}
+          onChange={(v) => setType(v)}
+        />
         {needsOptions && (
           <>
             <label className="db-settings-label">Options</label>
