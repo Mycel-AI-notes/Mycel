@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { dbApi } from '@/lib/database/api';
 import { Plus, Database } from 'lucide-react';
@@ -78,7 +79,7 @@ export function DatabasePicker({ currentNotePath, onPick, onCancel }: Props) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="db-modal-overlay" onMouseDown={onCancel}>
       <div className="db-modal db-picker" onMouseDown={(e) => e.stopPropagation()}>
         {!creating && !selected && (
@@ -188,6 +189,7 @@ export function DatabasePicker({ currentNotePath, onPick, onCancel }: Props) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

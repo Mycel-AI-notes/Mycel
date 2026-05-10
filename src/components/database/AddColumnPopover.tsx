@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ColumnDef, ColumnType } from '@/types/database';
 import { Select } from './Select';
 
@@ -55,7 +56,7 @@ export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
     onSubmit(id, def);
   }
 
-  return (
+  return createPortal(
     <div className="db-modal-overlay" onMouseDown={onClose}>
       <div
         className="db-modal db-add-column-modal"
@@ -105,6 +106,7 @@ export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

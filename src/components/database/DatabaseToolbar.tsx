@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus,
   Filter,
@@ -159,17 +160,19 @@ function FiltersModal({
     onChange([...filters, { field: first, op: ops[0].op, value: '' }]);
   }
 
-  return (
+  return createPortal(
     <div className="db-modal-overlay" onMouseDown={onClose}>
       <div
         className="db-modal db-filters-modal"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h3 className="db-modal-title">Filters</h3>
+        {filters.length === 0 && (
+          <div className="db-filter-empty">
+            No filters yet. Add one below.
+          </div>
+        )}
         <div className="db-filters-list">
-          {filters.length === 0 && (
-            <div className="db-filter-empty">No filters yet.</div>
-          )}
           {filters.map((f, idx) => {
             const col = schema[f.field];
             const ops = col ? operatorsFor(col.type) : [];
@@ -249,7 +252,8 @@ function FiltersModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -329,36 +329,6 @@ body {
   accent-color: var(--color-accent);
 }
 
-.db-filter-panel {
-  padding: 8px 8px 4px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-1);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.db-filter-empty {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-.db-filter-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.db-filter-row select,
-.db-filter-row input {
-  padding: 3px 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-surface-0);
-  color: var(--color-text-primary);
-  font-size: 12px;
-}
-.db-filter-row input {
-  flex: 1;
-}
-
 .db-table-wrap {
   overflow-x: auto;
 }
@@ -630,50 +600,48 @@ body {
   min-width: 520px;
   max-width: 720px;
 }
+/* Bordered list like .db-picker-list — gives the filter modal the same
+   structured-list feel as the /db picker. */
 .db-filters-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   max-height: 360px;
   overflow-y: auto;
-  padding: 4px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+.db-filters-list:empty {
+  display: none;
 }
 .db-filter-empty {
   font-size: 12px;
   color: var(--color-text-muted);
   text-align: center;
   padding: 16px 0;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  margin: 4px 0;
 }
 .db-filter-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
 }
-.db-filter-row select,
-.db-filter-row input {
-  padding: 5px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
-  font-size: 12px;
-  min-width: 0;
-}
-.db-filter-row > select:first-child {
-  flex: 1.2;
-}
-.db-filter-row > select:nth-child(2) {
-  flex: 1;
+.db-filter-row:last-child {
+  border-bottom: none;
 }
 .db-filter-row > .db-select:first-child {
-  flex: 1.2;
+  flex: 1.1;
 }
 .db-filter-row > .db-select:nth-child(2) {
   flex: 1;
 }
 .db-filter-row > .db-filter-input,
 .db-filter-row > .db-select:nth-child(3) {
-  flex: 1.5;
+  flex: 1.4;
 }
 .db-filter-input {
   padding: 5px 8px;
