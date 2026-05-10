@@ -31,32 +31,22 @@ export function makeWikilinkClickHandler(
   createNote: (path: string) => Promise<void>,
 ) {
   return EditorView.domEventHandlers({
-    click(event, view) {
-      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-      if (pos === null) return false;
+    click(event, _view) {
+      // Only navigate when clicking the rendered widget, not raw [[...]] text.
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains('cm-wikilink')) return false;
 
-      const line = view.state.doc.lineAt(pos);
-      const text = line.text;
-      const col = pos - line.from;
+      const label = target.textContent?.trim() ?? '';
+      if (!label) return false;
 
-      const wikilinkRe = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-      let match;
-      while ((match = wikilinkRe.exec(text)) !== null) {
-        const start = match.index;
-        const end = match.index + match[0].length;
-        if (col >= start && col <= end) {
-          const target = match[1].trim();
-          void resolveWikilink(target).then((resolved) => {
-            if (resolved) {
-              void openNote(resolved);
-            } else {
-              void createNote(`${target}.md`);
-            }
-          });
-          return true;
+      void resolveWikilink(label).then((resolved) => {
+        if (resolved) {
+          void openNote(resolved);
+        } else {
+          void createNote(`${label}.md`);
         }
-      }
-      return false;
+      });
+      return true;
     },
   });
 }
