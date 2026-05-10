@@ -16,6 +16,7 @@ interface VaultState {
   setActiveTab: (path: string) => void;
   saveNote: (path: string, content: string) => Promise<void>;
   createNote: (path: string) => Promise<void>;
+  createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
   markDirty: (path: string, dirty: boolean) => void;
@@ -100,6 +101,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         activeTabPath: path,
       };
     });
+    await get().refreshTree();
+  },
+
+  createFolder: async (path) => {
+    await invoke('folder_create', { path });
     await get().refreshTree();
   },
 

@@ -69,6 +69,20 @@ pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(),
 }
 
 #[tauri::command]
+pub async fn folder_create(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    let abs_path = vault_root.join(&path);
+    std::fs::create_dir_all(&abs_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn note_rename(old_path: String, new_path: String, state: State<'_, AppState>) -> Result<(), String> {
     let vault_root = {
         let guard = state.vault.lock().await;
