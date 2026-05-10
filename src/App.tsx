@@ -9,6 +9,7 @@ import { EditorTabs } from '@/components/editor/EditorTabs';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { EmptyEditor } from '@/components/editor/EmptyEditor';
 import { RightPanel } from '@/components/ui/RightPanel';
+import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { Logo } from '@/components/brand/Logo';
@@ -119,6 +120,8 @@ export default function App() {
           >
             <CalendarDays size={16} />
           </button>
+
+          <PalettePicker />
 
           <button
             onClick={toggleRightPanel}

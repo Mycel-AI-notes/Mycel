@@ -44,8 +44,8 @@ export default {
         embedding: 'var(--color-embedding)',
       },
       boxShadow: {
-        glow: '0 0 24px rgba(200, 245, 42, 0.18)',
-        'glow-sm': '0 0 12px rgba(200, 245, 42, 0.14)',
+        glow: 'var(--shadow-glow)',
+        'glow-sm': '0 0 12px color-mix(in srgb, var(--color-accent) 22%, transparent)',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
