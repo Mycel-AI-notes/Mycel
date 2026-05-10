@@ -7,11 +7,14 @@
 <p align="center"><strong>Local-first Markdown knowledge base.</strong></p>
 
 <!-- Screenshots go here -->
-<!--
+
 <p align="center">
-  <img src="docs/screenshots/editor.png" alt="Mycel editor" width="800">
+  <img src="public/demo_db_start.png" alt="Mycel editor" width="800">
 </p>
--->
+
+<p align="center">
+  <img src="public/demo_db.png" alt="Mycel editor" width="800">
+</p>
 
 
 Mycel is a desktop note-taking app built on [Tauri 2](https://tauri.app) + Rust + React. Open any folder, start writing — your notes stay as plain `.md` files on disk, no cloud account required.
