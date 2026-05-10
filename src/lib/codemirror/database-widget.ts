@@ -246,8 +246,14 @@ export const databaseWidgetTheme = EditorView.baseTheme({
   },
   // Hide gutter (line number + active-line highlight) for lines under a
   // database widget. Without this they flicker every time the widget
-  // re-renders or the table changes height.
+  // re-renders or the table changes height. Also clear the background so
+  // .cm-activeLineGutter doesn't paint a colored stripe in the gutter
+  // column when the cursor lands on a fence-boundary line.
   '.cm-db-fence-gutter': {
     visibility: 'hidden',
+    backgroundColor: 'transparent !important',
+  },
+  '.cm-db-fence-gutter.cm-activeLineGutter': {
+    backgroundColor: 'transparent !important',
   },
 });

@@ -546,11 +546,9 @@ body {
   border-radius: 3px;
 }
 
-.db-settings-popover,
-.db-filters-popover,
-.db-add-column-popover,
-.db-sort-popover,
-.db-columns-popover {
+.db-settings-popover {
+  /* Settings button is glued to the right edge — open the popover leftward
+     so it doesn't fall off the right side of the toolbar. */
   right: 0;
   left: auto;
   min-width: 260px;

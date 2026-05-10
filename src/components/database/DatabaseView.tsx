@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { dbApi } from '@/lib/database/api';
@@ -32,7 +32,6 @@ export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
   const [error, setError] = useState<ErrorState | null>(null);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
-  const addColumnButtonRef = useRef<HTMLButtonElement>(null);
 
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
@@ -373,11 +372,9 @@ export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
         onResizeColumn={handleResizeColumn}
         onSortColumn={handleSortColumn}
         onRowReload={reload}
-        addColumnButtonRef={addColumnButtonRef}
       />
       {addColumnOpen && (
         <AddColumnPopover
-          anchorRef={addColumnButtonRef}
           existingIds={new Set(Object.keys(db.schema))}
           onSubmit={handleAddColumn}
           onClose={() => setAddColumnOpen(false)}
