@@ -2172,6 +2172,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "gray_matter",
+ "indexmap 2.14.0",
  "notify",
  "pulldown-cmark",
  "regex",
@@ -2184,6 +2185,7 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
  "walkdir",
 ]
 

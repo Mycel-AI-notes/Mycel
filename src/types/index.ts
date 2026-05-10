@@ -3,7 +3,10 @@ export interface FileEntry {
   path: string;
   is_dir: boolean;
   children?: FileEntry[];
+  is_knowledge_base?: boolean;
 }
+
+export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
 
 export interface NoteMeta {
   title?: string;
@@ -41,4 +44,8 @@ export interface Tab {
   path: string;
   title: string;
   isDirty: boolean;
+  /// Preview tabs are transient: opening another preview tab replaces them
+  /// instead of appending. Saving the file promotes a preview tab to a
+  /// regular pinned tab. Double-clicking the tab also pins it.
+  isPreview?: boolean;
 }

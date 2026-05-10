@@ -1,7 +1,12 @@
 use crate::core::parser::{parse_note, ParsedNote};
+use crate::core::vault::KNOWLEDGE_BASE_DIR;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+
+fn is_protected(rel_path: &str) -> bool {
+    rel_path == KNOWLEDGE_BASE_DIR
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Note {
@@ -83,6 +88,9 @@ pub async fn folder_create(path: String, state: State<'_, AppState>) -> Result<(
 
 #[tauri::command]
 pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if is_protected(&path) {
+        return Err("This folder is managed by Mycel and cannot be deleted".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -91,12 +99,19 @@ pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(),
             .ok_or("No vault open")?
     };
     let abs_path = vault_root.join(&path);
-    std::fs::remove_file(&abs_path).map_err(|e| e.to_string())?;
+    if abs_path.is_dir() {
+        std::fs::remove_dir_all(&abs_path).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(&abs_path).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
 #[tauri::command]
 pub async fn note_rename(old_path: String, new_path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if is_protected(&old_path) {
+        return Err("This folder is managed by Mycel and cannot be renamed".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
