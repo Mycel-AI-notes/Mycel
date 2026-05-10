@@ -161,40 +161,18 @@ class DatabaseWidget extends WidgetType {
 }
 
 function buildDecorations(state: EditorState, notePath: string): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
   const blocks = findDbBlocks(state);
-
-  type Item = { from: number; to: number; deco: Decoration };
-  const items: Item[] = [];
-
-  // Always render the widget. atomicRanges keeps the cursor outside the fence,
-  // so the fence text is metadata managed through the widget.
   for (const b of blocks) {
-    items.push({
-      from: b.fenceFrom,
-      to: b.fenceTo,
-      deco: Decoration.replace({
+    builder.add(
+      b.fenceFrom,
+      b.fenceTo,
+      Decoration.replace({
         widget: new DatabaseWidget(b.source, b.view, notePath),
         block: true,
       }),
-    });
-    // Belt-and-suspenders: also tag every fence line with a class so the
-    // index.css rule can clear any active-line / selection background that
-    // might otherwise paint a stripe through the gutter or content area.
-    const startLine = state.doc.lineAt(b.fenceFrom);
-    const endLine = state.doc.lineAt(b.fenceTo);
-    for (let n = startLine.number; n <= endLine.number; n++) {
-      const ln = state.doc.line(n);
-      items.push({
-        from: ln.from,
-        to: ln.from,
-        deco: Decoration.line({ class: 'cm-db-fence-line' }),
-      });
-    }
+    );
   }
-
-  items.sort((a, b) => a.from - b.from || a.to - b.to);
-  const builder = new RangeSetBuilder<Decoration>();
-  for (const it of items) builder.add(it.from, it.to, it.deco);
   return builder.finish();
 }
 
