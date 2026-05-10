@@ -134,6 +134,54 @@
   --shadow-glow:            0 0 24px rgba(226, 90, 64, 0.18);
 }
 
+/* Classic — pure light. Forces white surfaces and near-black text regardless
+   of dark/light mode, so picking "Classic" gives a clean ink-on-paper look. */
+:root[data-palette='classic'],
+.dark[data-palette='classic'] {
+  --color-surface-0:        #ffffff;
+  --color-surface-1:        #fafafa;
+  --color-surface-2:        #f1f1f1;
+  --color-surface-hover:    #e6e6e6;
+
+  --color-text-primary:     #0a0a0a;
+  --color-text-secondary:   #2b2b2b;
+  --color-text-muted:       #6b6b6b;
+  --color-text-disabled:    #a3a3a3;
+
+  --color-accent:           #1F66C7;
+  --color-accent-bright:    #2D7AE0;
+  --color-accent-muted:     #285AA8;
+  --color-accent-deep:      #143F7E;
+
+  --color-border:           #d9d9d9;
+  --color-border-strong:    #b3b3b3;
+
+  --color-graph-active:     #1F66C7;
+  --color-graph-connected:  #5E94DD;
+  --color-graph-inactive:   #cfcfcf;
+  --color-graph-edge:       #dcdcdc;
+  --color-graph-edge-glow:  #1F66C7;
+
+  --color-wikilink:         #1F66C7;
+  --color-wikilink-broken:  #c0382b;
+  --color-tag:              #146A8C;
+  --color-embedding:        #2faf6c;
+
+  --color-search-bg:        #f4f4f4;
+  --color-search-selected:  #e2e8f0;
+  --color-semantic-glow:    rgba(31, 102, 199, 0.16);
+
+  --color-code-bg:          #f4f4f4;
+  --color-inline-code:      #1F66C7;
+
+  --color-selection:        rgba(31, 102, 199, 0.18);
+  --color-active-line:      rgba(0, 0, 0, 0.03);
+
+  --shadow-glow:            0 0 24px rgba(31, 102, 199, 0.16);
+
+  color-scheme: light;
+}
+
 /* Dark theme — the primary Mycel surface. */
 .dark {
   --color-surface-0:        #090B0F;
