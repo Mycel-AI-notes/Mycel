@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
 
 export function EditorTabs() {
-  const { openTabs, activeTabPath, setActiveTab, closeTab } = useVaultStore();
+  const { openTabs, activeTabPath, setActiveTab, closeTab, pinTab } = useVaultStore();
 
   if (openTabs.length === 0) return null;
 
@@ -13,11 +13,14 @@ export function EditorTabs() {
         <button
           key={tab.path}
           onClick={() => setActiveTab(tab.path)}
+          onDoubleClick={() => pinTab(tab.path)}
+          title={tab.isPreview ? 'Preview tab — double-click or save to pin' : tab.path}
           className={clsx(
             'flex items-center gap-1.5 px-3 py-1.5 text-sm border-r border-border shrink-0 max-w-[180px] group',
             tab.path === activeTabPath
               ? 'bg-surface-1 text-text-primary'
               : 'text-text-muted hover:text-text-secondary hover:bg-surface-1/50',
+            tab.isPreview && 'italic',
           )}
         >
           <span className="truncate">{tab.title}</span>

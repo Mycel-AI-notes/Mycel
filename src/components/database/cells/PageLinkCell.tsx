@@ -16,7 +16,7 @@ function sanitizeName(name: string): string {
 }
 
 export function PageLinkCell({ dbPath, row, onChanged }: Props) {
-  const { openNote } = useVaultStore();
+  const { openNote, refreshTree } = useVaultStore();
   const [creating, setCreating] = useState(false);
   const [pagesDir, setPagesDir] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => {
@@ -38,7 +38,9 @@ export function PageLinkCell({ dbPath, row, onChanged }: Props) {
         className="db-pagelink"
         onClick={(e) => {
           e.stopPropagation();
-          void openNote(row.page!);
+          // Pages opened from the table start as preview tabs — they only
+          // get pinned when the user actually saves them.
+          void openNote(row.page!, { preview: true });
         }}
       >
         <FileText size={12} /> {stem}
@@ -71,7 +73,10 @@ export function PageLinkCell({ dbPath, row, onChanged }: Props) {
                 await dbApi.createPage(dbPath, row.id, notePath);
                 setCreating(false);
                 onChanged();
-                await openNote(notePath);
+                // Refresh sidebar so the new folder/file is visible. Don't
+                // open the page automatically — user keeps focus on the
+                // table and can click the page link if they want to edit.
+                await refreshTree();
               } catch (err) {
                 console.error(err);
                 alert(String(err));
