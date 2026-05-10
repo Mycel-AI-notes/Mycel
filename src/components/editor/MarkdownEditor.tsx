@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
@@ -13,6 +13,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { makeWikilinkClickHandler } from './WikilinkNavigation';
@@ -60,18 +61,33 @@ export function MarkdownEditor({ path }: Props) {
   const { noteCache, saveNote, markDirty, openNote, createNote } = useVaultStore();
   const isDark = document.documentElement.classList.contains('dark');
 
+  const [isPreview, setIsPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+
   const note = noteCache.get(path);
+
+  const renderPreview = useCallback(async (content: string) => {
+    const html = await invoke<string>('render_html', { content });
+    setPreviewHtml(html);
+    setIsPreview(true);
+  }, []);
 
   const handleSave = useCallback(
     async (content: string) => {
       try {
         await saveNote(path, content);
+        await renderPreview(content);
       } catch (e) {
         console.error('Save failed:', e);
       }
     },
-    [path, saveNote],
+    [path, saveNote, renderPreview],
   );
+
+  const enterEdit = useCallback(() => {
+    setIsPreview(false);
+    setTimeout(() => viewRef.current?.focus(), 0);
+  }, []);
 
   useEffect(() => {
     if (!editorRef.current || !note) return;
@@ -146,13 +162,35 @@ export function MarkdownEditor({ path }: Props) {
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
         <span className="text-xs text-text-muted font-mono">{path}</span>
         <button
-          onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
+          onClick={() =>
+            isPreview
+              ? enterEdit()
+              : handleSave(viewRef.current?.state.doc.toString() ?? note.content)
+          }
           className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
         >
-          Save
+          {isPreview ? 'Edit' : 'Save'}
         </button>
       </div>
-      <div ref={editorRef} className="flex-1 overflow-hidden" />
+
+      {isPreview && (
+        <div
+          className="flex-1 overflow-auto cursor-text bg-surface-1"
+          onClick={enterEdit}
+          title="Click to edit"
+        >
+          <div
+            className="prose-mycel mx-auto px-8 py-6"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
+        </div>
+      )}
+
+      <div
+        ref={editorRef}
+        className="flex-1 overflow-hidden"
+        style={{ display: isPreview ? 'none' : 'block' }}
+      />
     </div>
   );
 }
