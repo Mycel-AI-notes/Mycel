@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { Database } from 'lucide-react';
 import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
@@ -17,6 +18,9 @@ import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
+import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
+import { DatabasePicker } from '@/components/database/DatabasePicker';
+import { insertDbFence } from '@/lib/database/insert';
 
 const themeCompartment = new Compartment();
 
@@ -62,6 +66,8 @@ export function MarkdownEditor({ path }: Props) {
   const viewRef = useRef<EditorView | null>(null);
   const { noteCache, saveNote, markDirty } = useVaultStore();
   const isDark = document.documentElement.classList.contains('dark');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
 
   const note = noteCache.get(path);
 
@@ -106,6 +112,12 @@ export function MarkdownEditor({ path }: Props) {
         markdownPreviewTheme,
         databaseWidgetPlugin(path),
         databaseWidgetTheme,
+        databaseSlashCommand({
+          openPicker: (from, to) => {
+            slashRangeRef.current = { from, to };
+            setPickerOpen(true);
+          },
+        }),
         wikilinkAutocomplete,
         themeCompartment.of(
           isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
@@ -149,16 +161,51 @@ export function MarkdownEditor({ path }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
         <span className="text-xs text-text-muted font-mono">{path}</span>
-        <button
-          onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-          className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
-          title="Save (Ctrl/Cmd+S)"
-        >
-          Save
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              slashRangeRef.current = null;
+              setPickerOpen(true);
+            }}
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
+            title="Insert database"
+          >
+            <Database size={12} /> DB
+          </button>
+          <button
+            onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
+            className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
+            title="Save (Ctrl/Cmd+S)"
+          >
+            Save
+          </button>
+        </div>
       </div>
 
       <div ref={editorRef} className="flex-1 overflow-hidden" />
+
+      {pickerOpen && (
+        <DatabasePicker
+          currentNotePath={path}
+          onCancel={() => {
+            setPickerOpen(false);
+            slashRangeRef.current = null;
+          }}
+          onPick={(source, viewId) => {
+            const view = viewRef.current;
+            setPickerOpen(false);
+            if (!view) return;
+            const range = slashRangeRef.current;
+            slashRangeRef.current = null;
+            insertDbFence(view, {
+              source,
+              view: viewId,
+              replaceFrom: range?.from,
+              replaceTo: range?.to,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -413,6 +413,62 @@ pub async fn db_create_page(
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+pub struct ViewSummary {
+    pub id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DbSummary {
+    pub path: String,
+    pub name: String,
+    pub views: Vec<ViewSummary>,
+}
+
+#[tauri::command]
+pub async fn dbs_list(state: State<'_, AppState>) -> Result<Vec<DbSummary>, String> {
+    let root = vault_root(&state).await?;
+    let mut out = Vec::new();
+    for entry in walkdir::WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if !name.ends_with(".db.json") {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(&root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel.contains("/.") || rel.starts_with('.') {
+            continue;
+        }
+        let stem = name.trim_end_matches(".db.json").to_string();
+        let views = match read_db(&path.to_path_buf()) {
+            Ok(db) => db
+                .views
+                .iter()
+                .map(|(id, def)| ViewSummary {
+                    id: id.clone(),
+                    label: def.label.clone(),
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        out.push(DbSummary {
+            path: rel,
+            name: stem,
+            views,
+        });
+    }
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
+}
+
 fn yaml_escape(s: &str) -> String {
     if s.contains(':') || s.contains('#') || s.contains('"') || s.starts_with(' ') {
         format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))

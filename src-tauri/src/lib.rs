@@ -49,6 +49,7 @@ pub fn run() {
             commands::database::db_update_column,
             commands::database::db_update_view,
             commands::database::db_create_page,
+            commands::database::dbs_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
