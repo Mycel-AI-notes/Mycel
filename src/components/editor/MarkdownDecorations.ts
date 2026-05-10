@@ -53,6 +53,8 @@ function cursorInSpan(sel: EditorSelection, from: number, to: number): boolean {
   return sel.ranges.some((r) => r.from < to && r.to > from);
 }
 
+const HIDE = Decoration.replace({});
+
 // ── Build ─────────────────────────────────────────────────────────────────────
 
 function buildDecorations(view: EditorView): DecorationSet {
@@ -65,6 +67,10 @@ function buildDecorations(view: EditorView): DecorationSet {
   const lineDecos: LineDeco[] = [];
   const spanDecos: SpanDeco[] = [];
 
+  const hide = (from: number, to: number) => spanDecos.push({ from, to, deco: HIDE });
+  const mark = (from: number, to: number, cls: string) =>
+    spanDecos.push({ from, to, deco: Decoration.mark({ class: cls }) });
+
   for (const { from, to } of view.visibleRanges) {
     let pos = from;
     while (pos <= to) {
@@ -72,28 +78,33 @@ function buildDecorations(view: EditorView): DecorationSet {
       const { text, from: lf, to: lt } = line;
       const onLine = cursorOnLine(sel, lf, lt);
 
-      // ── Headings (line deco only, no marker hiding) ───────────────────
+      // ── Headings ──────────────────────────────────────────────────────────
       const hm = text.match(/^(#{1,6}) /);
       if (hm) {
         const level = hm[1].length;
         lineDecos.push({ pos: lf, deco: Decoration.line({ class: `cm-md-h cm-md-h${level}` }) });
+        if (!onLine) {
+          // hide "## " prefix (level chars + 1 space)
+          hide(lf, lf + level + 1);
+        }
         pos = lt + 1;
         continue;
       }
 
-      // ── HR (line deco only, no replace/block widget) ─────────────────
+      // ── HR ────────────────────────────────────────────────────────────────
       if (/^-{3,}$/.test(text.trim())) {
         lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-hr' }) });
         pos = lt + 1;
         continue;
       }
 
-      // ── Blockquote ─────────────────────────────────────────────────────
-      if (text.startsWith('>')) {
+      // ── Blockquote ────────────────────────────────────────────────────────
+      if (text.startsWith('> ')) {
         lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-blockquote' }) });
+        if (!onLine) hide(lf, lf + 2);
       }
 
-      // ── Checkbox (inline replace, only off-line) ─────────────────────
+      // ── Checkbox ──────────────────────────────────────────────────────────
       if (!onLine) {
         const cbm = text.match(/^(\s*[-*+] )(\[[ x]\])/i);
         if (cbm) {
@@ -107,22 +118,59 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
-      // ── Inline marks (Decoration.mark only — zero cursor impact) ───────────
-
+      // ── Bold **text** ─────────────────────────────────────────────────────
       for (const m of text.matchAll(/\*\*(.+?)\*\*/g)) {
-        spanDecos.push({ from: lf + m.index!, to: lf + m.index! + m[0].length, deco: Decoration.mark({ class: 'cm-md-bold' }) });
-      }
-      for (const m of text.matchAll(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g)) {
-        spanDecos.push({ from: lf + m.index!, to: lf + m.index! + m[0].length, deco: Decoration.mark({ class: 'cm-md-italic' }) });
-      }
-      for (const m of text.matchAll(/~~(.+?)~~/g)) {
-        spanDecos.push({ from: lf + m.index!, to: lf + m.index! + m[0].length, deco: Decoration.mark({ class: 'cm-md-strike' }) });
-      }
-      for (const m of text.matchAll(/`([^`]+)`/g)) {
-        spanDecos.push({ from: lf + m.index!, to: lf + m.index! + m[0].length, deco: Decoration.mark({ class: 'cm-md-code' }) });
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        if (cursorInSpan(sel, mf, mt)) {
+          mark(mf, mt, 'cm-md-bold');
+        } else {
+          hide(mf, mf + 2);
+          mark(mf + 2, mt - 2, 'cm-md-bold');
+          hide(mt - 2, mt);
+        }
       }
 
-      // ── Wikilinks (replace widget, only when cursor outside span) ───────────
+      // ── Italic *text* ─────────────────────────────────────────────────────
+      for (const m of text.matchAll(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        if (cursorInSpan(sel, mf, mt)) {
+          mark(mf, mt, 'cm-md-italic');
+        } else {
+          hide(mf, mf + 1);
+          mark(mf + 1, mt - 1, 'cm-md-italic');
+          hide(mt - 1, mt);
+        }
+      }
+
+      // ── Strikethrough ~~text~~ ────────────────────────────────────────────
+      for (const m of text.matchAll(/~~(.+?)~~/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        if (cursorInSpan(sel, mf, mt)) {
+          mark(mf, mt, 'cm-md-strike');
+        } else {
+          hide(mf, mf + 2);
+          mark(mf + 2, mt - 2, 'cm-md-strike');
+          hide(mt - 2, mt);
+        }
+      }
+
+      // ── Inline code `text` ────────────────────────────────────────────────
+      for (const m of text.matchAll(/`([^`]+)`/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        if (cursorInSpan(sel, mf, mt)) {
+          mark(mf, mt, 'cm-md-code');
+        } else {
+          hide(mf, mf + 1);
+          mark(mf + 1, mt - 1, 'cm-md-code');
+          hide(mt - 1, mt);
+        }
+      }
+
+      // ── Wikilinks [[label]] ───────────────────────────────────────────────
       for (const m of text.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
@@ -138,6 +186,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
   spanDecos.sort((a, b) => a.from !== b.from ? a.from - b.from : b.to - a.to);
 
+  // Drop overlapping replace decorations (marks always pass through)
   const safeSpans: SpanDeco[] = [];
   let replaceEnd = -1;
   for (const s of spanDecos) {
@@ -149,6 +198,7 @@ function buildDecorations(view: EditorView): DecorationSet {
     safeSpans.push(s);
   }
 
+  // Merge line decos and span decos in position order
   let li = 0;
   let si = 0;
   while (li < lineDecos.length || si < safeSpans.length) {
@@ -189,8 +239,8 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-content': { padding: '16px 0' },
   '.cm-line': { padding: '0 24px' },
 
-  // Headings: weight + color only, NO font-size change (keeps line height
-  // uniform so CodeMirror coordinate mapping stays accurate)
+  // Headings: weight + color only — NO font-size (keeps line height uniform
+  // so CodeMirror coordinate mapping stays accurate)
   '.cm-md-h':  { fontWeight: '800', color: 'var(--color-text-primary)' },
   '.cm-md-h2': { fontWeight: '700' },
   '.cm-md-h3': { fontWeight: '600' },
