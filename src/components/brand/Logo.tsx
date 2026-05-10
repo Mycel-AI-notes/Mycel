@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { BRANCHES_COMPACT, buildBranchGeometry } from './Spore';
 
 interface LogoProps {
   size?: number;
@@ -9,22 +10,21 @@ interface LogoProps {
 }
 
 /**
- * Mycel mark — a radial spore: a central globe ringed by curved hyphae,
- * each tipped with a smaller terminal spore. Some hyphae carry a tiny
- * mid-bud — the "branching" tell of a living mycelium.
+ * Mycel mark — a compact radial spore: a central globe ringed by 7
+ * curved hyphae of varied length and direction, with one Y-fork and a
+ * couple of mid-buds. Asymmetric on purpose — a uniform N-pointed star
+ * reads as a primitive, not as a living organism.
  *
- * Uses currentColor so it inherits accent / muted tones from the parent.
- * Optimized for small toolbar sizes (16–24px) but scales cleanly up to
- * the onboarding hero.
+ * Inherits color from the parent via currentColor.
  */
 export function Logo({ size = 18, className, withWordmark = false, glow = false }: LogoProps) {
-  // viewBox is generous (-4..32) so the optional glow filter has room.
+  const branches = buildBranchGeometry(BRANCHES_COMPACT, 12, 12);
   return (
     <span className={clsx('inline-flex items-center gap-2 select-none', className)}>
       <svg
         width={size}
         height={size}
-        viewBox="-4 -4 32 32"
+        viewBox="-2 -2 28 28"
         fill="none"
         aria-hidden="true"
         className="shrink-0"
@@ -34,39 +34,56 @@ export function Logo({ size = 18, className, withWordmark = false, glow = false 
             : undefined
         }
       >
-        {/* hyphae — curved Bezier paths radiating from the centre */}
         <g
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
           fill="none"
-          opacity="0.95"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
         >
-          <path d="M12 12 Q 11.5 7.5 11 3" />
-          <path d="M12 12 Q 16.5 8 19.5 5.5" />
-          <path d="M12 12 Q 19.5 11 22.5 12.5" />
-          <path d="M12 12 Q 17 16.5 18.5 21" />
-          <path d="M12 12 Q 11.5 17 12 22" />
-          <path d="M12 12 Q 6.5 16 4 19" />
-          <path d="M12 12 Q 3.5 13 1.5 11.5" />
-          <path d="M12 12 Q 6.5 8.5 4 5.5" />
+          {branches.map((b, i) => (
+            <path key={`h${i}`} d={b.d} />
+          ))}
+          {branches.map(
+            (b, i) =>
+              b.fork && (
+                <g key={`f${i}`}>
+                  <path d={b.fork.leftPath} />
+                  <path d={b.fork.rightPath} />
+                </g>
+              ),
+          )}
         </g>
 
-        {/* terminal spores at the end of each hypha */}
+        <g fill="currentColor" opacity="0.85">
+          {branches.map(
+            (b, i) =>
+              b.midPos && (
+                <circle key={`m${i}`} cx={b.midPos[0]} cy={b.midPos[1]} r={b.midR} />
+              ),
+          )}
+        </g>
+
         <g fill="currentColor">
-          <circle cx="11" cy="3"   r="1.4" />
-          <circle cx="19.5" cy="5.5" r="1.5" />
-          <circle cx="22.5" cy="12.5" r="1.4" />
-          <circle cx="18.5" cy="21" r="1.5" />
-          <circle cx="12" cy="22"  r="1.4" />
-          <circle cx="4"  cy="19"  r="1.5" />
-          <circle cx="1.5" cy="11.5" r="1.3" />
-          <circle cx="4"  cy="5.5" r="1.4" />
+          {branches.map((b, i) =>
+            b.termR ? (
+              <circle key={`t${i}`} cx={b.end[0]} cy={b.end[1]} r={b.termR} />
+            ) : null,
+          )}
+          {branches.map(
+            (b, i) =>
+              b.fork && (
+                <g key={`ft${i}`}>
+                  <circle cx={b.fork.leftTip[0]} cy={b.fork.leftTip[1]} r={b.fork.tipR} />
+                  <circle cx={b.fork.rightTip[0]} cy={b.fork.rightTip[1]} r={b.fork.tipR} />
+                </g>
+              ),
+          )}
         </g>
 
-        {/* central globe — a soft "halo" + dense core suggests sphericality */}
-        <circle cx="12" cy="12" r="3.4" fill="currentColor" opacity="0.25" />
-        <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+        {/* central globe — halo + dense core */}
+        <circle cx="12" cy="12" r="3.0" fill="currentColor" opacity="0.25" />
+        <circle cx="12" cy="12" r="2.0" fill="currentColor" opacity="0.6" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" />
       </svg>
 
       {withWordmark && (
