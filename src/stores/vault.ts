@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, Tab } from '@/types';
+import { useRecentVaults } from './recentVaults';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -10,6 +11,7 @@ interface VaultState {
   noteCache: Map<string, Note>;
 
   openVault: (path: string) => Promise<void>;
+  closeVault: () => void;
   refreshTree: () => Promise<void>;
   openNote: (path: string, options?: { preview?: boolean }) => Promise<void>;
   closeTab: (path: string) => void;
@@ -33,6 +35,18 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   openVault: async (path) => {
     const tree = await invoke<FileEntry[]>('vault_open', { path });
     set({ vaultRoot: path, fileTree: tree, openTabs: [], activeTabPath: null, noteCache: new Map() });
+    useRecentVaults.getState().push(path);
+  },
+
+  closeVault: () => {
+    set({
+      vaultRoot: null,
+      fileTree: [],
+      openTabs: [],
+      activeTabPath: null,
+      noteCache: new Map(),
+    });
+    useRecentVaults.getState().clearLastOpened();
   },
 
   refreshTree: async () => {
