@@ -1,0 +1,22 @@
+# Build output
+dist/
+target/
+
+# Node
+node_modules/
+
+# Vault index (generated)
+.mycel/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
