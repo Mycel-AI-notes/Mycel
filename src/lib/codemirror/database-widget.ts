@@ -141,11 +141,13 @@ class DatabaseWidget extends WidgetType {
 function buildDecorations(state: EditorState, notePath: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const blocks = findDbBlocks(state);
-  const sel = state.selection.main;
 
+  // Always render the widget. Cursor-in-block collapse was confusing: a click
+  // on a cell would bubble into CM6, move the selection inside the fence
+  // range, and the widget would vanish behind raw ```db. atomicRanges keeps
+  // the cursor outside, so there is no need to ever show the raw fence —
+  // the fence text is metadata the user manages through the widget itself.
   for (const b of blocks) {
-    const cursorInBlock = sel.from <= b.fenceTo && sel.to >= b.fenceFrom;
-    if (cursorInBlock) continue;
     builder.add(
       b.fenceFrom,
       b.fenceTo,
@@ -166,9 +168,8 @@ export function databaseWidgetPlugin(notePath: string) {
   return StateField.define<DecorationSet>({
     create: (state) => buildDecorations(state, notePath),
     update(deco, tr) {
-      if (tr.docChanged || tr.selection) {
-        return buildDecorations(tr.state, notePath);
-      }
+      // Selection alone doesn't affect what we render — only doc edits do.
+      if (tr.docChanged) return buildDecorations(tr.state, notePath);
       return deco.map(tr.changes);
     },
     provide: (field) => [
