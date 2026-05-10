@@ -19,8 +19,26 @@ const OUT = resolve(__dirname, '..', 'src-tauri', 'app-icon.svg');
 const CANVAS = 1024;
 const CX = 512;
 const CY = 512;
-/** Scale factor: BRANCHES_FULL is authored on a 100-unit grid; 11× fills 1024². */
-const S = 11;
+
+/**
+ * macOS app-icon template: artwork lives on a 824² "squircle" inside a
+ * 1024² canvas, with ~100px transparent padding around it. The corner
+ * radius below (≈22.37% of 824) approximates the macOS quintic super-
+ * ellipse closely enough for everyday viewing — exact path-level match
+ * is overkill for what 99% of users perceive as "the rounded mac shape".
+ *
+ * https://developer.apple.com/design/resources/ (macOS app icon)
+ */
+const INSET   = 100;
+const TILE    = CANVAS - INSET * 2; // 824
+const RADIUS  = Math.round(TILE * 0.2237); // ≈184
+
+/**
+ * Spore scale on the 100-unit BRANCHES grid. With S=9.5 the outermost
+ * terminal sits ~30px inside the squircle's straight edge, leaving the
+ * organism breathing room from the rounded corners.
+ */
+const S = 9.5;
 
 // Mirror of BRANCHES_FULL in src/components/brand/Spore.tsx.
 const BRANCHES = [
@@ -89,33 +107,41 @@ const circle = (c) => `<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(c.r)}"/>`;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
-      <stop offset="0%"  stop-color="${ACCENT}" stop-opacity="0.18"/>
+    <radialGradient id="glow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"  stop-color="${ACCENT}" stop-opacity="0.20"/>
       <stop offset="55%" stop-color="${ACCENT}" stop-opacity="0.05"/>
       <stop offset="100%" stop-color="${ACCENT}" stop-opacity="0"/>
     </radialGradient>
+    <clipPath id="squircle">
+      <rect x="${INSET}" y="${INSET}" width="${TILE}" height="${TILE}"
+            rx="${RADIUS}" ry="${RADIUS}"/>
+    </clipPath>
   </defs>
 
-  <rect width="${CANVAS}" height="${CANVAS}" fill="${SURFACE}"/>
-  <rect width="${CANVAS}" height="${CANVAS}" fill="url(#glow)"/>
+  <!-- Everything renders inside the macOS-style squircle; the rest of
+       the canvas stays transparent so the OS shows native rounded edges. -->
+  <g clip-path="url(#squircle)">
+    <rect x="${INSET}" y="${INSET}" width="${TILE}" height="${TILE}" fill="${SURFACE}"/>
+    <rect x="${INSET}" y="${INSET}" width="${TILE}" height="${TILE}" fill="url(#glow)"/>
 
-  <g fill="none" stroke="${ACCENT}" stroke-width="${f(STROKE)}" stroke-linecap="round">
-${hyphae.map((d) => `    <path d="${d}"/>`).join('\n')}
-${forks .map((d) => `    <path d="${d}"/>`).join('\n')}
+    <g fill="none" stroke="${ACCENT}" stroke-width="${f(STROKE)}" stroke-linecap="round">
+${hyphae.map((d) => `      <path d="${d}"/>`).join('\n')}
+${forks .map((d) => `      <path d="${d}"/>`).join('\n')}
+    </g>
+
+    <g fill="${ACCENT}" opacity="0.9">
+${midSpores.map((c) => `      ${circle(c)}`).join('\n')}
+    </g>
+
+    <g fill="${ACCENT}">
+${termSpores.map((c) => `      ${circle(c)}`).join('\n')}
+${forkTips  .map((c) => `      ${circle(c)}`).join('\n')}
+    </g>
+
+    <circle cx="${CX}" cy="${CY}" r="${f(11   * S)}" fill="${ACCENT}" opacity="0.25"/>
+    <circle cx="${CX}" cy="${CY}" r="${f(7.5  * S)}" fill="${ACCENT}" opacity="0.65"/>
+    <circle cx="${CX}" cy="${CY}" r="${f(5    * S)}" fill="${BRIGHT}"/>
   </g>
-
-  <g fill="${ACCENT}" opacity="0.9">
-${midSpores.map((c) => `    ${circle(c)}`).join('\n')}
-  </g>
-
-  <g fill="${ACCENT}">
-${termSpores.map((c) => `    ${circle(c)}`).join('\n')}
-${forkTips  .map((c) => `    ${circle(c)}`).join('\n')}
-  </g>
-
-  <circle cx="${CX}" cy="${CY}" r="${f(11   * S)}" fill="${ACCENT}" opacity="0.25"/>
-  <circle cx="${CX}" cy="${CY}" r="${f(7.5  * S)}" fill="${ACCENT}" opacity="0.65"/>
-  <circle cx="${CX}" cy="${CY}" r="${f(5    * S)}" fill="${BRIGHT}"/>
 </svg>
 `;
 
