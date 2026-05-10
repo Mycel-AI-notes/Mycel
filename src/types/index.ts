@@ -3,7 +3,10 @@ export interface FileEntry {
   path: string;
   is_dir: boolean;
   children?: FileEntry[];
+  is_knowledge_base?: boolean;
 }
+
+export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
 
 export interface NoteMeta {
   title?: string;

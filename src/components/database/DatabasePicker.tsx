@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { dbApi } from '@/lib/database/api';
 import { Plus, Database } from 'lucide-react';
+import { KNOWLEDGE_BASE_DIR } from '@/types';
 
 interface ViewSummary {
   id: string;
@@ -69,7 +70,9 @@ export function DatabasePicker({ currentNotePath, onPick, onCancel }: Props) {
     const name = newName.trim();
     if (!name) return;
     const fileName = name.endsWith('.db.json') ? name : `${name}.db.json`;
-    const path = (noteDir ? noteDir + '/' : '') + fileName;
+    // All new databases live in the Knowledge Base folder so the data and
+    // the pages they generate stay together in one managed location.
+    const path = `${KNOWLEDGE_BASE_DIR}/${fileName}`;
     try {
       await dbApi.create(path);
       const source = relativeFrom(noteDir, path);
@@ -175,7 +178,8 @@ export function DatabasePicker({ currentNotePath, onPick, onCancel }: Props) {
                 }}
               />
               <span className="db-picker-hint">
-                Will be saved as <code>{(noteDir ? noteDir + '/' : '') + (newName || 'name') + '.db.json'}</code>
+                Will be saved as{' '}
+                <code>{`${KNOWLEDGE_BASE_DIR}/${newName || 'name'}.db.json`}</code>
               </span>
             </label>
             <div className="db-modal-actions">

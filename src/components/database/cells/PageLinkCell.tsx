@@ -75,7 +75,7 @@ export function PageLinkCell({ dbPath, row, onChanged }: Props) {
               position: 'fixed',
               top: pos.top,
               left: pos.left,
-              minWidth: Math.max(240, pos.minWidth),
+              minWidth: Math.max(260, pos.minWidth),
               zIndex: 60,
             }}
             onMouseDown={(e) => e.stopPropagation()}
@@ -115,6 +115,40 @@ export function PageLinkCell({ dbPath, row, onChanged }: Props) {
                 Will be saved in <code>{pagesDir}/</code>
               </div>
             )}
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                padding: '6px 8px',
+                borderTop: '1px solid var(--color-border)',
+              }}
+            >
+              <button className="db-btn" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+              <span style={{ flex: 1 }} />
+              <button
+                className="db-btn db-btn-primary"
+                disabled={!sanitizeName(draft)}
+                onClick={async () => {
+                  const name = sanitizeName(draft);
+                  if (!name) return;
+                  const dir = pagesDir ?? '';
+                  const notePath = (dir ? dir + '/' : '') + name + '.md';
+                  try {
+                    await dbApi.createPage(dbPath, row.id, notePath);
+                    setCreating(false);
+                    onChanged();
+                    await refreshTree();
+                  } catch (err) {
+                    console.error(err);
+                    alert(String(err));
+                  }
+                }}
+              >
+                Create
+              </button>
+            </div>
           </div>,
           document.body,
         )}
