@@ -341,8 +341,8 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-md-code': {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '0.875em',
-    backgroundColor: 'var(--color-surface-2)',
-    color: 'var(--color-text-primary)',
+    backgroundColor: 'var(--color-code-bg)',
+    color: 'var(--color-inline-code)',
     borderRadius: '3px',
     padding: '1px 5px',
   },
@@ -350,20 +350,28 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-md-link': {
     color: 'var(--color-accent)',
     textDecoration: 'underline',
+    textDecorationColor: 'color-mix(in srgb, var(--color-accent) 40%, transparent)',
+    textUnderlineOffset: '2px',
     cursor: 'pointer',
   },
   '.cm-md-link-mark': { color: 'var(--color-accent)' },
 
   '.cm-wikilink': {
-    color: 'var(--color-accent)',
+    color: 'var(--color-wikilink)',
     cursor: 'pointer',
-    borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
+    borderBottom: '1px solid color-mix(in srgb, var(--color-wikilink) 40%, transparent)',
+  },
+  '.cm-wikilink-broken': {
+    color: 'var(--color-wikilink-broken)',
+    cursor: 'pointer',
+    borderBottom: '1px dashed color-mix(in srgb, var(--color-wikilink-broken) 50%, transparent)',
   },
 
   '.cm-md-codeblock-line': {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '0.875em',
-    backgroundColor: 'var(--color-surface-2)',
+    backgroundColor: 'var(--color-code-bg)',
+    color: 'var(--color-text-primary)',
   },
 
   '.cm-checkbox': {

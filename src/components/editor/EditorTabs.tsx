@@ -32,7 +32,7 @@ export function EditorTabs() {
               closeTab(tab.path);
             }}
             className={clsx(
-              'p-0.5 rounded hover:bg-white/10 shrink-0',
+              'p-0.5 rounded hover:bg-surface-hover shrink-0',
               tab.isDirty
                 ? 'opacity-100'
                 : 'opacity-0 group-hover:opacity-100',
