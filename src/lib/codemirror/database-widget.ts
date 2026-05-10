@@ -256,8 +256,11 @@ export const databaseWidgetTheme = EditorView.baseTheme({
     margin: '12px 0',
     border: '1px solid var(--color-border)',
     borderRadius: '6px',
-    overflow: 'hidden',
     backgroundColor: 'var(--color-surface-0)',
+    // No overflow:hidden — popovers in the toolbar (Sort / Columns /
+    // Settings) need to extend below the widget when the table itself is
+    // short, otherwise their content gets clipped (e.g. the "Remove table"
+    // button became invisible on tables with no rows).
   },
   // Note: .cm-db-fence-gutter / .cm-db-fence-line styles live in index.css
   // because EditorView.theme() classes override baseTheme rules and that
