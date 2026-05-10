@@ -1,2 +1,2 @@
 # Mycel
-Knowledge Base с локальным AI
+Knowledge Base с локальным AI.
