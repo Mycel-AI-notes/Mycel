@@ -3,6 +3,10 @@ import type { Heading, WikiLink } from '@/types';
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const HASHTAG_RE = /(?:^|\s)#([\w\-/]+)/g;
 const WIKILINK_RE = /(!?)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+// `[label](url)` markdown links with http/https targets.
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+// Bare http(s) URLs.
+const BARE_URL_RE = /(?<![("\[])https?:\/\/[^\s<>"')\]]+/g;
 
 /**
  * Convert each line of the document into a sanitized line for tag/heading
@@ -83,6 +87,25 @@ export function parseWikilinks(raw: string): WikiLink[] {
     });
   }
   return links;
+}
+
+export interface ExternalLink {
+  url: string;
+  label: string;
+}
+
+export function parseExternalLinks(raw: string): ExternalLink[] {
+  const text = sanitizeLines(raw).join('\n');
+  const seen = new Map<string, ExternalLink>();
+  for (const m of text.matchAll(MD_LINK_RE)) {
+    const url = m[2].replace(/[.,;:!?)]+$/, '');
+    if (!seen.has(url)) seen.set(url, { url, label: m[1].trim() });
+  }
+  for (const m of text.matchAll(BARE_URL_RE)) {
+    const url = m[0].replace(/[.,;:!?)]+$/, '');
+    if (!seen.has(url)) seen.set(url, { url, label: url });
+  }
+  return [...seen.values()];
 }
 
 /** Reparse the live-mutable parts of a note (everything but frontmatter meta).

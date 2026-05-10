@@ -109,10 +109,22 @@ pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<V
 
         let parsed = parse_note(&content);
 
-        let has_link = parsed
-            .wikilinks
-            .iter()
-            .any(|wl| wl.target.to_lowercase() == target_stem);
+        // Match the target loosely: accept wikilinks written as `[[Note]]`,
+        // `[[folder/Note]]`, or `[[Note.md]]` — strip any path prefix and the
+        // optional `.md` extension before comparing. Heading anchors after `#`
+        // are also ignored.
+        let has_link = parsed.wikilinks.iter().any(|wl| {
+            let mut t = wl.target.to_lowercase();
+            if let Some(idx) = t.find('#') {
+                t.truncate(idx);
+            }
+            let t = t.trim();
+            let stem = std::path::Path::new(t)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| t.to_string());
+            stem == target_stem
+        });
 
         if has_link {
             let title = parsed.meta.title.unwrap_or_else(|| {
