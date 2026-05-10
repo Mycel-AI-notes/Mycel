@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Plus, Trash2, Pencil } from 'lucide-react';
 import { clsx } from 'clsx';
+import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 
@@ -26,11 +27,10 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
   }, [entry, openNote]);
 
   const handleDelete = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (confirm(`Delete "${entry.name}"?`)) {
-        deleteNote(entry.path);
-      }
+      const ok = await confirm(`Delete "${entry.name}"?`, { title: 'Delete note', kind: 'warning' });
+      if (ok) deleteNote(entry.path);
     },
     [entry, deleteNote],
   );
@@ -132,17 +132,35 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
 
 export function FileTree() {
   const { fileTree, vaultRoot, createNote } = useVaultStore();
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleNewNote = useCallback(async () => {
-    const name = prompt('Note name:');
-    if (!name?.trim()) return;
-    const path = `${name.trim().replace(/\.md$/, '')}.md`;
+  useEffect(() => {
+    if (creating) inputRef.current?.focus();
+  }, [creating]);
+
+  const startCreate = useCallback(() => {
+    setNewName('');
+    setCreating(true);
+  }, []);
+
+  const commitCreate = useCallback(async () => {
+    const trimmed = newName.trim();
+    setCreating(false);
+    if (!trimmed) return;
+    const path = `${trimmed.replace(/\.md$/, '')}.md`;
     try {
       await createNote(path);
     } catch (e) {
       console.error(e);
     }
-  }, [createNote]);
+  }, [newName, createNote]);
+
+  const cancelCreate = useCallback(() => {
+    setCreating(false);
+    setNewName('');
+  }, []);
 
   if (!vaultRoot) return null;
 
@@ -153,19 +171,37 @@ export function FileTree() {
           Files
         </span>
         <button
-          onClick={handleNewNote}
+          onClick={startCreate}
           className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
           title="New note"
         >
           <Plus size={14} />
         </button>
       </div>
+
+      {creating && (
+        <div className="px-3 py-1.5 border-b border-border">
+          <input
+            ref={inputRef}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onBlur={commitCreate}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitCreate();
+              if (e.key === 'Escape') cancelCreate();
+            }}
+            placeholder="Note name…"
+            className="w-full bg-surface-0 border border-accent rounded px-2 py-0.5 text-sm text-text-primary outline-none"
+          />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto py-1">
         {fileTree.map((entry) => (
           <FileTreeNode key={entry.path} entry={entry} depth={0} />
         ))}
-        {fileTree.length === 0 && (
-          <p className="text-text-muted text-xs px-3 py-4">No notes yet. Create one!</p>
+        {fileTree.length === 0 && !creating && (
+          <p className="text-text-muted text-xs px-3 py-4">No notes yet. Click + to create one.</p>
         )}
       </div>
     </div>
