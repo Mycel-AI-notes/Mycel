@@ -47,16 +47,6 @@ class HRWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-class CodeBlockWidget extends WidgetType {
-  eq() { return true; }
-  toDOM() {
-    const span = document.createElement('span');
-    span.className = 'cm-md-codeblock-fence';
-    return span;
-  }
-  ignoreEvent() { return false; }
-}
-
 class CheckboxWidget extends WidgetType {
   constructor(private checked: boolean, private togglePos: number) { super(); }
   eq(other: CheckboxWidget) {
@@ -119,12 +109,12 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   };
 
-  // Track fenced code block state across the entire visible range
-  // We need to scan from the beginning of the doc to know if we're inside a block
+  // Pre-scan from doc start up to the first visible position so we know
+  // whether we're already inside a fenced code block when rendering starts.
   let inCodeBlock = false;
   const fenceRe = /^```/;
-  // Pre-scan from doc start to the visible range start to get correct inCodeBlock state
-  for (let p = 1; p < (view.visibleRanges[0]?.from ?? 0); ) {
+  const visStart = view.visibleRanges[0]?.from ?? 0;
+  for (let p = 1; p < visStart; ) {
     const l = doc.lineAt(p);
     if (fenceRe.test(l.text)) inCodeBlock = !inCodeBlock;
     p = l.to + 1;
@@ -139,29 +129,10 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // ── Fenced code block ──────────────────────────────────────────────────
       if (fenceRe.test(text)) {
-        if (!inCodeBlock) {
-          // Opening fence
-          inCodeBlock = true;
-          lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-codeblock-line' }) });
-          if (!onLine) {
-            spanDecos.push({
-              from: lf,
-              to: lt,
-              deco: Decoration.replace({ widget: new CodeBlockWidget() }),
-            });
-          }
-        } else {
-          // Closing fence
-          inCodeBlock = false;
-          lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-codeblock-line' }) });
-          if (!onLine) {
-            spanDecos.push({
-              from: lf,
-              to: lt,
-              deco: Decoration.replace({ widget: new CodeBlockWidget() }),
-            });
-          }
-        }
+        inCodeBlock = !inCodeBlock;
+        lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-codeblock-line' }) });
+        // Hide the ``` fence markers when cursor is not on this line
+        if (!onLine && lt > lf) hide(lf, lt);
         pos = lt + 1;
         continue;
       }
@@ -213,7 +184,8 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
-      // Collect inline code spans first to protect them from other parsing
+      // Collect inline code spans first so their content is protected from
+      // bold/italic/etc. parsing below.
       const codeSpans: [number, number][] = [];
       for (const m of text.matchAll(/`([^`\n]+)`/g)) {
         const mf = lf + m.index!;
@@ -390,10 +362,6 @@ export const markdownPreviewTheme = EditorView.baseTheme({
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '0.875em',
     backgroundColor: 'var(--color-surface-2)',
-    display: 'block',
-  },
-  '.cm-md-codeblock-fence': {
-    display: 'none',
   },
 
   '.cm-checkbox': {
