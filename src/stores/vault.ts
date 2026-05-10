@@ -75,9 +75,15 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
     if (!noteCache.has(path)) {
       const note = await invoke<Note>('note_read', { path });
+      // Overlay TS-side reparse so headings carry line numbers from the get-go
+      // (the Rust parser uses pulldown_cmark events without positions).
+      const reparsed = reparseBody(note.content);
       set((s) => {
         const next = new Map(s.noteCache);
-        next.set(path, note);
+        next.set(path, {
+          ...note,
+          parsed: { ...note.parsed, ...reparsed },
+        });
         return { noteCache: next };
       });
     }

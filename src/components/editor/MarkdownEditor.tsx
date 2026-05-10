@@ -19,6 +19,7 @@ import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
+import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 
@@ -197,12 +198,14 @@ export function MarkdownEditor({ path }: Props) {
 
     const view = new EditorView({ state, parent: editorRef.current });
     viewRef.current = view;
+    registerEditorView(path, view);
 
     return () => {
       if (liveTimerRef.current) {
         clearTimeout(liveTimerRef.current);
         liveTimerRef.current = null;
       }
+      unregisterEditorView(path, view);
       view.destroy();
       viewRef.current = null;
     };

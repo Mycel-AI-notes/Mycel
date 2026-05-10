@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { FileText, Folder } from 'lucide-react';
 import { DisconnectedSpore } from '@/components/brand/Spore';
 import { TagSearch } from '@/components/search/TagSearch';
+import { scrollEditorToLine } from '@/lib/editor-registry';
 
 interface Backlink {
   path: string;
@@ -69,13 +70,22 @@ export function RightPanel() {
         {rightPanelTab === 'outline' && note && (
           <ul className="space-y-0.5">
             {note.parsed.headings.map((h, i) => (
-              <li
-                key={i}
-                className="text-text-secondary hover:text-text-primary cursor-pointer truncate py-0.5"
-                style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
-              >
-                <span className="text-text-muted mr-1">{'#'.repeat(h.level)}</span>
-                {h.text}
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeTabPath && typeof h.line === 'number') {
+                      scrollEditorToLine(activeTabPath, h.line);
+                    }
+                  }}
+                  disabled={typeof h.line !== 'number'}
+                  className="block w-full text-left text-text-secondary hover:text-text-primary truncate py-0.5 disabled:cursor-not-allowed"
+                  style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
+                  title={h.text}
+                >
+                  <span className="text-text-muted mr-1">{'#'.repeat(h.level)}</span>
+                  {h.text}
+                </button>
               </li>
             ))}
             {note.parsed.headings.length === 0 && (

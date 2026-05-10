@@ -20,6 +20,10 @@ export interface NoteMeta {
 export interface Heading {
   level: number;
   text: string;
+  /** 0-based line number in the note body (without frontmatter). Populated by
+   *  the TS reparser; absent for headings that came straight from the Rust
+   *  parser. */
+  line?: number;
 }
 
 export interface WikiLink {
