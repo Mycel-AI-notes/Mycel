@@ -159,7 +159,8 @@ function FileTreeNode({
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-      const src = e.dataTransfer.getData(DRAG_MIME);
+      const src =
+        e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
       if (src === entry.path) return;
       if (entry.path.startsWith(src + '/')) return; // cannot move into own descendant
@@ -388,7 +389,8 @@ export function FileTree() {
     (e: ReactDragEvent) => {
       e.preventDefault();
       setRootDragOver(false);
-      const src = e.dataTransfer.getData(DRAG_MIME);
+      const src =
+        e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
       if (parentOf(src) === '') return; // already at vault root
       const name = src.split('/').pop()!;
