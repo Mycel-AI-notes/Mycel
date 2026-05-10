@@ -12,6 +12,7 @@ import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
+import { GraphView } from '@/components/graph/GraphView';
 import { Logo } from '@/components/brand/Logo';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -26,6 +27,7 @@ import {
   PanelRightOpen,
   Zap,
   FolderSearch,
+  Share2,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
@@ -36,6 +38,7 @@ export default function App() {
   const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
   const autoOpenAttempted = useRef(false);
 
@@ -67,6 +70,9 @@ export default function App() {
       if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         if (vaultRoot) setQuickSwitcherOpen(true);
+      } else if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        if (vaultRoot) setGraphOpen((g) => !g);
       }
     };
     window.addEventListener('keydown', handler);
@@ -158,6 +164,14 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setGraphOpen(true)}
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+            title="Graph view (⌘G)"
+          >
+            <Share2 size={16} />
+          </button>
+
+          <button
             onClick={toggleRightPanel}
             className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             title="Toggle right panel"
@@ -198,6 +212,9 @@ export default function App() {
 
       {/* Quick Switcher overlay */}
       {quickSwitcherOpen && <QuickSwitcher onClose={closeQuickSwitcher} />}
+
+      {/* Graph view overlay */}
+      {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}
     </div>
   );
 }
