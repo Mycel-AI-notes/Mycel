@@ -1,12 +1,14 @@
 import { useVaultStore } from '@/stores/vault';
-import { DormantSpore } from '@/components/brand/Spore';
+import { Logo } from '@/components/brand/Logo';
 
 export function EmptyEditor() {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-5 text-text-muted">
-      <DormantSpore size={88} className="text-accent-muted/80" />
+      <span className="text-accent spore-breathe">
+        <Logo size={112} glow />
+      </span>
       <div className="text-center">
         <p className="text-sm">No note open</p>
         {vaultRoot && (
