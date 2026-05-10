@@ -155,6 +155,58 @@ body {
 .cm-editor.cm-focused {
   outline: none;
 }
+/* Soft accent halo around the caret — "living" cursor without a literal trail. */
+.cm-editor .cm-cursor,
+.cm-editor .cm-cursor-primary {
+  border-left-color: var(--color-accent) !important;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+/* ── Brand motion ───────────────────────────────────────────────────────── */
+
+@keyframes mycel-spore-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50%      { opacity: 1;    transform: scale(1.08); }
+}
+
+@keyframes mycel-breathe {
+  0%, 100% { opacity: 0.7;  transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+
+@keyframes mycel-halo {
+  0%, 100% { opacity: 0.15; transform: scale(0.96); }
+  50%      { opacity: 0.45; transform: scale(1.08); }
+}
+
+@keyframes mycel-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(2px, -2px); }
+}
+
+@keyframes mycel-hypha-glow {
+  0%, 100% { opacity: 0.18; }
+  50%      { opacity: 0.45; }
+}
+
+@keyframes mycel-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spore-pulse  { animation: mycel-spore-pulse 2.4s ease-in-out infinite; transform-origin: center; }
+.spore-breathe{ animation: mycel-breathe     5s   ease-in-out infinite; transform-origin: center; }
+.spore-halo   { animation: mycel-halo        4s   ease-in-out infinite; transform-origin: center; }
+.spore-drift  { animation: mycel-drift       8s   ease-in-out infinite; }
+.hypha-glow   { animation: mycel-hypha-glow  6s   ease-in-out infinite; }
+.spore-rotate { animation: mycel-rotate      240s linear infinite;      transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spore-pulse, .spore-breathe, .spore-halo,
+  .spore-drift, .hypha-glow, .spore-rotate {
+    animation: none;
+  }
+}
 
 /* Hide gutter (line numbers + active-line tint) for lines under a database
    widget. Lives in index.css instead of EditorView.baseTheme so that the
@@ -285,8 +337,8 @@ body {
 }
 .db-warning {
   padding: 6px 12px;
-  background: color-mix(in srgb, orange 15%, transparent);
-  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, var(--color-border));
   font-size: 12px;
   color: var(--color-text-secondary);
 }
@@ -321,12 +373,15 @@ body {
 }
 .db-btn-primary {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-surface-0);
   border-color: var(--color-accent);
+  font-weight: 500;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 .db-btn-primary:hover {
-  filter: brightness(1.1);
-  background: var(--color-accent);
+  background: var(--color-accent-bright);
+  border-color: var(--color-accent-bright);
+  box-shadow: var(--shadow-glow);
 }
 .db-btn-ghost {
   background: transparent;
@@ -411,7 +466,10 @@ body {
   margin: 4px 0;
 }
 .db-popover-danger {
-  color: #e44;
+  color: var(--color-error);
+}
+.db-popover-danger:hover {
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 .db-popover-row {
   display: flex;

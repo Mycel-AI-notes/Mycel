@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"  stop-color="#C8F52A" stop-opacity="0.20"/>
+      <stop offset="55%" stop-color="#C8F52A" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#C8F52A" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="squircle">
+      <rect x="100" y="100" width="824" height="824"
+            rx="184" ry="184"/>
+    </clipPath>
+  </defs>
+
+  <!-- Everything renders inside the macOS-style squircle; the rest of
+       the canvas stays transparent so the OS shows native rounded edges. -->
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="#0A0E14"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+
+    <g fill="none" stroke="#C8F52A" stroke-width="22.8" stroke-linecap="round">
+      <path d="M 512 512 Q 552.4 343.4 535.9 170.8"/>
+      <path d="M 512 512 Q 551.4 417.3 629.3 350.6"/>
+      <path d="M 512 512 Q 668.6 506.6 804.2 428.2"/>
+      <path d="M 512 512 Q 602.0 517.6 670.5 576.1"/>
+      <path d="M 512 512 Q 560.4 663.8 659.2 788.8"/>
+      <path d="M 512 512 Q 526.3 614.7 484.2 709.6"/>
+      <path d="M 512 512 Q 383.9 582.6 300.2 702.7"/>
+      <path d="M 512 512 Q 440.0 546.1 361.5 533.2"/>
+      <path d="M 512 512 Q 391.2 415.5 243.6 369.3"/>
+      <path d="M 512 512 Q 443.5 428.1 427.0 321.1"/>
+      <path d="M 804.2 428.2 L 859.4 391.0"/>
+      <path d="M 804.2 428.2 L 870.7 430.5"/>
+    </g>
+
+    <g fill="#C8F52A" opacity="0.9">
+      <circle cx="576.5" cy="423.2" r="15.2"/>
+      <circle cx="498.1" cy="610.8" r="14.3"/>
+      <circle cx="351.0" cy="426.4" r="14.3"/>
+    </g>
+
+    <g fill="#C8F52A">
+      <circle cx="535.9" cy="170.8" r="39.9"/>
+      <circle cx="629.3" cy="350.6" r="20.9"/>
+      <circle cx="670.5" cy="576.1" r="19.0"/>
+      <circle cx="659.2" cy="788.8" r="34.2"/>
+      <circle cx="484.2" cy="709.6" r="21.8"/>
+      <circle cx="300.2" cy="702.7" r="36.1"/>
+      <circle cx="361.5" cy="533.2" r="16.1"/>
+      <circle cx="243.6" cy="369.3" r="30.4"/>
+      <circle cx="427.0" cy="321.1" r="22.8"/>
+      <circle cx="859.4" cy="391.0" r="19.9"/>
+      <circle cx="870.7" cy="430.5" r="19.9"/>
+    </g>
+
+    <circle cx="512" cy="512" r="104.5" fill="#C8F52A" opacity="0.25"/>
+    <circle cx="512" cy="512" r="71.3" fill="#C8F52A" opacity="0.65"/>
+    <circle cx="512" cy="512" r="47.5" fill="#D7FF3F"/>
+  </g>
+</svg>

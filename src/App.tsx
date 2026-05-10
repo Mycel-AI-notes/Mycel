@@ -10,6 +10,7 @@ import { EmptyEditor } from '@/components/editor/EmptyEditor';
 import { RightPanel } from '@/components/ui/RightPanel';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
+import { Logo } from '@/components/brand/Logo';
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -59,6 +60,13 @@ export default function App() {
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
       {/* Toolbar */}
       <header className="flex items-center px-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2">
+        <span
+          className="flex items-center text-accent pl-0.5 pr-1"
+          title="Mycel"
+        >
+          <Logo size={20} />
+        </span>
+
         <button
           onClick={toggleSidebar}
           className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
