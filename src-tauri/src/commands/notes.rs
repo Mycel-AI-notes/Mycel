@@ -11,6 +11,19 @@ pub struct Note {
 }
 
 #[tauri::command]
+pub fn render_html(content: String) -> String {
+    use pulldown_cmark::{html, Options, Parser};
+    let opts = Options::ENABLE_TABLES
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS;
+    let parser = Parser::new_ext(&content, opts);
+    let mut output = String::new();
+    html::push_html(&mut output, parser);
+    output
+}
+
+#[tauri::command]
 pub async fn note_read(path: String, state: State<'_, AppState>) -> Result<Note, String> {
     let vault_root = {
         let guard = state.vault.lock().await;
@@ -52,6 +65,20 @@ pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Not
     note_save(path.clone(), initial.clone(), state.clone()).await?;
     let parsed = parse_note(&initial);
     Ok(Note { path, content: initial, parsed })
+}
+
+#[tauri::command]
+pub async fn folder_create(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    let abs_path = vault_root.join(&path);
+    std::fs::create_dir_all(&abs_path).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]

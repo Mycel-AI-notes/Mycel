@@ -1,5 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Plus, Trash2, Pencil } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  FileText,
+  Folder,
+  FolderOpen,
+  FilePlus,
+  FolderPlus,
+  Trash2,
+  Pencil,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
@@ -29,7 +39,7 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
   const handleDelete = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      const ok = await confirm(`Delete "${entry.name}"?`, { title: 'Delete note', kind: 'warning' });
+      const ok = await confirm(`Delete "${entry.name}"?`, { title: 'Delete', kind: 'warning' });
       if (ok) deleteNote(entry.path);
     },
     [entry, deleteNote],
@@ -48,7 +58,8 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== entry.name.replace(/\.md$/, '')) {
       const dir = entry.path.split('/').slice(0, -1).join('/');
-      const newPath = dir ? `${dir}/${trimmed}.md` : `${trimmed}.md`;
+      const ext = entry.is_dir ? '' : '.md';
+      const newPath = dir ? `${dir}/${trimmed}${ext}` : `${trimmed}${ext}`;
       renameNote(entry.path, newPath);
     }
     setRenaming(false);
@@ -101,20 +112,24 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
           <span className="flex-1 truncate">{entry.name.replace(/\.md$/, '')}</span>
         )}
 
-        {!entry.is_dir && !renaming && (
+        {!renaming && (
           <span className="hidden group-hover:flex items-center gap-0.5">
             <button
               onClick={startRename}
               className="p-0.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+              title="Rename"
             >
               <Pencil size={11} />
             </button>
-            <button
-              onClick={handleDelete}
-              className="p-0.5 rounded hover:bg-red-500/20 text-text-muted hover:text-red-400"
-            >
-              <Trash2 size={11} />
-            </button>
+            {!entry.is_dir && (
+              <button
+                onClick={handleDelete}
+                className="p-0.5 rounded hover:bg-red-500/20 text-text-muted hover:text-red-400"
+                title="Delete"
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
           </span>
         )}
       </div>
@@ -130,9 +145,11 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
   );
 }
 
+type CreatingType = 'note' | 'folder' | null;
+
 export function FileTree() {
-  const { fileTree, vaultRoot, createNote } = useVaultStore();
-  const [creating, setCreating] = useState(false);
+  const { fileTree, vaultRoot, createNote, createFolder } = useVaultStore();
+  const [creating, setCreating] = useState<CreatingType>(null);
   const [newName, setNewName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -140,25 +157,29 @@ export function FileTree() {
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
-  const startCreate = useCallback(() => {
+  const startCreate = useCallback((type: CreatingType) => {
     setNewName('');
-    setCreating(true);
+    setCreating(type);
   }, []);
 
   const commitCreate = useCallback(async () => {
     const trimmed = newName.trim();
-    setCreating(false);
-    if (!trimmed) return;
-    const path = `${trimmed.replace(/\.md$/, '')}.md`;
+    const type = creating;
+    setCreating(null);
+    if (!trimmed || !type) return;
     try {
-      await createNote(path);
+      if (type === 'note') {
+        await createNote(`${trimmed.replace(/\.md$/, '')}.md`);
+      } else {
+        await createFolder(trimmed);
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [newName, createNote]);
+  }, [newName, creating, createNote, createFolder]);
 
   const cancelCreate = useCallback(() => {
-    setCreating(false);
+    setCreating(null);
     setNewName('');
   }, []);
 
@@ -170,13 +191,22 @@ export function FileTree() {
         <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
           Files
         </span>
-        <button
-          onClick={startCreate}
-          className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
-          title="New note"
-        >
-          <Plus size={14} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => startCreate('note')}
+            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            title="New note"
+          >
+            <FilePlus size={14} />
+          </button>
+          <button
+            onClick={() => startCreate('folder')}
+            className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            title="New folder"
+          >
+            <FolderPlus size={14} />
+          </button>
+        </div>
       </div>
 
       {creating && (
@@ -190,7 +220,7 @@ export function FileTree() {
               if (e.key === 'Enter') commitCreate();
               if (e.key === 'Escape') cancelCreate();
             }}
-            placeholder="Note name…"
+            placeholder={creating === 'note' ? 'Note name…' : 'Folder name…'}
             className="w-full bg-surface-0 border border-accent rounded px-2 py-0.5 text-sm text-text-primary outline-none"
           />
         </div>

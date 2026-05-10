@@ -15,6 +15,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
+import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 
 const themeCompartment = new Compartment();
 
@@ -24,12 +25,11 @@ const lightTheme = EditorView.theme(
       backgroundColor: 'var(--color-surface-1)',
       color: 'var(--color-text-primary)',
       height: '100%',
-      fontSize: '14px',
-      fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
+      fontFamily: "'Inter', system-ui, sans-serif",
+      fontSize: '16px',
     },
-    '.cm-scroller': { overflow: 'auto', lineHeight: '1.7' },
-    '.cm-content': { padding: '16px 0', caretColor: 'var(--color-accent)' },
-    '.cm-line': { padding: '0 24px' },
+    '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
+    '.cm-content': { caretColor: 'var(--color-accent)' },
     '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.03)' },
     '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.03)' },
     '.cm-gutters': {
@@ -52,36 +52,6 @@ const lightTheme = EditorView.theme(
   { dark: false },
 );
 
-/** Click on [[wikilink]] to navigate */
-function makeWikilinkClickHandler(openNote: (path: string) => Promise<void>) {
-  return EditorView.domEventHandlers({
-    click(event, view) {
-      if (!event.ctrlKey && !event.metaKey) return false;
-      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-      if (pos === null) return false;
-
-      const line = view.state.doc.lineAt(pos);
-      const text = line.text;
-      const col = pos - line.from;
-
-      // Find [[...]] surrounding the click position
-      const wikilinkRe = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-      let match;
-      while ((match = wikilinkRe.exec(text)) !== null) {
-        const start = match.index;
-        const end = match.index + match[0].length;
-        if (col >= start && col <= end) {
-          const target = match[1].trim();
-          // Try to find by stem, fall back to exact
-          openNote(`${target}.md`);
-          return true;
-        }
-      }
-      return false;
-    },
-  });
-}
-
 interface Props {
   path: string;
 }
@@ -89,7 +59,7 @@ interface Props {
 export function MarkdownEditor({ path }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { noteCache, saveNote, markDirty, openNote } = useVaultStore();
+  const { noteCache, saveNote, markDirty } = useVaultStore();
   const isDark = document.documentElement.classList.contains('dark');
 
   const note = noteCache.get(path);
@@ -131,8 +101,9 @@ export function MarkdownEditor({ path }: Props) {
           base: markdownLanguage,
           codeLanguages: languages,
         }),
+        markdownPreviewPlugin,
+        markdownPreviewTheme,
         wikilinkAutocomplete,
-        makeWikilinkClickHandler(openNote),
         themeCompartment.of(
           isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
         ),
@@ -175,16 +146,15 @@ export function MarkdownEditor({ path }: Props) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
         <span className="text-xs text-text-muted font-mono">{path}</span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-text-muted hidden sm:block">Ctrl+click wikilinks to navigate</span>
-          <button
-            onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-            className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
-          >
-            Save
-          </button>
-        </div>
+        <button
+          onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
+          className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/10"
+          title="Save (Ctrl/Cmd+S)"
+        >
+          Save
+        </button>
       </div>
+
       <div ref={editorRef} className="flex-1 overflow-hidden" />
     </div>
   );
