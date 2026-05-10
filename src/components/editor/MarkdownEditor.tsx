@@ -16,6 +16,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
+import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 
 const themeCompartment = new Compartment();
 
@@ -43,6 +44,8 @@ const lightTheme = EditorView.theme(
       backgroundColor: 'rgba(99, 102, 241, 0.15)',
     },
     '.cm-tooltip-autocomplete': {
+      backgroundColor: 'var(--color-surface-0)',
+      border: '1px solid var(--color-border)',
       backgroundColor: 'var(--color-surface-0)',
       border: '1px solid var(--color-border)',
       borderRadius: '6px',
@@ -122,6 +125,8 @@ export function MarkdownEditor({ path }: Props) {
           base: markdownLanguage,
           codeLanguages: languages,
         }),
+        markdownPreviewPlugin,
+        markdownPreviewTheme,
         wikilinkAutocomplete,
         themeCompartment.of(
           isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],

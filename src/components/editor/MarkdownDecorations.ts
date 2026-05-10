@@ -136,10 +136,8 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   }
 
-  // Sort span decos: by from asc, to desc (wider wins at same start)
   spanDecos.sort((a, b) => a.from !== b.from ? a.from - b.from : b.to - a.to);
 
-  // Drop overlapping inline replace decorations
   const safeSpans: SpanDeco[] = [];
   let replaceEnd = -1;
   for (const s of spanDecos) {
@@ -151,7 +149,6 @@ function buildDecorations(view: EditorView): DecorationSet {
     safeSpans.push(s);
   }
 
-  // Merge line decos and span decos in position order for the builder
   let li = 0;
   let si = 0;
   while (li < lineDecos.length || si < safeSpans.length) {
@@ -189,21 +186,17 @@ export const markdownPreviewPlugin = ViewPlugin.fromClass(
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 export const markdownPreviewTheme = EditorView.baseTheme({
-  '.cm-content': {
-    maxWidth: '720px',
-    margin: '0 auto',
-    padding: '24px 0',
-    fontFamily: "'Inter', system-ui, sans-serif",
-  },
-  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 32px' },
+  '.cm-content': { padding: '16px 0' },
+  '.cm-line': { padding: '0 24px' },
 
-  '.cm-md-h':  { fontWeight: '700' },
-  '.cm-md-h1': { fontSize: '2em',   lineHeight: '1.3' },
-  '.cm-md-h2': { fontSize: '1.5em', lineHeight: '1.35' },
-  '.cm-md-h3': { fontSize: '1.25em' },
-  '.cm-md-h4': { fontSize: '1.1em' },
-  '.cm-md-h5': { fontSize: '1em' },
-  '.cm-md-h6': { fontSize: '0.9em', color: 'var(--color-text-muted)' },
+  // Headings: weight + color only, NO font-size change (keeps line height
+  // uniform so CodeMirror coordinate mapping stays accurate)
+  '.cm-md-h':  { fontWeight: '800', color: 'var(--color-text-primary)' },
+  '.cm-md-h2': { fontWeight: '700' },
+  '.cm-md-h3': { fontWeight: '600' },
+  '.cm-md-h4': { fontWeight: '600', color: 'var(--color-text-secondary)' },
+  '.cm-md-h5': { fontWeight: '600', color: 'var(--color-text-muted)' },
+  '.cm-md-h6': { fontWeight: '500', color: 'var(--color-text-muted)' },
 
   '.cm-md-hr': {
     borderTop: '2px solid var(--color-border)',
