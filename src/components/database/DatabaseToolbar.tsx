@@ -134,7 +134,7 @@ function SortPopover({
   );
 }
 
-function FiltersPopover({
+function FiltersModal({
   schema,
   filters,
   onChange,
@@ -145,9 +145,6 @@ function FiltersPopover({
   onChange: (next: FilterDef[]) => void;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  usePopoverClose(ref, onClose);
-
   const columnIds = Object.keys(schema);
 
   function update(idx: number, patch: Partial<FilterDef>) {
@@ -164,83 +161,104 @@ function FiltersPopover({
   }
 
   return (
-    <div ref={ref} className="db-popover db-filters-popover">
-      <div className="db-filters-list">
-        {filters.length === 0 && (
-          <div className="db-filter-empty">No filters yet.</div>
-        )}
-        {filters.map((f, idx) => {
-          const col = schema[f.field];
-          const ops = col ? operatorsFor(col.type) : [];
-          const opDef = ops.find((o) => o.op === f.op) ?? ops[0];
-          return (
-            <div key={idx} className="db-filter-row">
-              <select
-                value={f.field}
-                onChange={(e) => {
-                  const newField = e.target.value;
-                  const newOps = operatorsFor(schema[newField].type);
-                  update(idx, { field: newField, op: newOps[0].op, value: '' });
-                }}
-              >
-                {columnIds.map((cid) => (
-                  <option key={cid} value={cid}>
-                    {schema[cid].label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={f.op}
-                onChange={(e) =>
-                  update(idx, { op: e.target.value as FilterDef['op'] })
-                }
-              >
-                {ops.map((o) => (
-                  <option key={o.op} value={o.op}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              {opDef?.needsValue && col?.type === 'select' && (
+    <div className="db-modal-overlay" onMouseDown={onClose}>
+      <div
+        className="db-modal db-filters-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3 className="db-modal-title">Filters</h3>
+        <div className="db-filters-list">
+          {filters.length === 0 && (
+            <div className="db-filter-empty">No filters yet.</div>
+          )}
+          {filters.map((f, idx) => {
+            const col = schema[f.field];
+            const ops = col ? operatorsFor(col.type) : [];
+            const opDef = ops.find((o) => o.op === f.op) ?? ops[0];
+            return (
+              <div key={idx} className="db-filter-row">
                 <select
-                  value={String(f.value ?? '')}
-                  onChange={(e) => update(idx, { value: e.target.value })}
+                  value={f.field}
+                  onChange={(e) => {
+                    const newField = e.target.value;
+                    const newOps = operatorsFor(schema[newField].type);
+                    update(idx, {
+                      field: newField,
+                      op: newOps[0].op,
+                      value: '',
+                    });
+                  }}
                 >
-                  <option value="">—</option>
-                  {(col.options ?? []).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
+                  {columnIds.map((cid) => (
+                    <option key={cid} value={cid}>
+                      {schema[cid].label}
                     </option>
                   ))}
                 </select>
-              )}
-              {opDef?.needsValue && col?.type !== 'select' && (
-                <input
-                  type={
-                    col?.type === 'number'
-                      ? 'number'
-                      : col?.type === 'date'
-                        ? 'date'
-                        : 'text'
+                <select
+                  value={f.op}
+                  onChange={(e) =>
+                    update(idx, { op: e.target.value as FilterDef['op'] })
                   }
-                  value={String(f.value ?? '')}
-                  onChange={(e) => update(idx, { value: e.target.value })}
-                />
-              )}
-              <button
-                className="db-icon-btn"
-                onClick={() => remove(idx)}
-                title="Remove"
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
+                >
+                  {ops.map((o) => (
+                    <option key={o.op} value={o.op}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {opDef?.needsValue && col?.type === 'select' && (
+                  <select
+                    value={String(f.value ?? '')}
+                    onChange={(e) => update(idx, { value: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    {(col.options ?? []).map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {opDef?.needsValue && col?.type !== 'select' && (
+                  <input
+                    type={
+                      col?.type === 'number'
+                        ? 'number'
+                        : col?.type === 'date'
+                          ? 'date'
+                          : 'text'
+                    }
+                    value={String(f.value ?? '')}
+                    onChange={(e) => update(idx, { value: e.target.value })}
+                  />
+                )}
+                <button
+                  className="db-icon-btn"
+                  onClick={() => remove(idx)}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="db-modal-actions">
+          <button className="db-btn" onClick={add}>
+            + Add filter
+          </button>
+          {filters.length > 0 && (
+            <button className="db-btn" onClick={() => onChange([])}>
+              Clear all
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="db-btn db-btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
       </div>
-      <button className="db-popover-item" onClick={add}>
-        + Add filter
-      </button>
     </div>
   );
 }
@@ -333,23 +351,21 @@ export function DatabaseToolbar({
       <button className="db-btn db-btn-primary" onClick={onAddRow}>
         <Plus size={12} /> Add row
       </button>
-      <div className="db-popover-anchor">
-        <button
-          className={`db-btn ${filtersOpen || view.filters.length > 0 ? 'is-active' : ''}`}
-          onClick={() => setFiltersOpen((v) => !v)}
-        >
-          <Filter size={12} /> Filter
-          {view.filters.length > 0 ? ` (${view.filters.length})` : ''}
-        </button>
-        {filtersOpen && (
-          <FiltersPopover
-            schema={schema}
-            filters={view.filters}
-            onChange={onFiltersChange}
-            onClose={() => setFiltersOpen(false)}
-          />
-        )}
-      </div>
+      <button
+        className={`db-btn ${filtersOpen || view.filters.length > 0 ? 'is-active' : ''}`}
+        onClick={() => setFiltersOpen(true)}
+      >
+        <Filter size={12} /> Filter
+        {view.filters.length > 0 ? ` (${view.filters.length})` : ''}
+      </button>
+      {filtersOpen && (
+        <FiltersModal
+          schema={schema}
+          filters={view.filters}
+          onChange={onFiltersChange}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
       <div className="db-popover-anchor">
         <button
           className={`db-btn ${sortOpen || view.sort ? 'is-active' : ''}`}

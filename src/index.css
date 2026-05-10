@@ -599,23 +599,48 @@ body {
   font-size: 11px;
   color: var(--color-text-muted);
 }
-.db-filters-popover {
-  min-width: 420px;
-  max-width: 520px;
+.db-filters-modal {
+  min-width: 520px;
+  max-width: 720px;
 }
 .db-filters-list {
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 280px;
+  max-height: 360px;
   overflow-y: auto;
+  padding: 4px 0;
 }
 .db-filter-empty {
   font-size: 12px;
   color: var(--color-text-muted);
   text-align: center;
-  padding: 8px 0;
+  padding: 16px 0;
+}
+.db-filter-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.db-filter-row select,
+.db-filter-row input {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  min-width: 0;
+}
+.db-filter-row > select:first-child {
+  flex: 1.2;
+}
+.db-filter-row > select:nth-child(2) {
+  flex: 1;
+}
+.db-filter-row > input,
+.db-filter-row > select:nth-child(3) {
+  flex: 1.5;
 }
 
 .db-wikilink {
