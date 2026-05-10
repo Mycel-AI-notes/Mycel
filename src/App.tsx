@@ -30,6 +30,10 @@ import {
 
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
 
+const isMac =
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
 export default function App() {
   useTheme();
 
@@ -121,7 +125,12 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
       {/* Top toolbar */}
-      <header className="flex items-center px-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2">
+      <header
+        data-tauri-drag-region
+        className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
+          isMac ? 'pl-[78px]' : 'pl-3'
+        }`}
+      >
         <span
           className="flex items-center text-accent pl-0.5 pr-1"
           title="Mycel"
