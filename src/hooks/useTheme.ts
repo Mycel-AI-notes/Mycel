@@ -3,6 +3,7 @@ import { useUIStore } from '@/stores/ui';
 
 export function useTheme() {
   const theme = useUIStore((s) => s.theme);
+  const palette = useUIStore((s) => s.palette);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -14,6 +15,10 @@ export function useTheme() {
       root.classList.toggle('dark', theme === 'dark');
     }
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-palette', palette);
+  }, [palette]);
 
   useEffect(() => {
     if (useUIStore.getState().theme !== 'system') return;

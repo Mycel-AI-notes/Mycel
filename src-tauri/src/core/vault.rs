@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 /// Auto-created on vault open and protected from rename/delete.
 pub const KNOWLEDGE_BASE_DIR: &str = "Knowledge Base";
 
+/// Inbox-style folder for fast capture via global shortcut. Notes are
+/// nested by date (`quick/YYYY-MM-DD/HH-MM-SS.md`). Auto-created and
+/// protected from rename/delete so the global shortcut always has a
+/// target.
+pub const QUICK_NOTES_DIR: &str = "quick";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
     pub version: u32,
@@ -26,6 +32,9 @@ pub struct FileEntry {
     /// True for the protected Knowledge Base root folder.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_knowledge_base: bool,
+    /// True for the protected `quick/` capture folder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_quick_notes: bool,
 }
 
 pub struct Vault {
@@ -51,6 +60,11 @@ impl Vault {
         // pages generated from rows.
         let kb_dir = root.join(KNOWLEDGE_BASE_DIR);
         std::fs::create_dir_all(&kb_dir).context("Failed to create Knowledge Base directory")?;
+
+        // Ensure the quick-capture folder exists so the global shortcut
+        // always has a target on a fresh vault.
+        let quick_dir = root.join(QUICK_NOTES_DIR);
+        std::fs::create_dir_all(&quick_dir).context("Failed to create quick notes directory")?;
 
         Ok(Self { root })
     }
@@ -96,12 +110,14 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
         if path.is_dir() {
             let children = read_dir_recursive(&path, vault_root)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
+            let is_quick = rel_path == QUICK_NOTES_DIR;
             entries.push(FileEntry {
                 name,
                 path: rel_path,
                 is_dir: true,
                 children: Some(children),
                 is_knowledge_base: is_kb,
+                is_quick_notes: is_quick,
             });
         } else if path.extension().map(|e| e == "md").unwrap_or(false) {
             entries.push(FileEntry {
@@ -110,6 +126,7 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
                 is_dir: false,
                 children: None,
                 is_knowledge_base: false,
+                is_quick_notes: false,
             });
         }
     }

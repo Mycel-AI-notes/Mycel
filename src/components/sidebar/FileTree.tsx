@@ -11,6 +11,7 @@ import {
   Trash2,
   Pencil,
   Library,
+  Zap,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
@@ -68,6 +69,8 @@ function FileTreeNode({
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
+  const isQuickRoot = !!entry.is_quick_notes;
+  const isLocked = isKB || isQuickRoot;
   const isOpen = entry.is_dir && expanded.has(entry.path);
 
   const toggleExpand = useCallback(() => {
@@ -125,7 +128,7 @@ function FileTreeNode({
 
   const handleDragStart = useCallback(
     (e: ReactDragEvent) => {
-      if (isKB || renaming) {
+      if (isLocked || renaming) {
         e.preventDefault();
         return;
       }
@@ -133,7 +136,7 @@ function FileTreeNode({
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
     },
-    [entry.path, isKB, renaming],
+    [entry.path, isLocked, renaming],
   );
 
   const handleDragOver = useCallback(
@@ -175,7 +178,7 @@ function FileTreeNode({
   return (
     <div>
       <div
-        draggable={!renaming && !isKB}
+        draggable={!renaming && !isLocked}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -198,6 +201,13 @@ function FileTreeNode({
             </span>
             {isKB ? (
               <Library size={14} className="shrink-0 text-accent" />
+            ) : isQuickRoot ? (
+              <Zap
+                size={14}
+                className="shrink-0 text-accent"
+                fill="currentColor"
+                strokeWidth={1.5}
+              />
             ) : isOpen ? (
               <FolderOpen size={14} className="shrink-0 text-accent-muted/90" />
             ) : (
@@ -230,7 +240,7 @@ function FileTreeNode({
           </span>
         )}
 
-        {!renaming && !isKB && (
+        {!renaming && !isLocked && (
           <span className="hidden group-hover:flex items-center gap-0.5">
             {entry.is_dir && (
               <>

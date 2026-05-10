@@ -4,9 +4,11 @@ export interface FileEntry {
   is_dir: boolean;
   children?: FileEntry[];
   is_knowledge_base?: boolean;
+  is_quick_notes?: boolean;
 }
 
 export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
+export const QUICK_NOTES_DIR = 'quick';
 
 export interface NoteMeta {
   title?: string;
