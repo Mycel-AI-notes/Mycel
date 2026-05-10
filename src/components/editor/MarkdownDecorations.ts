@@ -92,8 +92,12 @@ function buildDecorations(view: EditorView): DecorationSet {
       }
 
       // ── HR ────────────────────────────────────────────────────────────────
-      if (/^-{3,}$/.test(text.trim())) {
-        lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-hr' }) });
+      if (/^-{3,}\s*$/.test(text)) {
+        // Only style as HR when cursor is off-line; otherwise show plain dashes
+        // so they're editable.
+        if (!onLine) {
+          lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-hr' }) });
+        }
         pos = lt + 1;
         continue;
       }
@@ -170,7 +174,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
-      // ── Wikilinks [[label]] ───────────────────────────────────────────────
+      // ── Wikilinks [[label]] ──────────────────────────────────────────────
       for (const m of text.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
@@ -254,11 +258,16 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-md-h6': { fontSize: '0.9em', color: 'var(--color-text-muted)' },
 
   '.cm-md-hr': {
-    borderTop: '2px solid var(--color-border)',
+    position: 'relative',
     color: 'transparent',
-    lineHeight: '2px',
-    overflow: 'hidden',
-    margin: '4px 0',
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      left: '32px',
+      right: '32px',
+      top: '50%',
+      borderTop: '1px solid var(--color-border)',
+    },
   },
 
   '.cm-md-blockquote': {
