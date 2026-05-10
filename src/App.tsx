@@ -64,7 +64,7 @@ export default function App() {
           className="flex items-center text-accent pl-0.5 pr-1"
           title="Mycel"
         >
-          <Logo size={16} />
+          <Logo size={20} />
         </span>
 
         <button

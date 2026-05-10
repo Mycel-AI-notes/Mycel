@@ -189,14 +189,21 @@ body {
   50%      { opacity: 0.45; }
 }
 
+@keyframes mycel-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .spore-pulse  { animation: mycel-spore-pulse 2.4s ease-in-out infinite; transform-origin: center; }
 .spore-breathe{ animation: mycel-breathe     5s   ease-in-out infinite; transform-origin: center; }
 .spore-halo   { animation: mycel-halo        4s   ease-in-out infinite; transform-origin: center; }
 .spore-drift  { animation: mycel-drift       8s   ease-in-out infinite; }
 .hypha-glow   { animation: mycel-hypha-glow  6s   ease-in-out infinite; }
+.spore-rotate { animation: mycel-rotate      240s linear infinite;      transform-origin: center; }
 
 @media (prefers-reduced-motion: reduce) {
-  .spore-pulse, .spore-breathe, .spore-halo, .spore-drift, .hypha-glow {
+  .spore-pulse, .spore-breathe, .spore-halo,
+  .spore-drift, .hypha-glow, .spore-rotate {
     animation: none;
   }
 }

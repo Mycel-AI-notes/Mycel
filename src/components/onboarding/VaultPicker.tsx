@@ -25,8 +25,8 @@ export function VaultPicker() {
 
   return (
     <div className="relative h-full overflow-hidden bg-surface-1">
-      {/* Ambient mycelium graph — calmly breathes behind the hero. */}
-      <SporeField className="opacity-[0.35] mix-blend-screen" />
+      {/* Ambient mycelium colony — multiple radial spores drift behind the hero. */}
+      <SporeField />
 
       {/* Subtle vignette so text stays legible over the field */}
       <div
@@ -40,7 +40,7 @@ export function VaultPicker() {
       <div className="relative z-10 flex flex-col items-center justify-center h-full gap-7 px-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="text-accent">
-            <Logo size={48} />
+            <Logo size={72} glow />
           </span>
           <h1 className="text-3xl font-semibold tracking-tight text-text-primary">
             Mycel

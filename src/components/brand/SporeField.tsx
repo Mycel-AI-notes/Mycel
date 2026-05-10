@@ -1,58 +1,53 @@
 import { clsx } from 'clsx';
+import { RadialSpore } from './Spore';
 
 /**
- * Ambient onboarding visual — a slow-breathing mycelium field of
- * spore nodes connected by curved hyphae. Lives behind hero text;
- * intentionally low-contrast so it sets a mood without competing.
+ * Onboarding ambient field — a colony of radial spores at varied
+ * sizes, opacities and rotations. Each instance breathes on its own
+ * stagger; large background spores rotate imperceptibly to keep the
+ * field alive.
  *
- * Pure SVG, scales to its container, animates via CSS keyframes
- * (see `index.css`). Respects `prefers-reduced-motion`.
+ * Pure SVG via <RadialSpore>, layered with absolute-positioned divs.
+ * Pointer-events disabled so it never intercepts the hero CTA.
  */
 
-interface Node {
-  x: number;
-  y: number;
-  r: number;
-  /** Animation flavor — 'breathe' for soft scale, 'halo' for opacity halo. */
-  kind: 'breathe' | 'halo' | 'still';
-  /** seconds */
-  delay?: number;
-  opacity?: number;
+interface Instance {
+  /** percent — top */
+  top: string;
+  /** percent — left */
+  left: string;
+  /** px diameter */
+  size: number;
+  /** initial rotation in deg */
+  rotate: number;
+  /** 0..1 — overall opacity, also used to imply depth */
+  opacity: number;
+  /** seconds — breathe animation delay */
+  delay: number;
+  /** strength of the accent glow */
+  glow: number;
+  /** if true — wrap in a slowly rotating group */
+  spin?: boolean;
 }
 
-const NODES: Node[] = [
-  { x: 15, y: 22, r: 1.6, kind: 'breathe', delay: 0,    opacity: 0.85 },
-  { x: 28, y: 58, r: 3.2, kind: 'halo',    delay: 0.6,  opacity: 0.9  },
-  { x: 50, y: 18, r: 2.4, kind: 'breathe', delay: 1.2,  opacity: 0.8  },
-  { x: 62, y: 72, r: 2.6, kind: 'halo',    delay: 2.0,  opacity: 0.85 },
-  { x: 78, y: 32, r: 3.6, kind: 'breathe', delay: 0.3,  opacity: 0.9  },
-  { x: 82, y: 86, r: 1.4, kind: 'breathe', delay: 1.8,  opacity: 0.7  },
-  { x: 10, y: 80, r: 1.2, kind: 'still',                 opacity: 0.55 },
-  { x: 45, y: 90, r: 1.5, kind: 'breathe', delay: 2.4,  opacity: 0.7  },
-  { x: 40, y: 45, r: 1.1, kind: 'still',                 opacity: 0.5  },
-  { x: 90, y: 55, r: 2.0, kind: 'breathe', delay: 1.0,  opacity: 0.8  },
-];
+const INSTANCES: Instance[] = [
+  // Large, soft, far-back spores set the depth.
+  { top: '6%',  left: '8%',  size: 230, rotate:  18, opacity: 0.18, delay: 0,   glow: 10, spin: true },
+  { top: '14%', left: '62%', size: 280, rotate: -22, opacity: 0.16, delay: 1.6, glow: 12, spin: true },
+  { top: '58%', left: '72%', size: 210, rotate:  35, opacity: 0.20, delay: 3.0, glow: 10, spin: true },
+  { top: '64%', left: '4%',  size: 190, rotate: -10, opacity: 0.18, delay: 4.0, glow:  9, spin: true },
 
-interface Edge {
-  /** Bezier-quadratic: from (x1,y1) via (cx,cy) to (x2,y2). */
-  d: string;
-  /** seconds — staggers the hypha-glow animation. */
-  delay?: number;
-  opacity?: number;
-}
+  // Mid layer — medium opacity, more presence.
+  { top: '40%', left: '32%', size: 130, rotate:  60, opacity: 0.32, delay: 0.8, glow:  8 },
+  { top: '34%', left: '78%', size: 110, rotate: -45, opacity: 0.34, delay: 2.2, glow:  8 },
+  { top: '78%', left: '40%', size: 120, rotate:  12, opacity: 0.30, delay: 3.6, glow:  8 },
 
-const EDGES: Edge[] = [
-  { d: 'M15 22 Q 32 14, 50 18',     delay: 0,   opacity: 0.45 },
-  { d: 'M50 18 Q 64 22, 78 32',     delay: 0.8, opacity: 0.5  },
-  { d: 'M50 18 Q 46 30, 40 45',     delay: 1.4, opacity: 0.4  },
-  { d: 'M40 45 Q 30 52, 28 58',     delay: 2.0, opacity: 0.45 },
-  { d: 'M40 45 Q 52 58, 62 72',     delay: 0.5, opacity: 0.4  },
-  { d: 'M28 58 Q 18 70, 10 80',     delay: 1.6, opacity: 0.35 },
-  { d: 'M62 72 Q 70 80, 82 86',     delay: 2.6, opacity: 0.35 },
-  { d: 'M62 72 Q 54 82, 45 90',     delay: 1.0, opacity: 0.4  },
-  { d: 'M78 32 Q 88 42, 90 55',     delay: 0.2, opacity: 0.5  },
-  { d: 'M90 55 Q 88 68, 82 86',     delay: 1.8, opacity: 0.35 },
-  { d: 'M28 58 Q 34 50, 40 45',     delay: 2.2, opacity: 0.4  },
+  // Foreground accents — small, sharper, brighter.
+  { top: '20%', left: '38%', size: 70,  rotate: -28, opacity: 0.55, delay: 1.0, glow:  6 },
+  { top: '74%', left: '20%', size: 60,  rotate:  22, opacity: 0.55, delay: 2.8, glow:  6 },
+  { top: '50%', left: '88%', size: 64,  rotate:  50, opacity: 0.50, delay: 4.4, glow:  6 },
+  { top: '88%', left: '78%', size: 56,  rotate: -35, opacity: 0.52, delay: 0.4, glow:  6 },
+  { top: '8%',  left: '88%', size: 54,  rotate:  10, opacity: 0.45, delay: 2.0, glow:  6 },
 ];
 
 interface Props {
@@ -61,69 +56,48 @@ interface Props {
 
 export function SporeField({ className }: Props) {
   return (
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="xMidYMid slice"
+    <div
       aria-hidden="true"
       className={clsx(
-        'absolute inset-0 w-full h-full pointer-events-none text-accent',
+        'absolute inset-0 pointer-events-none overflow-hidden text-accent',
         className,
       )}
     >
-      {/* hyphae first so spores render on top */}
-      <g fill="none" stroke="currentColor" strokeLinecap="round">
-        {EDGES.map((e, i) => (
-          <path
-            key={`e${i}`}
-            d={e.d}
-            strokeWidth="0.18"
-            className="hypha-glow"
+      {INSTANCES.map((s, i) => {
+        const halfSize = s.size / 2;
+        return (
+          <div
+            key={i}
+            className="absolute"
             style={{
-              animationDelay: `${e.delay ?? 0}s`,
-              opacity: e.opacity,
+              top: s.top,
+              left: s.left,
+              width: s.size,
+              height: s.size,
+              marginTop: -halfSize,
+              marginLeft: -halfSize,
+              opacity: s.opacity,
             }}
-          />
-        ))}
-      </g>
-
-      <g fill="currentColor">
-        {NODES.map((n, i) => {
-          const cls =
-            n.kind === 'breathe'
-              ? 'spore-breathe'
-              : n.kind === 'halo'
-                ? 'spore-halo'
-                : undefined;
-          return (
-            <g key={`n${i}`} style={{ transformOrigin: `${n.x}px ${n.y}px` }}>
-              {/* faint outer ring on the bigger nodes */}
-              {n.r >= 2 && (
-                <circle
-                  cx={n.x}
-                  cy={n.y}
-                  r={n.r + 1.6}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="0.15"
-                  opacity={(n.opacity ?? 0.7) * 0.4}
+          >
+            <div
+              className={clsx('w-full h-full', s.spin && 'spore-rotate')}
+              style={s.spin ? { animationDelay: `${-s.delay * 8}s` } : undefined}
+            >
+              <div
+                className="spore-breathe w-full h-full"
+                style={{ animationDelay: `${s.delay}s` }}
+              >
+                <RadialSpore
+                  size={s.size}
+                  rotate={s.rotate}
+                  glow={s.glow}
+                  className="block"
                 />
-              )}
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={n.r}
-                opacity={n.opacity}
-                className={cls}
-                style={
-                  cls && n.delay !== undefined
-                    ? { animationDelay: `${n.delay}s`, transformOrigin: `${n.x}px ${n.y}px` }
-                    : { transformOrigin: `${n.x}px ${n.y}px` }
-                }
-              />
-            </g>
-          );
-        })}
-      </g>
-    </svg>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
