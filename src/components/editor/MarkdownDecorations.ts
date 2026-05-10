@@ -8,7 +8,7 @@ import {
 } from '@codemirror/view';
 import { RangeSetBuilder, EditorSelection } from '@codemirror/state';
 
-// ── Widgets ──────────────────────────────────────────────────────────────────
+// ── Widgets ───────────────────────────────────────────────────────────────────
 
 class HrWidget extends WidgetType {
   toDOM() {
@@ -19,186 +19,9 @@ class HrWidget extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-class CheckboxWidget extends WidgetType {
-  constructor(private checked: boolean, private pos: number) { super(); }
-  toDOM(view: EditorView) {
-    const el = document.createElement('input');
-    el.type = 'checkbox';
-    el.checked = this.checked;
-    el.className = 'cm-checkbox';
-    el.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const newChar = this.checked ? ' ' : 'x';
-      view.dispatch({
-        changes: { from: this.pos, to: this.pos + 1, insert: newChar },
-      });
-    });
-    return el;
-  }
-  ignoreEvent() { return false; }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function cursorInRange(sel: EditorSelection, from: number, to: number): boolean {
-  return sel.ranges.some((r) => r.from <= to && r.to >= from);
-}
-
-function lineHasCursor(sel: EditorSelection, lineFrom: number, lineTo: number): boolean {
-  return cursorInRange(sel, lineFrom, lineTo);
-}
-
-// ── Main plugin ───────────────────────────────────────────────────────────────
-
-function buildDecorations(view: EditorView): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
-  const sel = view.state.selection;
-  const doc = view.state.doc;
-
-  // Collect all decorations with their positions, then sort before adding
-  const decos: { from: number; to: number; deco: Decoration }[] = [];
-
-  const add = (from: number, to: number, deco: Decoration) => {
-    decos.push({ from, to, deco });
-  };
-
-  for (const { from, to } of view.visibleRanges) {
-    let pos = from;
-    while (pos <= to) {
-      const line = doc.lineAt(pos);
-      const text = line.text;
-      const lineFrom = line.from;
-      const lineTo = line.to;
-      const hasCursor = lineHasCursor(sel, lineFrom, lineTo);
-
-      // ── Headings ──────────────────────────────────────────────────────────
-      const headingMatch = text.match(/^(#{1,6}) (.+)/);
-      if (headingMatch && !hasCursor) {
-        const level = headingMatch[1].length;
-        const hashEnd = lineFrom + level + 1; // after "## "
-        // Hide the "# " markers
-        add(lineFrom, hashEnd, Decoration.replace({}));
-        // Style the heading text
-        add(
-          lineFrom,
-          lineTo,
-          Decoration.line({ class: `cm-heading cm-heading-${level}` }),
-        );
-        pos = lineTo + 1;
-        continue;
-      }
-      if (headingMatch && hasCursor) {
-        const level = headingMatch[1].length;
-        add(lineFrom, lineTo, Decoration.line({ class: `cm-heading cm-heading-${level}` }));
-        pos = lineTo + 1;
-        continue;
-      }
-
-      // ── Horizontal rule ───────────────────────────────────────────────────
-      if (/^---+$/.test(text.trim()) && !hasCursor) {
-        add(lineFrom, lineTo, Decoration.replace({ widget: new HrWidget() }));
-        pos = lineTo + 1;
-        continue;
-      }
-
-      // ── Blockquote ────────────────────────────────────────────────────────
-      if (text.startsWith('>')) {
-        add(lineFrom, lineTo, Decoration.line({ class: 'cm-blockquote' }));
-        if (!hasCursor) {
-          add(lineFrom, lineFrom + 1, Decoration.replace({}));
-          if (text[1] === ' ') add(lineFrom + 1, lineFrom + 2, Decoration.replace({}));
-        }
-      }
-
-      // ── Checkboxes ────────────────────────────────────────────────────────
-      const cbMatch = text.match(/^(\s*[-*+] )(\[[ x]\])/i);
-      if (cbMatch) {
-        const checked = cbMatch[2][1].toLowerCase() === 'x';
-        const cbFrom = lineFrom + cbMatch[1].length;
-        const cbTo = cbFrom + 3;
-        if (!hasCursor) {
-          add(cbFrom, cbTo, Decoration.replace({ widget: new CheckboxWidget(checked, cbFrom + 1) }));
-        }
-      }
-
-      // ── Inline spans (bold, italic, strikethrough, code, wikilinks) ───────
-      if (!hasCursor) {
-        // Bold **text** or __text__
-        for (const m of text.matchAll(/(\*\*|__)(.+?)\1/g)) {
-          const mFrom = lineFrom + m.index!;
-          const mTo = mFrom + m[0].length;
-          if (cursorInRange(sel, mFrom, mTo)) continue;
-          add(mFrom, mFrom + m[1].length, Decoration.mark({ class: 'cm-hide' }));
-          add(mFrom, mTo, Decoration.mark({ class: 'cm-bold' }));
-          add(mTo - m[1].length, mTo, Decoration.mark({ class: 'cm-hide' }));
-        }
-
-        // Italic *text* or _text_ (not part of **)
-        for (const m of text.matchAll(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g)) {
-          const mFrom = lineFrom + m.index!;
-          const mTo = mFrom + m[0].length;
-          if (cursorInRange(sel, mFrom, mTo)) continue;
-          add(mFrom, mFrom + 1, Decoration.mark({ class: 'cm-hide' }));
-          add(mFrom, mTo, Decoration.mark({ class: 'cm-italic' }));
-          add(mTo - 1, mTo, Decoration.mark({ class: 'cm-hide' }));
-        }
-
-        // Strikethrough ~~text~~
-        for (const m of text.matchAll(/~~(.+?)~~/g)) {
-          const mFrom = lineFrom + m.index!;
-          const mTo = mFrom + m[0].length;
-          if (cursorInRange(sel, mFrom, mTo)) continue;
-          add(mFrom, mFrom + 2, Decoration.mark({ class: 'cm-hide' }));
-          add(mFrom, mTo, Decoration.mark({ class: 'cm-strikethrough' }));
-          add(mTo - 2, mTo, Decoration.mark({ class: 'cm-hide' }));
-        }
-
-        // Inline code `code`
-        for (const m of text.matchAll(/`([^`]+)`/g)) {
-          const mFrom = lineFrom + m.index!;
-          const mTo = mFrom + m[0].length;
-          if (cursorInRange(sel, mFrom, mTo)) continue;
-          add(mFrom, mFrom + 1, Decoration.mark({ class: 'cm-hide' }));
-          add(mFrom + 1, mTo - 1, Decoration.mark({ class: 'cm-inline-code' }));
-          add(mTo - 1, mTo, Decoration.mark({ class: 'cm-hide' }));
-        }
-
-        // Wikilinks [[target]] or [[target|alias]]
-        for (const m of text.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
-          const mFrom = lineFrom + m.index!;
-          const mTo = mFrom + m[0].length;
-          if (cursorInRange(sel, mFrom, mTo)) continue;
-          const display = m[2] ?? m[1];
-          // Replace entire [[...]] with styled span showing display text
-          add(
-            mFrom,
-            mTo,
-            Decoration.replace({
-              widget: new WikilinkWidget(display.trim()),
-            }),
-          );
-        }
-      }
-
-      pos = lineTo + 1;
-    }
-  }
-
-  // Sort by from position, then by to position descending (wider ranges first)
-  decos.sort((a, b) => {
-    if (a.from !== b.from) return a.from - b.from;
-    return b.to - a.to;
-  });
-
-  for (const { from, to, deco } of decos) {
-    builder.add(from, to, deco);
-  }
-
-  return builder.finish();
-}
-
 class WikilinkWidget extends WidgetType {
   constructor(private label: string) { super(); }
+  eq(other: WikilinkWidget) { return this.label === other.label; }
   toDOM() {
     const span = document.createElement('span');
     span.className = 'cm-wikilink';
@@ -207,6 +30,149 @@ class WikilinkWidget extends WidgetType {
   }
   ignoreEvent() { return false; }
 }
+
+class CheckboxWidget extends WidgetType {
+  constructor(private checked: boolean, private pos: number) { super(); }
+  eq(other: CheckboxWidget) { return this.checked === other.checked && this.pos === other.pos; }
+  toDOM(view: EditorView) {
+    const el = document.createElement('input');
+    el.type = 'checkbox';
+    el.checked = this.checked;
+    el.className = 'cm-checkbox';
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      view.dispatch({ changes: { from: this.pos, to: this.pos + 1, insert: this.checked ? ' ' : 'x' } });
+    });
+    return el;
+  }
+  ignoreEvent() { return false; }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function cursorOnLine(sel: EditorSelection, lineFrom: number, lineTo: number): boolean {
+  return sel.ranges.some((r) => r.from <= lineTo && r.to >= lineFrom);
+}
+
+function cursorInSpan(sel: EditorSelection, from: number, to: number): boolean {
+  return sel.ranges.some((r) => r.from < to && r.to > from);
+}
+
+// ── Build decorations ─────────────────────────────────────────────────────────
+
+function buildDecorations(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const sel = view.state.selection;
+  const doc = view.state.doc;
+
+  type Entry = { from: number; to: number; deco: Decoration };
+  const entries: Entry[] = [];
+
+  for (const { from, to } of view.visibleRanges) {
+    let pos = from;
+    while (pos <= to) {
+      const line = doc.lineAt(pos);
+      const { text, from: lf, to: lt } = line;
+      const onLine = cursorOnLine(sel, lf, lt);
+
+      // ── Heading ──────────────────────────────────────────────────────────
+      const hMatch = text.match(/^(#{1,6}) /);
+      if (hMatch) {
+        const level = hMatch[1].length;
+        entries.push({ from: lf, to: lt, deco: Decoration.line({ class: `cm-md-h cm-md-h${level}` }) });
+        if (!onLine) {
+          entries.push({ from: lf, to: lf + level + 1, deco: Decoration.replace({}) });
+        }
+        pos = lt + 1;
+        continue;
+      }
+
+      // ── Horizontal rule ───────────────────────────────────────────────────
+      if (/^-{3,}$/.test(text.trim()) && !onLine) {
+        entries.push({ from: lf, to: lt, deco: Decoration.replace({ widget: new HrWidget(), block: true }) });
+        pos = lt + 1;
+        continue;
+      }
+
+      // ── Blockquote ────────────────────────────────────────────────────────
+      if (text.startsWith('>')) {
+        entries.push({ from: lf, to: lt, deco: Decoration.line({ class: 'cm-md-blockquote' }) });
+      }
+
+      // ── Checkbox ─────────────────────────────────────────────────────────
+      if (!onLine) {
+        const cbMatch = text.match(/^(\s*[-*+] )(\[[ x]\])/i);
+        if (cbMatch) {
+          const checked = cbMatch[2][1].toLowerCase() === 'x';
+          const cbFrom = lf + cbMatch[1].length;
+          entries.push({ from: cbFrom, to: cbFrom + 3, deco: Decoration.replace({ widget: new CheckboxWidget(checked, cbFrom + 1) }) });
+        }
+      }
+
+      // ── Inline marks (Decoration.mark only — no cursor impact) ───────────
+
+      for (const m of text.matchAll(/\*\*(.+?)\*\*/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        entries.push({ from: mf, to: mt, deco: Decoration.mark({ class: 'cm-md-bold' }) });
+      }
+
+      for (const m of text.matchAll(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        entries.push({ from: mf, to: mt, deco: Decoration.mark({ class: 'cm-md-italic' }) });
+      }
+
+      for (const m of text.matchAll(/~~(.+?)~~/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        entries.push({ from: mf, to: mt, deco: Decoration.mark({ class: 'cm-md-strike' }) });
+      }
+
+      for (const m of text.matchAll(/`([^`]+)`/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        entries.push({ from: mf, to: mt, deco: Decoration.mark({ class: 'cm-md-code' }) });
+      }
+
+      // ── Wikilinks (replace widget, only when cursor not inside) ───────────
+      for (const m of text.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
+        const mf = lf + m.index!;
+        const mt = mf + m[0].length;
+        if (!cursorInSpan(sel, mf, mt)) {
+          const label = (m[2] ?? m[1]).trim();
+          entries.push({ from: mf, to: mt, deco: Decoration.replace({ widget: new WikilinkWidget(label) }) });
+        }
+      }
+
+      pos = lt + 1;
+    }
+  }
+
+  // Sort by from asc, to desc
+  entries.sort((a, b) => a.from !== b.from ? a.from - b.from : b.to - a.to);
+
+  // Drop overlapping replace decorations
+  const safe: Entry[] = [];
+  let lastReplaceEnd = -1;
+  for (const e of entries) {
+    const isReplace = (e.deco as { spec?: { widget?: unknown } }).spec?.widget !== undefined
+      || e.deco.startSide === -1;
+    if (isReplace) {
+      if (e.from < lastReplaceEnd) continue;
+      lastReplaceEnd = e.to;
+    }
+    safe.push(e);
+  }
+
+  for (const { from, to, deco } of safe) {
+    builder.add(from, to, deco);
+  }
+
+  return builder.finish();
+}
+
+// ── Plugin ────────────────────────────────────────────────────────────────────
 
 export const markdownPreviewPlugin = ViewPlugin.fromClass(
   class {
@@ -223,67 +189,57 @@ export const markdownPreviewPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-// ── Editor theme additions ────────────────────────────────────────────────────
+// ── Theme ─────────────────────────────────────────────────────────────────────
 
 export const markdownPreviewTheme = EditorView.baseTheme({
-  // Typography
-  '&': { fontFamily: "'Inter', system-ui, sans-serif" },
-  '.cm-content': { maxWidth: '720px', margin: '0 auto', padding: '24px 0' },
+  '.cm-content': { maxWidth: '720px', margin: '0 auto', padding: '24px 0', fontFamily: "'Inter', system-ui, sans-serif" },
   '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 32px' },
 
-  // Hide markers
-  '.cm-hide': { display: 'none' },
+  '.cm-md-h':  { fontWeight: '700' },
+  '.cm-md-h1': { fontSize: '2em',   lineHeight: '1.3' },
+  '.cm-md-h2': { fontSize: '1.5em', lineHeight: '1.35' },
+  '.cm-md-h3': { fontSize: '1.25em' },
+  '.cm-md-h4': { fontSize: '1.1em' },
+  '.cm-md-h5': { fontSize: '1em' },
+  '.cm-md-h6': { fontSize: '0.9em', color: 'var(--color-text-muted)' },
 
-  // Headings
-  '.cm-heading-1': { fontSize: '2em', fontWeight: '700', marginTop: '0.5em' },
-  '.cm-heading-2': { fontSize: '1.5em', fontWeight: '600' },
-  '.cm-heading-3': { fontSize: '1.25em', fontWeight: '600' },
-  '.cm-heading-4': { fontSize: '1.1em', fontWeight: '600' },
-  '.cm-heading-5': { fontSize: '1em', fontWeight: '600' },
-  '.cm-heading-6': { fontSize: '0.9em', fontWeight: '600', color: 'var(--color-text-muted)' },
-
-  // Inline styles
-  '.cm-bold': { fontWeight: '700' },
-  '.cm-italic': { fontStyle: 'italic' },
-  '.cm-strikethrough': { textDecoration: 'line-through', opacity: '0.6' },
-  '.cm-inline-code': {
-    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-    fontSize: '0.875em',
-    backgroundColor: 'var(--color-surface-2)',
-    borderRadius: '3px',
-    padding: '1px 4px',
-  },
-
-  // Wikilink
-  '.cm-wikilink': {
-    color: 'var(--color-accent)',
-    cursor: 'pointer',
-    borderBottom: '1px solid var(--color-accent)',
-    textDecoration: 'none',
-  },
-
-  // Blockquote
-  '.cm-blockquote': {
+  '.cm-md-blockquote': {
     borderLeft: '3px solid var(--color-accent)',
     paddingLeft: '1em',
     color: 'var(--color-text-muted)',
     fontStyle: 'italic',
   },
 
-  // HR
-  '.cm-hr-line': {
-    borderTop: '1px solid var(--color-border)',
-    margin: '1em 0',
-    height: '1px',
+  '.cm-md-bold':   { fontWeight: '700' },
+  '.cm-md-italic': { fontStyle: 'italic' },
+  '.cm-md-strike': { textDecoration: 'line-through', opacity: '0.6' },
+  '.cm-md-code': {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.875em',
+    backgroundColor: 'var(--color-surface-2)',
+    borderRadius: '3px',
+    padding: '1px 4px',
   },
 
-  // Checkbox
+  '.cm-wikilink': {
+    color: 'var(--color-accent)',
+    cursor: 'pointer',
+    borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 50%, transparent)',
+  },
+
+  '.cm-hr-line': {
+    borderTop: '1px solid var(--color-border)',
+    margin: '8px 32px',
+    height: '1px',
+    display: 'block',
+  },
+
   '.cm-checkbox': {
     cursor: 'pointer',
     accentColor: 'var(--color-accent)',
     width: '14px',
     height: '14px',
-    marginRight: '4px',
+    marginRight: '6px',
     verticalAlign: 'middle',
   },
 });
