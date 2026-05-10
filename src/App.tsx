@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 import { useDailyNote } from '@/hooks/useDailyNote';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
+import { useRecentVaults } from '@/stores/recentVaults';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { EditorTabs } from '@/components/editor/EditorTabs';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
@@ -17,15 +18,31 @@ import {
   PanelRightClose,
   PanelRightOpen,
   CalendarDays,
+  FolderSearch,
 } from 'lucide-react';
 
 export default function App() {
   useTheme();
 
-  const { vaultRoot, activeTabPath } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const openDailyNote = useDailyNote();
+  const autoOpenAttempted = useRef(false);
+
+  // Auto-open the last vault on startup. If it fails (folder moved/deleted),
+  // forget it so we don't loop the user into the same broken vault.
+  useEffect(() => {
+    if (autoOpenAttempted.current) return;
+    if (vaultRoot) return;
+    const { lastOpened, remove } = useRecentVaults.getState();
+    if (!lastOpened) return;
+    autoOpenAttempted.current = true;
+    openVault(lastOpened).catch((e) => {
+      console.error('Auto-open of last vault failed:', e);
+      remove(lastOpened);
+    });
+  }, [vaultRoot, openVault]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -87,6 +104,14 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-1">
+          <button
+            onClick={closeVault}
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+            title="Manage vaults — back to vault picker"
+          >
+            <FolderSearch size={16} />
+          </button>
+
           <button
             onClick={openDailyNote}
             className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
