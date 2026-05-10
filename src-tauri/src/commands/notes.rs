@@ -1,11 +1,11 @@
 use crate::core::parser::{parse_note, ParsedNote};
-use crate::core::vault::KNOWLEDGE_BASE_DIR;
+use crate::core::vault::{KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 fn is_protected(rel_path: &str) -> bool {
-    rel_path == KNOWLEDGE_BASE_DIR
+    rel_path == KNOWLEDGE_BASE_DIR || rel_path == QUICK_NOTES_DIR
 }
 
 #[derive(Debug, Serialize, Deserialize)]
