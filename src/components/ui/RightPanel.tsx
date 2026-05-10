@@ -4,6 +4,7 @@ import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { clsx } from 'clsx';
 import { FileText } from 'lucide-react';
+import { DisconnectedSpore } from '@/components/brand/Spore';
 
 interface Backlink {
   path: string;
@@ -69,9 +70,12 @@ export function RightPanel() {
         {rightPanelTab === 'backlinks' && (
           <div className="space-y-2">
             {backlinks.length === 0 ? (
-              <p className="text-text-muted text-xs">
-                {activeTabPath ? 'No backlinks' : 'Open a note to see backlinks'}
-              </p>
+              <div className="flex flex-col items-center gap-1.5 py-6 text-text-muted">
+                <DisconnectedSpore size={28} className="text-accent-muted/80" />
+                <p className="text-xs">
+                  {activeTabPath ? 'No backlinks' : 'Open a note to see backlinks'}
+                </p>
+              </div>
             ) : (
               backlinks.map((bl) => (
                 <button

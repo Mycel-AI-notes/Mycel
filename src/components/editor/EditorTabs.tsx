@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
+import { PulseSpore } from '@/components/brand/Spore';
 
 export function EditorTabs() {
   const { openTabs, activeTabPath, setActiveTab, closeTab } = useVaultStore();
@@ -21,7 +22,9 @@ export function EditorTabs() {
           )}
         >
           <span className="truncate">{tab.title}</span>
-          {tab.isDirty && <span className="text-accent text-xs">●</span>}
+          {tab.isDirty && (
+            <PulseSpore size={9} className="text-accent" />
+          )}
           <span
             role="button"
             onClick={(e) => {

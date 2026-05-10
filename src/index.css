@@ -155,6 +155,51 @@ body {
 .cm-editor.cm-focused {
   outline: none;
 }
+/* Soft accent halo around the caret — "living" cursor without a literal trail. */
+.cm-editor .cm-cursor,
+.cm-editor .cm-cursor-primary {
+  border-left-color: var(--color-accent) !important;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+/* ── Brand motion ───────────────────────────────────────────────────────── */
+
+@keyframes mycel-spore-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50%      { opacity: 1;    transform: scale(1.08); }
+}
+
+@keyframes mycel-breathe {
+  0%, 100% { opacity: 0.7;  transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+
+@keyframes mycel-halo {
+  0%, 100% { opacity: 0.15; transform: scale(0.96); }
+  50%      { opacity: 0.45; transform: scale(1.08); }
+}
+
+@keyframes mycel-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(2px, -2px); }
+}
+
+@keyframes mycel-hypha-glow {
+  0%, 100% { opacity: 0.18; }
+  50%      { opacity: 0.45; }
+}
+
+.spore-pulse  { animation: mycel-spore-pulse 2.4s ease-in-out infinite; transform-origin: center; }
+.spore-breathe{ animation: mycel-breathe     5s   ease-in-out infinite; transform-origin: center; }
+.spore-halo   { animation: mycel-halo        4s   ease-in-out infinite; transform-origin: center; }
+.spore-drift  { animation: mycel-drift       8s   ease-in-out infinite; }
+.hypha-glow   { animation: mycel-hypha-glow  6s   ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spore-pulse, .spore-breathe, .spore-halo, .spore-drift, .hypha-glow {
+    animation: none;
+  }
+}
 
 /* Markdown preview styles */
 .prose-mycel {

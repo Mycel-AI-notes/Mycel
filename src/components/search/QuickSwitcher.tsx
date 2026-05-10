@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { clsx } from 'clsx';
 import { FileText, Search } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
+import { DisconnectedSpore } from '@/components/brand/Spore';
 
 interface NoteSummary {
   path: string;
@@ -109,7 +110,11 @@ export function QuickSwitcher({ onClose }: Props) {
 
         <div className="max-h-80 overflow-y-auto py-1">
           {filtered.length === 0 ? (
-            <p className="text-text-muted text-sm text-center py-6">No notes found</p>
+            <div className="flex flex-col items-center gap-2 py-8 text-text-muted">
+              <DisconnectedSpore size={32} className="text-accent-muted" />
+              <p className="text-sm">No notes found</p>
+              <p className="text-xs opacity-70">try a different fragment</p>
+            </div>
           ) : (
             filtered.map((note, i) => (
               <button
