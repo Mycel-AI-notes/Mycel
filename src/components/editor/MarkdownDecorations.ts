@@ -109,12 +109,41 @@ function buildDecorations(view: EditorView): DecorationSet {
     }
   };
 
+  // Pre-scan from doc start up to the first visible position so we know
+  // whether we're already inside a fenced code block when rendering starts.
+  let inCodeBlock = false;
+  const fenceRe = /^```/;
+  const visStart = view.visibleRanges[0]?.from ?? 0;
+  for (let p = 1; p < visStart; ) {
+    const l = doc.lineAt(p);
+    if (fenceRe.test(l.text)) inCodeBlock = !inCodeBlock;
+    p = l.to + 1;
+  }
+
   for (const { from, to } of view.visibleRanges) {
     let pos = from;
     while (pos <= to) {
       const line = doc.lineAt(pos);
       const { text, from: lf, to: lt } = line;
       const onLine = cursorOnLine(sel, lf, lt);
+
+      // ── Fenced code block ──────────────────────────────────────────────────
+      if (fenceRe.test(text)) {
+        inCodeBlock = !inCodeBlock;
+        lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-codeblock-line' }) });
+        // Hide the ``` fence markers when cursor is not on this line
+        if (!onLine && lt > lf) hide(lf, lt);
+        pos = lt + 1;
+        continue;
+      }
+
+      if (inCodeBlock) {
+        lineDecos.push({ pos: lf, deco: Decoration.line({ class: 'cm-md-codeblock-line' }) });
+        pos = lt + 1;
+        continue;
+      }
+
+      // ── Normal markdown ────────────────────────────────────────────────────
 
       const hm = text.match(/^(#{1,6}) /);
       if (hm) {
@@ -155,33 +184,41 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
+      // Collect inline code spans first so their content is protected from
+      // bold/italic/etc. parsing below.
+      const codeSpans: [number, number][] = [];
       for (const m of text.matchAll(/`([^`\n]+)`/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
+        codeSpans.push([mf, mt]);
         wrapInline(mf, mt, 1, 'cm-md-code');
       }
+
+      const inCode = (mf: number, mt: number) =>
+        codeSpans.some(([cf, ct]) => mf < ct && mt > cf);
 
       for (const m of text.matchAll(/\*\*([^\n*][^\n]*?)\*\*/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
-        wrapInline(mf, mt, 2, 'cm-md-bold');
+        if (!inCode(mf, mt)) wrapInline(mf, mt, 2, 'cm-md-bold');
       }
 
       for (const m of text.matchAll(/(?<![*\w])\*(?!\*)([^\n*]+?)\*(?![*\w])/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
-        wrapInline(mf, mt, 1, 'cm-md-italic');
+        if (!inCode(mf, mt)) wrapInline(mf, mt, 1, 'cm-md-italic');
       }
 
       for (const m of text.matchAll(/~~([^\n]+?)~~/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
-        wrapInline(mf, mt, 2, 'cm-md-strike');
+        if (!inCode(mf, mt)) wrapInline(mf, mt, 2, 'cm-md-strike');
       }
 
       for (const m of text.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)\)/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
+        if (inCode(mf, mt)) continue;
         if (cursorInSpan(sel, mf, mt)) {
           mark(mf, mt, 'cm-md-link-mark');
         } else {
@@ -196,6 +233,7 @@ function buildDecorations(view: EditorView): DecorationSet {
       for (const m of text.matchAll(/\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
+        if (inCode(mf, mt)) continue;
         if (!cursorInSpan(sel, mf, mt)) {
           const label = (m[2] ?? m[1]).trim();
           spanDecos.push({ from: mf, to: mt, deco: Decoration.replace({ widget: new WikilinkWidget(label) }) });
@@ -318,6 +356,12 @@ export const markdownPreviewTheme = EditorView.baseTheme({
     color: 'var(--color-accent)',
     cursor: 'pointer',
     borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
+  },
+
+  '.cm-md-codeblock-line': {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.875em',
+    backgroundColor: 'var(--color-surface-2)',
   },
 
   '.cm-checkbox': {
