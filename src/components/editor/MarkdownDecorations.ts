@@ -236,17 +236,22 @@ export const markdownPreviewPlugin = ViewPlugin.fromClass(
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 export const markdownPreviewTheme = EditorView.baseTheme({
-  '.cm-content': { padding: '16px 0' },
-  '.cm-line': { padding: '0 24px' },
+  '.cm-content': {
+    maxWidth: '760px',
+    margin: '0 auto',
+    padding: '24px 0',
+    fontFamily: "'Inter', system-ui, sans-serif",
+  },
+  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 32px' },
 
-  // Headings: weight + color only — NO font-size (keeps line height uniform
-  // so CodeMirror coordinate mapping stays accurate)
-  '.cm-md-h':  { fontWeight: '800', color: 'var(--color-text-primary)' },
-  '.cm-md-h2': { fontWeight: '700' },
-  '.cm-md-h3': { fontWeight: '600' },
-  '.cm-md-h4': { fontWeight: '600', color: 'var(--color-text-secondary)' },
-  '.cm-md-h5': { fontWeight: '600', color: 'var(--color-text-muted)' },
-  '.cm-md-h6': { fontWeight: '500', color: 'var(--color-text-muted)' },
+  // Headings — Obsidian-like: bigger + bolder
+  '.cm-md-h':  { fontWeight: '700', color: 'var(--color-text-primary)' },
+  '.cm-md-h1': { fontSize: '2em',    lineHeight: '1.25' },
+  '.cm-md-h2': { fontSize: '1.6em',  lineHeight: '1.3' },
+  '.cm-md-h3': { fontSize: '1.3em',  lineHeight: '1.35' },
+  '.cm-md-h4': { fontSize: '1.15em' },
+  '.cm-md-h5': { fontSize: '1em' },
+  '.cm-md-h6': { fontSize: '0.9em', color: 'var(--color-text-muted)' },
 
   '.cm-md-hr': {
     borderTop: '2px solid var(--color-border)',
