@@ -16,6 +16,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
+import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 
 const themeCompartment = new Compartment();
 
@@ -103,6 +104,8 @@ export function MarkdownEditor({ path }: Props) {
         }),
         markdownPreviewPlugin,
         markdownPreviewTheme,
+        databaseWidgetPlugin(path),
+        databaseWidgetTheme,
         wikilinkAutocomplete,
         themeCompartment.of(
           isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
