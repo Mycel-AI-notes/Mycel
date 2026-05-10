@@ -17,7 +17,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { makeWikilinkClickHandler } from './WikilinkNavigation';
-import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 
 const themeCompartment = new Compartment();
 
@@ -27,8 +26,12 @@ const lightTheme = EditorView.theme(
       backgroundColor: 'var(--color-surface-1)',
       color: 'var(--color-text-primary)',
       height: '100%',
+      fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
+      fontSize: '14px',
     },
-    '.cm-scroller': { overflow: 'auto' },
+    '.cm-scroller': { overflow: 'auto', lineHeight: '1.7' },
+    '.cm-content': { padding: '16px 0', caretColor: 'var(--color-accent)' },
+    '.cm-line': { padding: '0 24px' },
     '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.03)' },
     '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.03)' },
     '.cm-gutters': {
@@ -115,8 +118,6 @@ export function MarkdownEditor({ path }: Props) {
           base: markdownLanguage,
           codeLanguages: languages,
         }),
-        markdownPreviewPlugin,
-        markdownPreviewTheme,
         wikilinkAutocomplete,
         makeWikilinkClickHandler(openNote, createNote),
         themeCompartment.of(
