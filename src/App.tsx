@@ -1,4 +1,6 @@
+import { useEffect, useState, useCallback } from 'react';
 import { useTheme } from '@/hooks/useTheme';
+import { useDailyNote } from '@/hooks/useDailyNote';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { Sidebar } from '@/components/sidebar/Sidebar';
@@ -7,13 +9,43 @@ import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { EmptyEditor } from '@/components/editor/EmptyEditor';
 import { RightPanel } from '@/components/ui/RightPanel';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { QuickSwitcher } from '@/components/search/QuickSwitcher';
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  CalendarDays,
+} from 'lucide-react';
 
 export default function App() {
   useTheme();
 
   const { vaultRoot, activeTabPath } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const openDailyNote = useDailyNote();
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        if (vaultRoot) setQuickSwitcherOpen(true);
+      }
+      if (e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        openDailyNote();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [vaultRoot, openDailyNote]);
+
+  const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
 
   if (!vaultRoot) {
     return (
@@ -35,17 +67,34 @@ export default function App() {
           {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
 
-        <span className="flex-1 text-center text-xs text-text-muted truncate font-mono">
-          {vaultRoot.split('/').pop() ?? vaultRoot}
-        </span>
-
+        {/* Quick Switcher trigger */}
         <button
-          onClick={toggleRightPanel}
-          className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
-          title="Toggle right panel"
+          onClick={() => setQuickSwitcherOpen(true)}
+          className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
         >
-          {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          <span className="flex-1 text-left">
+            {vaultRoot.split('/').pop() ?? vaultRoot}
+          </span>
+          <kbd className="text-[10px] bg-surface-2 px-1 rounded">⌘O</kbd>
         </button>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={openDailyNote}
+            className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            title="Daily note (Cmd+D)"
+          >
+            <CalendarDays size={16} />
+          </button>
+
+          <button
+            onClick={toggleRightPanel}
+            className="p-1.5 rounded hover:bg-white/10 text-text-muted hover:text-text-primary"
+            title="Toggle right panel"
+          >
+            {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+          </button>
+        </div>
       </header>
 
       {/* Main layout */}
@@ -64,6 +113,9 @@ export default function App() {
 
         {!rightPanelCollapsed && <RightPanel />}
       </div>
+
+      {/* Quick Switcher overlay */}
+      {quickSwitcherOpen && <QuickSwitcher onClose={closeQuickSwitcher} />}
     </div>
   );
 }

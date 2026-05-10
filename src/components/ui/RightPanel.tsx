@@ -1,14 +1,32 @@
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { clsx } from 'clsx';
+import { FileText } from 'lucide-react';
+
+interface Backlink {
+  path: string;
+  title: string;
+  context: string;
+}
 
 export function RightPanel() {
   const { rightPanelTab, setRightPanelTab } = useUIStore();
-  const { activeTabPath, noteCache } = useVaultStore();
+  const { activeTabPath, noteCache, openNote } = useVaultStore();
+  const [backlinks, setBacklinks] = useState<Backlink[]>([]);
 
   const note = activeTabPath ? noteCache.get(activeTabPath) : null;
 
   const tabs = ['outline', 'backlinks', 'tags'] as const;
+
+  useEffect(() => {
+    if (!activeTabPath || rightPanelTab !== 'backlinks') return;
+    setBacklinks([]);
+    invoke<Backlink[]>('backlinks_get', { path: activeTabPath })
+      .then(setBacklinks)
+      .catch(console.error);
+  }, [activeTabPath, rightPanelTab]);
 
   return (
     <aside className="flex flex-col h-full bg-surface-0 border-l border-border w-52 shrink-0 text-sm">
@@ -35,9 +53,10 @@ export function RightPanel() {
             {note.parsed.headings.map((h, i) => (
               <li
                 key={i}
-                className="text-text-secondary hover:text-text-primary cursor-pointer truncate"
+                className="text-text-secondary hover:text-text-primary cursor-pointer truncate py-0.5"
                 style={{ paddingLeft: `${(h.level - 1) * 12}px` }}
               >
+                <span className="text-text-muted mr-1">{'#'.repeat(h.level)}</span>
                 {h.text}
               </li>
             ))}
@@ -48,7 +67,31 @@ export function RightPanel() {
         )}
 
         {rightPanelTab === 'backlinks' && (
-          <p className="text-text-muted text-xs">Backlinks coming in Stage 2</p>
+          <div className="space-y-2">
+            {backlinks.length === 0 ? (
+              <p className="text-text-muted text-xs">
+                {activeTabPath ? 'No backlinks' : 'Open a note to see backlinks'}
+              </p>
+            ) : (
+              backlinks.map((bl) => (
+                <button
+                  key={bl.path}
+                  onClick={() => openNote(bl.path)}
+                  className="w-full text-left group"
+                >
+                  <div className="flex items-center gap-1.5 text-text-secondary group-hover:text-text-primary">
+                    <FileText size={11} className="shrink-0 text-text-muted" />
+                    <span className="text-xs font-medium truncate">{bl.title}</span>
+                  </div>
+                  {bl.context && (
+                    <p className="text-xs text-text-muted mt-0.5 line-clamp-2 pl-4">
+                      {bl.context}
+                    </p>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
         )}
 
         {rightPanelTab === 'tags' && note && (
@@ -64,7 +107,9 @@ export function RightPanel() {
           </div>
         )}
 
-        {!note && <p className="text-text-muted text-xs">Open a note to see details</p>}
+        {!note && rightPanelTab !== 'backlinks' && (
+          <p className="text-text-muted text-xs">Open a note to see details</p>
+        )}
       </div>
     </aside>
   );
