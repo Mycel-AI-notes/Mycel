@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { RefObject, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ColumnDef, SortDef } from '@/types/database';
+import { useAnchorPos, useClickOutside } from './floating';
 
 interface Props {
+  anchorRef: RefObject<HTMLElement | null>;
   columnId: string;
   column: ColumnDef;
   currentSort?: SortDef | null;
@@ -12,6 +15,7 @@ interface Props {
 }
 
 export function DatabaseColumnMenu({
+  anchorRef,
   columnId,
   column,
   currentSort,
@@ -20,23 +24,31 @@ export function DatabaseColumnMenu({
   onDelete,
   onSort,
 }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(column.label);
+  const pos = useAnchorPos(anchorRef, true);
+  useClickOutside([anchorRef, popRef], true, onClose);
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  if (!pos) return null;
 
   const sortedAsc = currentSort?.field === columnId && currentSort.dir === 'asc';
-  const sortedDesc = currentSort?.field === columnId && currentSort.dir === 'desc';
+  const sortedDesc =
+    currentSort?.field === columnId && currentSort.dir === 'desc';
 
-  return (
-    <div ref={ref} className="db-popover db-column-menu">
+  return createPortal(
+    <div
+      ref={popRef}
+      className="db-popover db-column-menu"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        minWidth: Math.max(160, pos.minWidth),
+        zIndex: 60,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       {renaming ? (
         <input
           autoFocus
@@ -88,6 +100,7 @@ export function DatabaseColumnMenu({
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

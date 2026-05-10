@@ -44,6 +44,8 @@ export function DatabaseTable({
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const resizingRef = useRef<{ id: string; startX: number; startW: number } | null>(null);
+  // Active column-header button so the popover knows where to anchor.
+  const menuAnchorRef = useRef<HTMLButtonElement | null>(null);
 
   const visibleIds = view.visible_columns.filter(
     (c) => c === PAGE_COL || schema[c],
@@ -150,6 +152,9 @@ export function DatabaseTable({
                       <span>{label}</span>
                     ) : (
                       <button
+                        ref={(el) => {
+                          if (openMenuId === cid) menuAnchorRef.current = el;
+                        }}
                         className="db-th-btn"
                         onClick={() => setOpenMenuId(openMenuId === cid ? null : cid)}
                       >
@@ -159,6 +164,8 @@ export function DatabaseTable({
                   </div>
                   {!isPage && col && openMenuId === cid && (
                     <DatabaseColumnMenu
+                      key={cid}
+                      anchorRef={menuAnchorRef}
                       columnId={cid}
                       column={col}
                       currentSort={view.sort ?? null}
