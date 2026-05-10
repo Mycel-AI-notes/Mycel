@@ -1,8 +1,22 @@
-# Mycel
+<p align="center">
+  <img src="src-tauri/icons/128x128@2x.png" alt="Mycel" width="128" height="128">
+</p>
 
-**Local-first Markdown knowledge base.**
+<h1 align="center">Mycel</h1>
+
+<p align="center"><strong>Local-first Markdown knowledge base.</strong></p>
+
+<!-- Screenshots go here -->
+<!--
+<p align="center">
+  <img src="docs/screenshots/editor.png" alt="Mycel editor" width="800">
+</p>
+-->
+
 
 Mycel is a desktop note-taking app built on [Tauri 2](https://tauri.app) + Rust + React. Open any folder, start writing — your notes stay as plain `.md` files on disk, no cloud account required.
+
+
 
 > Status: early MVP (v0.1). The editor, file tree, tabs, wikilinks, daily notes and inline databases work today. The bigger items in the roadmap below — proactive AI, sync, the spore graph, image embeds — are still in progress.
 
