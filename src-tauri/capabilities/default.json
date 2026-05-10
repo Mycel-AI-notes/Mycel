@@ -14,6 +14,13 @@
     "fs:allow-mkdir",
     "fs:allow-read-dir",
     "fs:allow-remove",
-    "fs:allow-rename"
+    "fs:allow-rename",
+    "global-shortcut:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize"
   ]
 }

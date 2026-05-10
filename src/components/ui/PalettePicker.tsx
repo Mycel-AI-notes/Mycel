@@ -34,18 +34,18 @@ export function PalettePicker() {
     <div ref={rootRef} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+        className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
         title="Color palette"
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <PaletteIcon size={16} />
+        <PaletteIcon size={14} />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-md border border-border bg-surface-0 shadow-lg py-1"
+          className="absolute right-0 bottom-full mb-1 z-50 min-w-[160px] rounded-md border border-border bg-surface-0 shadow-lg py-1"
         >
           {PALETTES.map((p) => (
             <button
