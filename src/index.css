@@ -771,13 +771,15 @@ body {
   background: var(--color-surface-2);
 }
 .db-select-option.is-active {
-  /* Just colour + weight — no background tint, that read as a stripe in
-     the modal where the option list overlapped the editor gutter. */
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   color: var(--color-accent);
-  font-weight: 600;
+  font-weight: 500;
+}
+.db-select-option:hover {
+  background: var(--color-surface-2);
 }
 .db-select-option.is-active:hover {
-  background: var(--color-surface-2);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
 .db-wikilink {
