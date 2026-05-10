@@ -303,12 +303,14 @@ export const markdownPreviewPlugin = ViewPlugin.fromClass(
 
 export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-content': {
+    width: '100%',
     maxWidth: '760px',
     margin: '0 auto',
     padding: '24px 0',
     fontFamily: "'Inter', system-ui, sans-serif",
+    boxSizing: 'border-box',
   },
-  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 32px' },
+  '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 clamp(16px, 4vw, 32px)' },
 
   '.cm-md-h':  { fontWeight: '700', color: 'var(--color-text-primary)' },
   '.cm-md-h1': { fontSize: '2em',    lineHeight: '1.25' },

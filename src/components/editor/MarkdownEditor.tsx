@@ -28,7 +28,7 @@ const lightTheme = EditorView.theme(
       fontFamily: "'Inter', system-ui, sans-serif",
       fontSize: '16px',
     },
-    '.cm-scroller': { overflow: 'auto', lineHeight: '1.75' },
+    '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
     '.cm-content': { caretColor: 'var(--color-accent)' },
     '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.03)' },
     '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.03)' },
