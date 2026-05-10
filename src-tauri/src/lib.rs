@@ -6,12 +6,14 @@ use tokio::sync::Mutex;
 
 pub struct AppState {
     pub vault: Arc<Mutex<Option<core::vault::Vault>>>,
+    pub watcher: Arc<Mutex<Option<core::watcher::VaultWatcher>>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             vault: Arc::new(Mutex::new(None)),
+            watcher: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -36,6 +38,19 @@ pub fn run() {
             commands::notes::folder_create,
             commands::search::notes_list,
             commands::search::backlinks_get,
+            commands::database::db_read,
+            commands::database::db_write,
+            commands::database::db_create,
+            commands::database::db_update_cell,
+            commands::database::db_add_row,
+            commands::database::db_delete_row,
+            commands::database::db_add_column,
+            commands::database::db_delete_column,
+            commands::database::db_update_column,
+            commands::database::db_update_view,
+            commands::database::db_create_page,
+            commands::database::db_pages_dir,
+            commands::database::dbs_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,6 +2,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+/// Special vault folder where databases and the pages they generate live.
+/// Auto-created on vault open and protected from rename/delete.
+pub const KNOWLEDGE_BASE_DIR: &str = "Knowledge Base";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
     pub version: u32,
@@ -19,6 +23,9 @@ pub struct FileEntry {
     pub path: String,
     pub is_dir: bool,
     pub children: Option<Vec<FileEntry>>,
+    /// True for the protected Knowledge Base root folder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_knowledge_base: bool,
 }
 
 pub struct Vault {
@@ -39,6 +46,11 @@ impl Vault {
             let json = serde_json::to_string_pretty(&config)?;
             std::fs::write(&config_path, json)?;
         }
+
+        // Ensure the Knowledge Base folder exists. It hosts databases and the
+        // pages generated from rows.
+        let kb_dir = root.join(KNOWLEDGE_BASE_DIR);
+        std::fs::create_dir_all(&kb_dir).context("Failed to create Knowledge Base directory")?;
 
         Ok(Self { root })
     }
@@ -83,11 +95,13 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
 
         if path.is_dir() {
             let children = read_dir_recursive(&path, vault_root)?;
+            let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
             entries.push(FileEntry {
                 name,
                 path: rel_path,
                 is_dir: true,
                 children: Some(children),
+                is_knowledge_base: is_kb,
             });
         } else if path.extension().map(|e| e == "md").unwrap_or(false) {
             entries.push(FileEntry {
@@ -95,6 +109,7 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
                 path: rel_path,
                 is_dir: false,
                 children: None,
+                is_knowledge_base: false,
             });
         }
     }

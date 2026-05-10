@@ -11,9 +11,10 @@ interface VaultState {
 
   openVault: (path: string) => Promise<void>;
   refreshTree: () => Promise<void>;
-  openNote: (path: string) => Promise<void>;
+  openNote: (path: string, options?: { preview?: boolean }) => Promise<void>;
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
+  pinTab: (path: string) => void;
   saveNote: (path: string, content: string) => Promise<void>;
   createNote: (path: string) => Promise<void>;
   createFolder: (path: string) => Promise<void>;
@@ -39,7 +40,8 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ fileTree: tree });
   },
 
-  openNote: async (path) => {
+  openNote: async (path, options) => {
+    const preview = options?.preview ?? false;
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
@@ -52,14 +54,45 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     }
 
     const alreadyOpen = openTabs.find((t) => t.path === path);
-    if (!alreadyOpen) {
-      const note = get().noteCache.get(path)!;
-      const title = note.parsed.meta.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+    const note = get().noteCache.get(path)!;
+    const title = note.parsed.meta.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+
+    if (alreadyOpen) {
+      // If user explicitly re-opens (non-preview) an existing preview tab,
+      // promote it. Otherwise leave it alone.
+      if (alreadyOpen.isPreview && !preview) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t) =>
+            t.path === path ? { ...t, isPreview: false } : t,
+          ),
+        }));
+      }
+    } else if (preview) {
+      // Replace the existing preview tab (if any), otherwise append.
+      const existingIdx = openTabs.findIndex((t) => t.isPreview);
+      if (existingIdx >= 0) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t, i) =>
+            i === existingIdx ? { path, title, isDirty: false, isPreview: true } : t,
+          ),
+        }));
+      } else {
+        set((s) => ({
+          openTabs: [...s.openTabs, { path, title, isDirty: false, isPreview: true }],
+        }));
+      }
+    } else {
       set((s) => ({
-        openTabs: [...s.openTabs, { path, title, isDirty: false }],
+        openTabs: [...s.openTabs, { path, title, isDirty: false, isPreview: false }],
       }));
     }
     set({ activeTabPath: path });
+  },
+
+  pinTab: (path) => {
+    set((s) => ({
+      openTabs: s.openTabs.map((t) => (t.path === path ? { ...t, isPreview: false } : t)),
+    }));
   },
 
   closeTab: (path) => {
@@ -84,7 +117,10 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       if (parsed) next.set(path, { path, content, parsed });
       return {
         noteCache: next,
-        openTabs: s.openTabs.map((t) => (t.path === path ? { ...t, isDirty: false } : t)),
+        // Saving promotes a preview tab to a regular pinned tab.
+        openTabs: s.openTabs.map((t) =>
+          t.path === path ? { ...t, isDirty: false, isPreview: false } : t,
+        ),
       };
     });
   },

@@ -1,12 +1,22 @@
 use crate::core::vault::{FileEntry, Vault};
+use crate::core::watcher::start_watcher;
 use crate::AppState;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
-pub async fn vault_open(path: String, state: State<'_, AppState>) -> Result<Vec<FileEntry>, String> {
+pub async fn vault_open(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<FileEntry>, String> {
     let vault = Vault::open(&path).map_err(|e| e.to_string())?;
     let tree = vault.file_tree().map_err(|e| e.to_string())?;
+    let root = vault.root.clone();
     *state.vault.lock().await = Some(vault);
+
+    let new_watcher = start_watcher(app, root);
+    *state.watcher.lock().await = new_watcher;
+
     Ok(tree)
 }
 

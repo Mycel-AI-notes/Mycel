@@ -9,6 +9,7 @@ import {
   FolderPlus,
   Trash2,
   Pencil,
+  Library,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
@@ -27,6 +28,7 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
   const { openNote, deleteNote, renameNote, activeTabPath } = useVaultStore();
 
   const isActive = activeTabPath === entry.path;
+  const isKB = !!entry.is_knowledge_base;
 
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
@@ -82,7 +84,9 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
             <span className="w-3 h-3 shrink-0 text-text-muted">
               {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </span>
-            {expanded ? (
+            {isKB ? (
+              <Library size={14} className="shrink-0 text-accent" />
+            ) : expanded ? (
               <FolderOpen size={14} className="shrink-0 text-accent-muted/90" />
             ) : (
               <Folder size={14} className="shrink-0 text-accent-deep" />
@@ -112,7 +116,7 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
           <span className="flex-1 truncate">{entry.name.replace(/\.md$/, '')}</span>
         )}
 
-        {!renaming && (
+        {!renaming && !isKB && (
           <span className="hidden group-hover:flex items-center gap-0.5">
             <button
               onClick={startRename}
