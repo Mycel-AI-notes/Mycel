@@ -16,7 +16,6 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkAutocomplete } from './WikilinkCompletion';
-import { makeWikilinkClickHandler } from './WikilinkNavigation';
 
 const themeCompartment = new Compartment();
 
@@ -61,7 +60,7 @@ interface Props {
 export function MarkdownEditor({ path }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { noteCache, saveNote, markDirty, openNote, createNote } = useVaultStore();
+  const { noteCache, saveNote, markDirty } = useVaultStore();
   const isDark = document.documentElement.classList.contains('dark');
 
   const [isPreview, setIsPreview] = useState(false);
@@ -89,7 +88,12 @@ export function MarkdownEditor({ path }: Props) {
 
   const enterEdit = useCallback(() => {
     setIsPreview(false);
-    setTimeout(() => viewRef.current?.focus(), 0);
+    setTimeout(() => {
+      const view = viewRef.current;
+      if (!view) return;
+      view.dispatch({ selection: { anchor: 0 } });
+      view.focus();
+    }, 0);
   }, []);
 
   useEffect(() => {
@@ -119,7 +123,6 @@ export function MarkdownEditor({ path }: Props) {
           codeLanguages: languages,
         }),
         wikilinkAutocomplete,
-        makeWikilinkClickHandler(openNote, createNote),
         themeCompartment.of(
           isDark ? oneDark : [lightTheme, syntaxHighlighting(defaultHighlightStyle)],
         ),
