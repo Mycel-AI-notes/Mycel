@@ -546,6 +546,78 @@ body {
   border-radius: 3px;
 }
 
+.db-settings-popover,
+.db-filters-popover,
+.db-add-column-popover,
+.db-sort-popover,
+.db-columns-popover {
+  right: 0;
+  left: auto;
+  min-width: 260px;
+}
+.db-add-column-popover {
+  min-width: 240px;
+}
+.db-add-column-fields {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-add-column-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 10px 10px;
+}
+.db-settings-section {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-settings-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.db-settings-input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+.db-settings-input:focus {
+  border-color: var(--color-accent);
+}
+.db-settings-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.db-filters-popover {
+  min-width: 420px;
+  max-width: 520px;
+}
+.db-filters-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.db-filter-empty {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 8px 0;
+}
+
 .db-wikilink {
   color: var(--color-accent);
   cursor: pointer;

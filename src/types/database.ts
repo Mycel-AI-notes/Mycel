@@ -45,6 +45,8 @@ export interface ViewDef {
   visible_columns: string[];
   sort?: SortDef | null;
   filters: FilterDef[];
+  /// Optional max rows shown in this view. null/absent means unlimited.
+  row_limit?: number | null;
   [extra: string]: unknown;
 }
 

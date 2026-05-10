@@ -5,6 +5,7 @@ import { dbApi } from '@/lib/database/api';
 import type {
   ColumnDef,
   Database,
+  FilterDef,
   Row,
   SortDef,
   ViewDef,
@@ -13,12 +14,12 @@ import { PAGE_COL } from '@/types/database';
 import { filterRows, sortRows } from '@/lib/database/filtering';
 import { DatabaseToolbar } from './DatabaseToolbar';
 import { DatabaseTable } from './DatabaseTable';
-import { DatabaseFilterPanel } from './DatabaseFilterPanel';
-import { AddColumnModal } from './AddColumnModal';
+import { AddColumnPopover } from './AddColumnPopover';
 
 interface Props {
   dbPath: string;
   viewId?: string;
+  onRemoveFromDoc?: () => void;
 }
 
 interface ErrorState {
@@ -26,10 +27,9 @@ interface ErrorState {
   message: string;
 }
 
-export function DatabaseView({ dbPath, viewId }: Props) {
+export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
   const [db, setDb] = useState<Database | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
 
@@ -86,7 +86,9 @@ export function DatabaseView({ dbPath, viewId }: Props) {
   const visibleRows = useMemo(() => {
     if (!db || !view) return [];
     const filtered = filterRows(db.rows, db.schema, view.filters);
-    return sortRows(filtered, view.sort);
+    const sorted = sortRows(filtered, view.sort);
+    const limit = view.row_limit;
+    return limit && limit > 0 ? sorted.slice(0, limit) : sorted;
   }, [db, view]);
 
   const persistView = useCallback(
@@ -285,6 +287,22 @@ export function DatabaseView({ dbPath, viewId }: Props) {
     [view, persistView],
   );
 
+  const handleFiltersChange = useCallback(
+    (filters: FilterDef[]) => {
+      if (!view) return;
+      void persistView({ ...view, filters });
+    },
+    [view, persistView],
+  );
+
+  const handleRowLimitChange = useCallback(
+    (limit: number | null) => {
+      if (!view) return;
+      void persistView({ ...view, row_limit: limit });
+    },
+    [view, persistView],
+  );
+
   if (error) {
     if (error.kind === 'not_found') {
       return (
@@ -332,32 +350,14 @@ export function DatabaseView({ dbPath, viewId }: Props) {
       <DatabaseToolbar
         schema={db.schema}
         view={view}
-        filterCount={view.filters.length}
-        filtersOpen={filtersOpen}
-        pagesDir={db.pages_dir ?? null}
+        rowLimit={view.row_limit ?? null}
         onAddRow={handleAddRow}
-        onToggleFilters={() => setFiltersOpen((v) => !v)}
         onSortChange={handleSortChange}
         onColumnsChange={handleColumnsChange}
-        onPagesDirChange={async (dir) => {
-          if (!db) return;
-          const next = { ...db, pages_dir: dir };
-          setDb(next);
-          try {
-            await dbApi.write(dbPath, next);
-          } catch (err) {
-            console.error(err);
-            reload();
-          }
-        }}
+        onFiltersChange={handleFiltersChange}
+        onRowLimitChange={handleRowLimitChange}
+        onRemoveFromDoc={onRemoveFromDoc}
       />
-      {filtersOpen && (
-        <DatabaseFilterPanel
-          schema={db.schema}
-          view={view}
-          onChange={persistView}
-        />
-      )}
       <DatabaseTable
         dbPath={dbPath}
         schema={db.schema}
@@ -366,21 +366,25 @@ export function DatabaseView({ dbPath, viewId }: Props) {
         onCellChange={handleCellChange}
         onAddOption={handleAddOption}
         onDeleteRow={handleDeleteRow}
-        onAddColumnClick={() => setAddColumnOpen(true)}
+        onAddColumnClick={() => setAddColumnOpen((v) => !v)}
         onRenameColumn={handleRenameColumn}
         onDeleteColumn={handleDeleteColumn}
         onResizeColumn={handleResizeColumn}
         onSortColumn={handleSortColumn}
         onRowReload={reload}
+        addColumnPopover={
+          addColumnOpen ? (
+            <AddColumnPopover
+              existingIds={new Set(Object.keys(db.schema))}
+              onSubmit={handleAddColumn}
+              onClose={() => setAddColumnOpen(false)}
+            />
+          ) : null
+        }
       />
-      {addColumnOpen && (
-        <AddColumnModal
-          onSubmit={handleAddColumn}
-          onCancel={() => setAddColumnOpen(false)}
-        />
-      )}
       <div className="db-footer">
         {visibleRows.length} of {db.rows.length} rows
+        {view.row_limit ? ` (limit ${view.row_limit})` : ''}
       </div>
     </div>
   );

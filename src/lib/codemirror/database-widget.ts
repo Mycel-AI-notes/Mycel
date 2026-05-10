@@ -94,7 +94,7 @@ class DatabaseWidget extends WidgetType {
     return 0;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const container = document.createElement('div');
     container.className = 'cm-db-widget';
     container.contentEditable = 'false';
@@ -109,6 +109,19 @@ class DatabaseWidget extends WidgetType {
     container.addEventListener('mouseup', stop);
     container.addEventListener('click', stop);
 
+    const onRemoveFromDoc = () => {
+      const blocks = findDbBlocks(view.state);
+      const target = blocks.find(
+        (b) => b.source === this.source && b.view === this.viewId,
+      );
+      if (!target) return;
+      const docLen = view.state.doc.length;
+      // Consume the trailing newline if there is one, so the document doesn't
+      // keep an empty line where the fence used to be.
+      const to = Math.min(docLen, target.fenceTo + 1);
+      view.dispatch({ changes: { from: target.fenceFrom, to, insert: '' } });
+    };
+
     const dbPath = resolveDbPath(this.notePath, this.source);
     const viewId = this.viewId;
     queueMicrotask(() => {
@@ -116,7 +129,9 @@ class DatabaseWidget extends WidgetType {
       try {
         const root = createRoot(container);
         this.root = root;
-        root.render(createElement(DatabaseView, { dbPath, viewId }));
+        root.render(
+          createElement(DatabaseView, { dbPath, viewId, onRemoveFromDoc }),
+        );
       } catch (err) {
         console.error('Failed to mount database widget', err);
       }

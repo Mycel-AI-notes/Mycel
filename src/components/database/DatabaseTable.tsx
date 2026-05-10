@@ -19,6 +19,7 @@ interface Props {
   onResizeColumn: (columnId: string, width: number) => void | Promise<void>;
   onSortColumn: (columnId: string, dir: 'asc' | 'desc' | null) => void;
   onRowReload: () => void;
+  addColumnPopover?: React.ReactNode;
 }
 
 interface EditingCell {
@@ -40,6 +41,7 @@ export function DatabaseTable({
   onResizeColumn,
   onSortColumn,
   onRowReload,
+  addColumnPopover,
 }: Props) {
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -178,13 +180,16 @@ export function DatabaseTable({
               );
             })}
             <th className="db-th db-th-add">
-              <button
-                onClick={onAddColumnClick}
-                className="db-th-add-btn"
-                title="Add column"
-              >
-                <Plus size={12} />
-              </button>
+              <div className="db-popover-anchor">
+                <button
+                  onClick={onAddColumnClick}
+                  className="db-th-add-btn"
+                  title="Add column"
+                >
+                  <Plus size={12} />
+                </button>
+                {addColumnPopover}
+              </div>
             </th>
           </tr>
         </thead>

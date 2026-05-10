@@ -64,6 +64,8 @@ pub struct ViewDef {
     pub sort: Option<SortDef>,
     #[serde(default)]
     pub filters: Vec<FilterDef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_limit: Option<u32>,
     #[serde(flatten)]
     pub extra: HashMap<String, JsonValue>,
 }
@@ -180,6 +182,7 @@ pub async fn db_create(
         visible_columns: vec!["title".into()],
         sort: None,
         filters: Vec::new(),
+        row_limit: None,
         extra: HashMap::new(),
     };
     db.views.insert("default".to_string(), view);

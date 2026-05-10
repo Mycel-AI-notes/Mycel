@@ -1,0 +1,118 @@
+import { useEffect, useRef, useState } from 'react';
+import type { ColumnDef, ColumnType } from '@/types/database';
+
+interface Props {
+  existingIds: Set<string>;
+  onSubmit: (columnId: string, def: ColumnDef) => void;
+  onClose: () => void;
+}
+
+const TYPES: { value: ColumnType; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'select', label: 'Select' },
+  { value: 'multi-select', label: 'Multi-select' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'date', label: 'Date' },
+  { value: 'rich-text', label: 'Rich text' },
+];
+
+function toId(label: string) {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function uniqueId(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base}_${i}`)) i += 1;
+  return `${base}_${i}`;
+}
+
+export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [label, setLabel] = useState('');
+  const [type, setType] = useState<ColumnType>('text');
+  const [optionsRaw, setOptionsRaw] = useState('');
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const needsOptions = type === 'select' || type === 'multi-select';
+
+  function submit() {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    const baseId = toId(trimmed) || `col_${Date.now()}`;
+    const id = uniqueId(baseId, existingIds);
+    const def: ColumnDef = { type, label: trimmed };
+    if (needsOptions) {
+      def.options = optionsRaw
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    onSubmit(id, def);
+  }
+
+  return (
+    <div ref={ref} className="db-popover db-add-column-popover">
+      <div className="db-add-column-fields">
+        <label className="db-settings-label">Name</label>
+        <input
+          autoFocus
+          className="db-settings-input"
+          value={label}
+          placeholder="e.g. Status"
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+            if (e.key === 'Escape') onClose();
+          }}
+        />
+        <label className="db-settings-label">Type</label>
+        <select
+          className="db-settings-input"
+          value={type}
+          onChange={(e) => setType(e.target.value as ColumnType)}
+        >
+          {TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        {needsOptions && (
+          <>
+            <label className="db-settings-label">Options</label>
+            <input
+              className="db-settings-input"
+              value={optionsRaw}
+              placeholder="todo, doing, done"
+              onChange={(e) => setOptionsRaw(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit();
+              }}
+            />
+          </>
+        )}
+      </div>
+      <div className="db-add-column-actions">
+        <button className="db-btn" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="db-btn db-btn-primary" onClick={submit}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}

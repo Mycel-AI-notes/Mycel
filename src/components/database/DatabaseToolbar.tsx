@@ -1,19 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Filter, ArrowUpDown, Columns, Settings } from 'lucide-react';
-import type { ColumnDef, SortDef, ViewDef } from '@/types/database';
+import {
+  Plus,
+  Filter,
+  ArrowUpDown,
+  Columns,
+  Settings,
+  Trash2,
+} from 'lucide-react';
+import type { ColumnDef, FilterDef, SortDef, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
+import { operatorsFor } from '@/lib/database/filtering';
 
 interface Props {
   schema: Record<string, ColumnDef>;
   view: ViewDef;
-  filterCount: number;
-  filtersOpen: boolean;
-  pagesDir: string | null;
+  rowLimit: number | null;
   onAddRow: () => void;
-  onToggleFilters: () => void;
   onSortChange: (sort: SortDef | null) => void;
   onColumnsChange: (visibleColumns: string[]) => void;
-  onPagesDirChange: (dir: string | null) => void;
+  onFiltersChange: (filters: FilterDef[]) => void;
+  onRowLimitChange: (limit: number | null) => void;
+  onRemoveFromDoc?: () => void;
+}
+
+function usePopoverClose(
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [ref, onClose]);
 }
 
 function ColumnsPopover({
@@ -28,22 +48,13 @@ function ColumnsPopover({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  usePopoverClose(ref, onClose);
 
   function toggle(id: string) {
     if (visible.includes(id)) onChange(visible.filter((c) => c !== id));
     else onChange([...visible, id]);
   }
 
-  const knownIds = new Set(Object.keys(schema));
-  knownIds.add(PAGE_COL);
   const items: { id: string; label: string }[] = [
     ...Object.entries(schema).map(([id, def]) => ({ id, label: def.label })),
     { id: PAGE_COL, label: 'Page' },
@@ -77,13 +88,7 @@ function SortPopover({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  usePopoverClose(ref, onClose);
 
   return (
     <div ref={ref} className="db-popover db-sort-popover">
@@ -129,63 +134,180 @@ function SortPopover({
   );
 }
 
-function SettingsPopover({
-  pagesDir,
+function FiltersPopover({
+  schema,
+  filters,
   onChange,
   onClose,
 }: {
-  pagesDir: string | null;
-  onChange: (dir: string | null) => void;
+  schema: Record<string, ColumnDef>;
+  filters: FilterDef[];
+  onChange: (next: FilterDef[]) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState(pagesDir ?? '');
+  usePopoverClose(ref, onClose);
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+  const columnIds = Object.keys(schema);
+
+  function update(idx: number, patch: Partial<FilterDef>) {
+    onChange(filters.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  }
+  function remove(idx: number) {
+    onChange(filters.filter((_, i) => i !== idx));
+  }
+  function add() {
+    if (columnIds.length === 0) return;
+    const first = columnIds[0];
+    const ops = operatorsFor(schema[first].type);
+    onChange([...filters, { field: first, op: ops[0].op, value: '' }]);
+  }
+
+  return (
+    <div ref={ref} className="db-popover db-filters-popover">
+      <div className="db-filters-list">
+        {filters.length === 0 && (
+          <div className="db-filter-empty">No filters yet.</div>
+        )}
+        {filters.map((f, idx) => {
+          const col = schema[f.field];
+          const ops = col ? operatorsFor(col.type) : [];
+          const opDef = ops.find((o) => o.op === f.op) ?? ops[0];
+          return (
+            <div key={idx} className="db-filter-row">
+              <select
+                value={f.field}
+                onChange={(e) => {
+                  const newField = e.target.value;
+                  const newOps = operatorsFor(schema[newField].type);
+                  update(idx, { field: newField, op: newOps[0].op, value: '' });
+                }}
+              >
+                {columnIds.map((cid) => (
+                  <option key={cid} value={cid}>
+                    {schema[cid].label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={f.op}
+                onChange={(e) =>
+                  update(idx, { op: e.target.value as FilterDef['op'] })
+                }
+              >
+                {ops.map((o) => (
+                  <option key={o.op} value={o.op}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {opDef?.needsValue && col?.type === 'select' && (
+                <select
+                  value={String(f.value ?? '')}
+                  onChange={(e) => update(idx, { value: e.target.value })}
+                >
+                  <option value="">—</option>
+                  {(col.options ?? []).map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {opDef?.needsValue && col?.type !== 'select' && (
+                <input
+                  type={
+                    col?.type === 'number'
+                      ? 'number'
+                      : col?.type === 'date'
+                        ? 'date'
+                        : 'text'
+                  }
+                  value={String(f.value ?? '')}
+                  onChange={(e) => update(idx, { value: e.target.value })}
+                />
+              )}
+              <button
+                className="db-icon-btn"
+                onClick={() => remove(idx)}
+                title="Remove"
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button className="db-popover-item" onClick={add}>
+        + Add filter
+      </button>
+    </div>
+  );
+}
+
+function SettingsPopover({
+  rowLimit,
+  onRowLimitChange,
+  onRemoveFromDoc,
+  onClose,
+}: {
+  rowLimit: number | null;
+  onRowLimitChange: (limit: number | null) => void;
+  onRemoveFromDoc?: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState(rowLimit ? String(rowLimit) : '');
+  usePopoverClose(ref, onClose);
+
+  function commitLimit() {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      onRowLimitChange(null);
+      return;
     }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  function commit() {
-    const trimmed = draft.trim().replace(/^\/+|\/+$/g, '');
-    onChange(trimmed || null);
-    onClose();
+    const n = parseInt(trimmed, 10);
+    if (Number.isFinite(n) && n > 0) onRowLimitChange(n);
+    else onRowLimitChange(null);
   }
 
   return (
     <div ref={ref} className="db-popover db-settings-popover">
-      <div className="db-popover-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-        <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-          Pages folder (relative to vault)
-        </label>
+      <div className="db-settings-section">
+        <label className="db-settings-label">Max rows per view</label>
         <input
           autoFocus
+          type="number"
+          min={1}
+          placeholder="unlimited"
           value={draft}
-          placeholder="leave empty for default"
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitLimit}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') commit();
+            if (e.key === 'Enter') {
+              commitLimit();
+              onClose();
+            }
             if (e.key === 'Escape') onClose();
           }}
-          style={{
-            padding: '6px 8px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            background: 'var(--color-surface-1)',
-            color: 'var(--color-text-primary)',
-            fontSize: 12,
-          }}
+          className="db-settings-input"
         />
-        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-          Default: subfolder named after the database file.
-        </span>
+        <span className="db-settings-hint">Leave empty for unlimited.</span>
       </div>
-      <button className="db-popover-item" onClick={commit}>
-        Save
-      </button>
+      {onRemoveFromDoc && (
+        <>
+          <div className="db-popover-divider" />
+          <button
+            className="db-popover-item db-popover-danger"
+            onClick={() => {
+              onRemoveFromDoc();
+              onClose();
+            }}
+          >
+            <Trash2 size={12} /> Remove table from page
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -193,36 +315,50 @@ function SettingsPopover({
 export function DatabaseToolbar({
   schema,
   view,
-  filterCount,
-  filtersOpen,
-  pagesDir,
+  rowLimit,
   onAddRow,
-  onToggleFilters,
   onSortChange,
   onColumnsChange,
-  onPagesDirChange,
+  onFiltersChange,
+  onRowLimitChange,
+  onRemoveFromDoc,
 }: Props) {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
     <div className="db-toolbar">
       <button className="db-btn db-btn-primary" onClick={onAddRow}>
         <Plus size={12} /> Add row
       </button>
-      <button
-        className={`db-btn ${filtersOpen || filterCount > 0 ? 'is-active' : ''}`}
-        onClick={onToggleFilters}
-      >
-        <Filter size={12} /> Filter{filterCount > 0 ? ` (${filterCount})` : ''}
-      </button>
+      <div className="db-popover-anchor">
+        <button
+          className={`db-btn ${filtersOpen || view.filters.length > 0 ? 'is-active' : ''}`}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          <Filter size={12} /> Filter
+          {view.filters.length > 0 ? ` (${view.filters.length})` : ''}
+        </button>
+        {filtersOpen && (
+          <FiltersPopover
+            schema={schema}
+            filters={view.filters}
+            onChange={onFiltersChange}
+            onClose={() => setFiltersOpen(false)}
+          />
+        )}
+      </div>
       <div className="db-popover-anchor">
         <button
           className={`db-btn ${sortOpen || view.sort ? 'is-active' : ''}`}
           onClick={() => setSortOpen((v) => !v)}
         >
-          <ArrowUpDown size={12} /> Sort{view.sort ? ` · ${schema[view.sort.field]?.label ?? view.sort.field}` : ''}
+          <ArrowUpDown size={12} /> Sort
+          {view.sort
+            ? ` · ${schema[view.sort.field]?.label ?? view.sort.field}`
+            : ''}
         </button>
         {sortOpen && (
           <SortPopover
@@ -249,15 +385,16 @@ export function DatabaseToolbar({
       <div className="db-popover-anchor" style={{ marginLeft: 'auto' }}>
         <button
           className="db-btn"
-          title="Database settings"
+          title="Table settings"
           onClick={() => setSettingsOpen((v) => !v)}
         >
           <Settings size={12} />
         </button>
         {settingsOpen && (
           <SettingsPopover
-            pagesDir={pagesDir}
-            onChange={onPagesDirChange}
+            rowLimit={rowLimit}
+            onRowLimitChange={onRowLimitChange}
+            onRemoveFromDoc={onRemoveFromDoc}
             onClose={() => setSettingsOpen(false)}
           />
         )}
