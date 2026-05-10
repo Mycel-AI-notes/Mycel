@@ -304,6 +304,8 @@ export const markdownPreviewPlugin = ViewPlugin.fromClass(
 export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-content': {
     width: '100%',
+    maxWidth: '1024px',
+    margin: '0 auto',
     padding: '24px 0',
     fontFamily: "'Inter', system-ui, sans-serif",
     boxSizing: 'border-box',
