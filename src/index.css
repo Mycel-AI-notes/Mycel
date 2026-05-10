@@ -63,6 +63,22 @@ body {
   outline: none;
 }
 
+/* Hide gutter (line numbers + active-line tint) for lines under a database
+   widget. Lives in index.css instead of EditorView.baseTheme so that the
+   theme classes loaded via EditorView.theme() can't override the
+   background-color rule on .cm-activeLineGutter. */
+.cm-editor .cm-gutterElement.cm-db-fence-gutter,
+.cm-editor .cm-gutterElement.cm-db-fence-gutter.cm-activeLineGutter {
+  visibility: hidden !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.cm-editor .cm-line.cm-db-fence-line,
+.cm-editor .cm-line.cm-db-fence-line.cm-activeLine {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 /* Markdown preview styles */
 .prose-mycel {
   max-width: 720px;

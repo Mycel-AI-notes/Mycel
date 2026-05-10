@@ -161,25 +161,40 @@ class DatabaseWidget extends WidgetType {
 }
 
 function buildDecorations(state: EditorState, notePath: string): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
   const blocks = findDbBlocks(state);
 
-  // Always render the widget. Cursor-in-block collapse was confusing: a click
-  // on a cell would bubble into CM6, move the selection inside the fence
-  // range, and the widget would vanish behind raw ```db. atomicRanges keeps
-  // the cursor outside, so there is no need to ever show the raw fence —
-  // the fence text is metadata the user manages through the widget itself.
+  type Item = { from: number; to: number; deco: Decoration };
+  const items: Item[] = [];
+
+  // Always render the widget. atomicRanges keeps the cursor outside the fence,
+  // so the fence text is metadata managed through the widget.
   for (const b of blocks) {
-    builder.add(
-      b.fenceFrom,
-      b.fenceTo,
-      Decoration.replace({
+    items.push({
+      from: b.fenceFrom,
+      to: b.fenceTo,
+      deco: Decoration.replace({
         widget: new DatabaseWidget(b.source, b.view, notePath),
         block: true,
       }),
-    );
+    });
+    // Belt-and-suspenders: also tag every fence line with a class so the
+    // index.css rule can clear any active-line / selection background that
+    // might otherwise paint a stripe through the gutter or content area.
+    const startLine = state.doc.lineAt(b.fenceFrom);
+    const endLine = state.doc.lineAt(b.fenceTo);
+    for (let n = startLine.number; n <= endLine.number; n++) {
+      const ln = state.doc.line(n);
+      items.push({
+        from: ln.from,
+        to: ln.from,
+        deco: Decoration.line({ class: 'cm-db-fence-line' }),
+      });
+    }
   }
 
+  items.sort((a, b) => a.from - b.from || a.to - b.to);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const it of items) builder.add(it.from, it.to, it.deco);
   return builder.finish();
 }
 
@@ -244,16 +259,7 @@ export const databaseWidgetTheme = EditorView.baseTheme({
     overflow: 'hidden',
     backgroundColor: 'var(--color-surface-0)',
   },
-  // Hide gutter (line number + active-line highlight) for lines under a
-  // database widget. Without this they flicker every time the widget
-  // re-renders or the table changes height. Also clear the background so
-  // .cm-activeLineGutter doesn't paint a colored stripe in the gutter
-  // column when the cursor lands on a fence-boundary line.
-  '.cm-db-fence-gutter': {
-    visibility: 'hidden',
-    backgroundColor: 'transparent !important',
-  },
-  '.cm-db-fence-gutter.cm-activeLineGutter': {
-    backgroundColor: 'transparent !important',
-  },
+  // Note: .cm-db-fence-gutter / .cm-db-fence-line styles live in index.css
+  // because EditorView.theme() classes override baseTheme rules and that
+  // was leaving the active-line tint visible.
 });
