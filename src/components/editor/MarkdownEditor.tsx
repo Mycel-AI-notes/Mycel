@@ -120,7 +120,8 @@ interface Props {
 export function MarkdownEditor({ path }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { noteCache, saveNote, markDirty } = useVaultStore();
+  const { noteCache, saveNote, markDirty, updateNoteLive } = useVaultStore();
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDark = document.documentElement.classList.contains('dark');
   const [pickerOpen, setPickerOpen] = useState(false);
   const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
@@ -184,6 +185,10 @@ export function MarkdownEditor({ path }: Props) {
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
+            if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+            liveTimerRef.current = setTimeout(() => {
+              updateNoteLive(path, update.state.doc.toString());
+            }, 150);
           }
         }),
         EditorView.lineWrapping,
@@ -194,6 +199,10 @@ export function MarkdownEditor({ path }: Props) {
     viewRef.current = view;
 
     return () => {
+      if (liveTimerRef.current) {
+        clearTimeout(liveTimerRef.current);
+        liveTimerRef.current = null;
+      }
       view.destroy();
       viewRef.current = null;
     };

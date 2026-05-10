@@ -43,6 +43,7 @@ pub fn run() {
             commands::notes::folder_create,
             commands::search::notes_list,
             commands::search::backlinks_get,
+            commands::search::notes_by_tag,
             commands::database::db_read,
             commands::database::db_write,
             commands::database::db_create,
