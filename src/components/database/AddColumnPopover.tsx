@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type { ColumnDef, ColumnType } from '@/types/database';
 import { Select } from './Select';
 
 interface Props {
+  anchorRef: RefObject<HTMLElement | null>;
   existingIds: Set<string>;
   onSubmit: (columnId: string, def: ColumnDef) => void;
   onClose: () => void;
@@ -33,19 +41,58 @@ function uniqueId(base: string, taken: Set<string>): string {
   return `${base}_${i}`;
 }
 
-export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
+interface AnchorPos {
+  top: number;
+  left: number;
+}
+
+export function AddColumnPopover({
+  anchorRef,
+  existingIds,
+  onSubmit,
+  onClose,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [label, setLabel] = useState('');
   const [type, setType] = useState<ColumnType>('text');
   const [optionsRaw, setOptionsRaw] = useState('');
+  const [pos, setPos] = useState<AnchorPos | null>(null);
+
+  // Position relative to the + button via portal so the popover is never
+  // clipped by .db-table-wrap's overflow.
+  useLayoutEffect(() => {
+    function update() {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const popoverWidth = 260;
+      // Anchor at the right edge of the + button, opening to the LEFT so the
+      // popover doesn't fall off the right side of the screen.
+      const left = Math.max(8, r.right - popoverWidth);
+      setPos({ top: r.bottom + 4, left });
+    }
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchorRef]);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        // Don't close when the click was on the trigger that opened us — the
+        // trigger's click handler will already toggle us shut.
+        const anchor = anchorRef.current;
+        if (anchor && anchor.contains(e.target as Node)) return;
+        onClose();
+      }
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [anchorRef, onClose]);
 
   const needsOptions = type === 'select' || type === 'multi-select';
 
@@ -64,8 +111,20 @@ export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
     onSubmit(id, def);
   }
 
-  return (
-    <div ref={ref} className="db-popover db-add-column-popover">
+  if (!pos) return null;
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="db-popover db-add-column-popover"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 60,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <div className="db-add-column-fields">
         <label className="db-settings-label">Name</label>
         <input
@@ -108,6 +167,7 @@ export function AddColumnPopover({ existingIds, onSubmit, onClose }: Props) {
           Add
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

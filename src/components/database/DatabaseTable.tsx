@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { RefObject, useEffect, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { ColumnDef, Row, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
@@ -19,7 +19,7 @@ interface Props {
   onResizeColumn: (columnId: string, width: number) => void | Promise<void>;
   onSortColumn: (columnId: string, dir: 'asc' | 'desc' | null) => void;
   onRowReload: () => void;
-  addColumnPopover?: React.ReactNode;
+  addColumnButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 interface EditingCell {
@@ -41,7 +41,7 @@ export function DatabaseTable({
   onResizeColumn,
   onSortColumn,
   onRowReload,
-  addColumnPopover,
+  addColumnButtonRef,
 }: Props) {
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -180,16 +180,14 @@ export function DatabaseTable({
               );
             })}
             <th className="db-th db-th-add">
-              <div className="db-popover-anchor">
-                <button
-                  onClick={onAddColumnClick}
-                  className="db-th-add-btn"
-                  title="Add column"
-                >
-                  <Plus size={12} />
-                </button>
-                {addColumnPopover}
-              </div>
+              <button
+                ref={addColumnButtonRef}
+                onClick={onAddColumnClick}
+                className="db-th-add-btn"
+                title="Add column"
+              >
+                <Plus size={12} />
+              </button>
             </th>
           </tr>
         </thead>

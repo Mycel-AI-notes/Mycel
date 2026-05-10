@@ -107,6 +107,11 @@ export function Select<T extends string>({
             ref={listRef}
             className="db-select-list"
             role="listbox"
+            // Stop the mousedown from bubbling to document-level listeners.
+            // Without this, parent popovers (Sort / Settings / etc.) close
+            // themselves on every option click because their click-outside
+            // handler sees a click in body, not inside their own ref.
+            onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
               top: pos.top,
