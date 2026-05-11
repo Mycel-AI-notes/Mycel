@@ -34,10 +34,6 @@ export async function saveAttachmentBytes(
   });
 }
 
-export async function downloadAttachment(url: string): Promise<string> {
-  return invoke<string>('attachment_download_url', { url });
-}
-
 export async function listAttachments(): Promise<AttachmentMeta[]> {
   return invoke<AttachmentMeta[]>('attachment_list');
 }
@@ -90,27 +86,3 @@ export function insertImageLink(
   });
 }
 
-/**
- * Replace the first occurrence of `oldSrc` inside an image-link `(…)`
- * with `newSrc`. Used after downloading an external URL so the link
- * automatically rewrites to the local path.
- */
-export function rewriteImageSrc(
-  view: EditorView,
-  oldSrc: string,
-  newSrc: string,
-): boolean {
-  const doc = view.state.doc.toString();
-  // Escape regex metacharacters in oldSrc so URLs containing `?` or `.`
-  // match literally rather than as patterns.
-  const escaped = oldSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(!\\[[^\\]]*\\]\\()${escaped}(\\))`);
-  const m = re.exec(doc);
-  if (!m) return false;
-  const fromIdx = m.index + m[1].length;
-  const toIdx = fromIdx + oldSrc.length;
-  view.dispatch({
-    changes: { from: fromIdx, to: toIdx, insert: newSrc },
-  });
-  return true;
-}

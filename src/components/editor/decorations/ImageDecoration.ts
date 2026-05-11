@@ -23,7 +23,6 @@ import {
 import { EditorState, StateField } from '@codemirror/state';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
-import { downloadAttachment, rewriteImageSrc } from '@/lib/attachments';
 
 export interface ImageMatch {
   /** Document offset of the opening `!` */
@@ -32,11 +31,16 @@ export interface ImageMatch {
   to: number;
   alt: string;
   src: string;
-  isExternal: boolean;
 }
 
-const IMAGE_RE = /!\[([^\]\n]*)\]\(([^)\s]+)\)/g;
+// Paths can contain spaces and unicode (e.g. macOS screenshots), so we
+// allow anything that isn't a `)` or newline between the parens. The
+// original `[^)\s]+` form skipped legitimate filenames like
+// `Снимок экрана 2026-05-11 в 13.25.58.png`.
+const IMAGE_RE = /!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
 
+/** External-URL images intentionally fall through to plain markdown —
+ *  we only render local attachments inline. */
 function isExternal(src: string): boolean {
   return /^(https?:|data:|blob:)/i.test(src);
 }
@@ -45,12 +49,12 @@ export function findImageMatches(text: string, offset: number): ImageMatch[] {
   const out: ImageMatch[] = [];
   for (const m of text.matchAll(IMAGE_RE)) {
     if (m.index === undefined) continue;
+    if (isExternal(m[2])) continue;
     out.push({
       from: offset + m.index,
       to: offset + m.index + m[0].length,
       alt: m[1],
       src: m[2],
-      isExternal: isExternal(m[2]),
     });
   }
   return out;
@@ -61,7 +65,6 @@ class ImageWidget extends WidgetType {
     public readonly alt: string,
     public readonly src: string,
     public readonly resolvedSrc: string,
-    public readonly external: boolean,
     /** Markdown source range — used by the delete button to remove the
      * `![…](…)` text exactly, without depending on cursor position. */
     public readonly srcFrom: number,
@@ -75,7 +78,6 @@ class ImageWidget extends WidgetType {
       this.alt === other.alt &&
       this.src === other.src &&
       this.resolvedSrc === other.resolvedSrc &&
-      this.external === other.external &&
       this.srcFrom === other.srcFrom &&
       this.srcTo === other.srcTo
     );
@@ -107,12 +109,10 @@ class ImageWidget extends WidgetType {
       placeholder.style.display = 'block';
     });
 
-    if (!this.external) {
-      img.style.cursor = 'zoom-in';
-      img.addEventListener('click', () => {
-        useVaultStore.getState().openImageTab(this.src, { preview: true });
-      });
-    }
+    img.style.cursor = 'zoom-in';
+    img.addEventListener('click', () => {
+      useVaultStore.getState().openImageTab(this.src, { preview: true });
+    });
 
     // ── Toolbar ──────────────────────────────────────────────────────
     const toolbar = document.createElement('div');
@@ -127,42 +127,11 @@ class ImageWidget extends WidgetType {
     spacer.className = 'cm-image-spacer';
     toolbar.appendChild(spacer);
 
-    if (this.external) {
-      const save = makeButton('⬇ Save locally', 'Download to attachments/ and rewrite the link');
-      const url = this.src;
-      save.addEventListener('click', async () => {
-        const label = save.textContent ?? '';
-        save.disabled = true;
-        save.textContent = '⏳ Downloading…';
-        save.title = url;
-        try {
-          const rel = await downloadAttachment(url);
-          rewriteImageSrc(view, url, rel);
-          // The doc change will rebuild the widget with a local img, so
-          // the button state doesn't need to be reset here.
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          save.classList.add('cm-image-btn-danger');
-          save.textContent = '⚠ Failed — hover for details';
-          save.title = `Download failed: ${msg}`;
-          save.disabled = false;
-          // Reset to "Save locally" so the user can retry after a fix.
-          setTimeout(() => {
-            save.classList.remove('cm-image-btn-danger');
-            save.textContent = label;
-            save.title = 'Download to attachments/ and rewrite the link';
-          }, 4000);
-          console.error('Download external image failed:', err);
-        }
-      });
-      toolbar.appendChild(save);
-    } else {
-      const open = makeButton('↗ Open in tab', 'Open this image in a new tab');
-      open.addEventListener('click', () => {
-        useVaultStore.getState().openImageTab(this.src, { preview: true });
-      });
-      toolbar.appendChild(open);
-    }
+    const open = makeButton('↗ Open in tab', 'Open this image in a new tab');
+    open.addEventListener('click', () => {
+      useVaultStore.getState().openImageTab(this.src, { preview: true });
+    });
+    toolbar.appendChild(open);
 
     const del = makeButton('✕ Remove', 'Remove this image link from the note');
     del.classList.add('cm-image-btn-danger');
@@ -219,13 +188,11 @@ function buildImageDecorations(state: EditorState): DecorationSet {
     const matches = findImageMatches(line.text, line.from);
     if (matches.length === 0) continue;
     for (const m of matches) {
-      const resolved = m.isExternal
-        ? m.src
-        : convertFileSrc(absoluteAttachmentPath(m.src));
+      const resolved = convertFileSrc(absoluteAttachmentPath(m.src));
       items.push({
         pos: line.to,
         deco: Decoration.widget({
-          widget: new ImageWidget(m.alt, m.src, resolved, m.isExternal, m.from, m.to),
+          widget: new ImageWidget(m.alt, m.src, resolved, m.from, m.to),
           side: 1,
           block: true,
         }),

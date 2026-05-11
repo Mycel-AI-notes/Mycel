@@ -5,11 +5,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-/// Image formats the editor renders inline. We mirror the spec's list and
-/// fall back to a generic write for anything else the user explicitly
-/// passes (e.g. via paste) so we don't silently drop bytes.
-const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg"];
-
 #[derive(Debug, Serialize)]
 pub struct AttachmentMeta {
     /// Vault-relative path, always starting with `attachments/`.
@@ -143,60 +138,6 @@ pub async fn attachment_save_bytes(
     Ok(rel_string(&vault, &dest))
 }
 
-/// Download a remote image into `attachments/`. The caller passes the URL
-/// from `![alt](url)` and we return the new vault-relative path so the
-/// editor can rewrite the link to the local file.
-#[tauri::command]
-pub async fn attachment_download_url(
-    url: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let vault = vault_root(&state).await?;
-    let dir = ensure_attachments_dir(&vault)?;
-
-    let parsed = url::Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(format!("Unsupported URL scheme: {}", parsed.scheme()));
-    }
-
-    let resp = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Download failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
-    }
-    let content_type = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("Download failed: {e}"))?;
-
-    // Prefer the last path segment when it has an image-like extension —
-    // it keeps the original file name visible in `attachments/`. Otherwise
-    // fall back to the timestamp form + an extension derived from the
-    // Content-Type so we never write a name-less blob.
-    let url_name = parsed
-        .path_segments()
-        .and_then(|mut s| s.next_back())
-        .and_then(sanitize_filename);
-    let name = match url_name {
-        Some(n) if has_image_ext(&n) => n,
-        _ => {
-            let ext = ext_from_mime(&content_type).unwrap_or("bin").to_string();
-            timestamp_name(&ext)
-        }
-    };
-
-    let dest = dedupe_path(&dir, &name);
-    std::fs::write(&dest, &bytes).map_err(|e| format!("Failed to write attachment: {e}"))?;
-    Ok(rel_string(&vault, &dest))
-}
-
 /// Flat listing of every file in `attachments/`. Used by a future
 /// attachment manager; in v1 it powers a "find orphans" path the user can
 /// trigger manually.
@@ -263,26 +204,6 @@ pub async fn attachment_delete(
         deleted: true,
         referenced_in: Vec::new(),
     })
-}
-
-fn has_image_ext(name: &str) -> bool {
-    let ext = Path::new(name)
-        .extension()
-        .map(|s| s.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    IMAGE_EXTS.iter().any(|e| *e == ext)
-}
-
-fn ext_from_mime(mime: &str) -> Option<&'static str> {
-    let base = mime.split(';').next().unwrap_or("").trim().to_lowercase();
-    match base.as_str() {
-        "image/png" => Some("png"),
-        "image/jpeg" => Some("jpg"),
-        "image/gif" => Some("gif"),
-        "image/webp" => Some("webp"),
-        "image/svg+xml" => Some("svg"),
-        _ => None,
-    }
 }
 
 /// Walk every `.md` file in the vault and collect those that mention the

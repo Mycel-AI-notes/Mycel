@@ -119,7 +119,6 @@ pub fn run() {
             commands::garden::garden_bind_page,
             commands::attachments::attachment_save_file,
             commands::attachments::attachment_save_bytes,
-            commands::attachments::attachment_download_url,
             commands::attachments::attachment_list,
             commands::attachments::attachment_delete,
         ])
