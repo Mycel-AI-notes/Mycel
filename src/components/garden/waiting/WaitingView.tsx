@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Hourglass, Plus, AlertTriangle, Trash2, Check, ClipboardList } from 'lucide-react';
+import { Hourglass, Plus, AlertTriangle, Trash2, Check, ClipboardList, Eraser } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useGardenStore } from '@/stores/garden';
 import type { WaitingItem } from '@/types/garden';
@@ -136,6 +136,7 @@ function NewWaitingForm({ onClose }: { onClose: () => void }) {
 export function WaitingView() {
   const waiting = useGardenStore((s) => s.waiting);
   const loadWaiting = useGardenStore((s) => s.loadWaiting);
+  const clearCompletedWaiting = useGardenStore((s) => s.clearCompletedWaiting);
   const config = useGardenStore((s) => s.config);
   const [adding, setAdding] = useState(false);
 
@@ -183,10 +184,22 @@ export function WaitingView() {
 
         {done.length > 0 && (
           <section className="mt-8">
-            <header className="text-xs uppercase tracking-wider text-text-muted mb-1">
+            <header className="flex items-center justify-between text-xs uppercase tracking-wider text-text-muted mb-1">
               <span className="inline-flex items-center gap-1.5">
                 <Check size={11} className="text-accent" /> Done ({done.length})
               </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = window.confirm(
+                    `Permanently delete ${done.length} received item${done.length === 1 ? '' : 's'}?`,
+                  );
+                  if (ok) await clearCompletedWaiting();
+                }}
+                className="inline-flex items-center gap-1 text-[11px] normal-case text-text-muted hover:text-error"
+              >
+                <Eraser size={11} /> Clear all
+              </button>
             </header>
             <ul className="flex flex-col gap-2">
               {done.map((item) => (

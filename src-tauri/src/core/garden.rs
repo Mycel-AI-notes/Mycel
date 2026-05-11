@@ -426,6 +426,16 @@ pub fn delete_action(vault_root: &Path, id: &str) -> Result<()> {
     write_actions(vault_root, &f)
 }
 
+/// Drop every completed action. Returns how many rows were removed.
+pub fn clear_completed_actions(vault_root: &Path) -> Result<usize> {
+    let mut f = read_actions(vault_root)?;
+    let before = f.items.len();
+    f.items.retain(|i| !i.done);
+    let removed = before - f.items.len();
+    write_actions(vault_root, &f)?;
+    Ok(removed)
+}
+
 // ---- Projects ----
 
 pub fn read_projects(vault_root: &Path) -> Result<ProjectsFile> {
@@ -629,6 +639,16 @@ pub fn delete_waiting(vault_root: &Path, id: &str) -> Result<()> {
     let mut f = read_waiting(vault_root)?;
     f.items.retain(|i| i.id != id);
     write_waiting(vault_root, &f)
+}
+
+/// Drop every received waiting-for item. Returns how many rows were removed.
+pub fn clear_completed_waiting(vault_root: &Path) -> Result<usize> {
+    let mut f = read_waiting(vault_root)?;
+    let before = f.items.len();
+    f.items.retain(|i| !i.done);
+    let removed = before - f.items.len();
+    write_waiting(vault_root, &f)?;
+    Ok(removed)
 }
 
 // ---- Someday ----

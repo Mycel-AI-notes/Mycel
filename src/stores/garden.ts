@@ -84,6 +84,7 @@ interface GardenState extends GardenUIState {
   ) => Promise<void>;
   completeAction: (id: string, done: boolean) => Promise<void>;
   deleteAction: (id: string) => Promise<void>;
+  clearCompletedActions: () => Promise<number>;
 
   // ---- Projects ----
   addProject: (item: {
@@ -127,6 +128,7 @@ interface GardenState extends GardenUIState {
   ) => Promise<void>;
   completeWaiting: (id: string, done: boolean) => Promise<void>;
   deleteWaiting: (id: string) => Promise<void>;
+  clearCompletedWaiting: () => Promise<number>;
 
   // ---- Someday ----
   addSomeday: (item: {
@@ -289,6 +291,11 @@ export const useGardenStore = create<GardenState>((set, get) => ({
     await invoke('garden_action_delete', { id });
     await Promise.all([get().loadActions(), get().refreshCounts()]);
   },
+  clearCompletedActions: async () => {
+    const removed = await invoke<number>('garden_actions_clear_completed');
+    await Promise.all([get().loadActions(), get().refreshCounts()]);
+    return removed;
+  },
 
   addProject: async (item) => {
     const id = await invoke<string>('garden_project_add', { item });
@@ -323,6 +330,11 @@ export const useGardenStore = create<GardenState>((set, get) => ({
   deleteWaiting: async (id) => {
     await invoke('garden_waiting_delete', { id });
     await Promise.all([get().loadWaiting(), get().refreshCounts()]);
+  },
+  clearCompletedWaiting: async () => {
+    const removed = await invoke<number>('garden_waiting_clear_completed');
+    await Promise.all([get().loadWaiting(), get().refreshCounts()]);
+    return removed;
   },
 
   addSomeday: async (item) => {

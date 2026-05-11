@@ -247,6 +247,14 @@ pub async fn garden_action_delete(
     map_err(g::delete_action(&root, &id))
 }
 
+#[tauri::command]
+pub async fn garden_actions_clear_completed(
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let root = vault_root(&state).await?;
+    map_err(g::clear_completed_actions(&root))
+}
+
 // ---------- Projects ----------
 
 #[tauri::command]
@@ -370,6 +378,14 @@ pub async fn garden_waiting_delete(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_waiting(&root, &id))
+}
+
+#[tauri::command]
+pub async fn garden_waiting_clear_completed(
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let root = vault_root(&state).await?;
+    map_err(g::clear_completed_waiting(&root))
 }
 
 // ---------- Someday ----------

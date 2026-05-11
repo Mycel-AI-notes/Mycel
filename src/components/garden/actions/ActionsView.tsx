@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Zap, Trash2, Check } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Zap, Trash2, Check, SlidersHorizontal, X, Eraser } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
-import type { ActionGrouping, ActionItem } from '@/types/garden';
+import type { ActionFilters, ActionGrouping, ActionItem } from '@/types/garden';
 import { DurationBadge, EnergyBadge, PageLink, ProjectChip } from '../shared/badges';
 import { Select } from '@/components/ui/Select';
 
@@ -13,6 +13,145 @@ const GROUPING_LABEL: Record<ActionGrouping, string> = {
   energy: 'By energy',
   duration: 'By duration',
 };
+
+const FILTER_LABEL: Record<keyof ActionFilters, string> = {
+  context: 'Context',
+  project: 'Project',
+  energy: 'Energy',
+  duration: 'Time',
+};
+
+interface FilterPopoverProps {
+  filters: ActionFilters;
+  setFilters: (f: Partial<ActionFilters>) => void;
+  clearFilters: () => void;
+  contexts: string[];
+  projects: { title: string }[];
+}
+
+function FilterPopover({
+  filters,
+  setFilters,
+  clearFilters,
+  contexts,
+  projects,
+}: FilterPopoverProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const activeCount = Object.values(filters).filter(Boolean).length;
+
+  // Click-outside to close — but ignore clicks on Select portals, which
+  // mount under document.body outside `ref`.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (ref.current?.contains(target)) return;
+      // Custom Select uses CSS class .db-select-list for its dropdown.
+      if (target.closest('.db-select-list')) return;
+      setOpen(false);
+    };
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={clsx(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors',
+          activeCount > 0
+            ? 'border-accent/60 text-accent bg-accent/10'
+            : 'border-border text-text-secondary hover:bg-surface-hover',
+        )}
+      >
+        <SlidersHorizontal size={12} />
+        Filter
+        {activeCount > 0 && (
+          <span className="ml-0.5 px-1 rounded-full bg-accent/20 text-accent text-[10px] tabular-nums">
+            {activeCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-surface-1 border border-border rounded-md shadow-xl p-3 min-w-[260px] flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-14 text-text-muted text-[11px]">{FILTER_LABEL.context}</span>
+            <div className="flex-1">
+              <Select
+                value={filters.context ?? ''}
+                onChange={(v) => setFilters({ context: v || undefined })}
+                options={[
+                  { value: '', label: 'All' },
+                  ...contexts.map((c) => ({ value: c, label: c })),
+                ]}
+                width="100%"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-14 text-text-muted text-[11px]">{FILTER_LABEL.project}</span>
+            <div className="flex-1">
+              <Select
+                value={filters.project ?? ''}
+                onChange={(v) => setFilters({ project: v || undefined })}
+                options={[
+                  { value: '', label: 'All' },
+                  ...projects.map((p) => ({ value: p.title, label: p.title })),
+                ]}
+                width="100%"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-14 text-text-muted text-[11px]">{FILTER_LABEL.energy}</span>
+            <div className="flex-1">
+              <Select
+                value={filters.energy ?? ''}
+                onChange={(v) => setFilters({ energy: v || undefined })}
+                options={[
+                  { value: '', label: 'All' },
+                  { value: 'высокая', label: 'высокая' },
+                  { value: 'средняя', label: 'средняя' },
+                  { value: 'низкая', label: 'низкая' },
+                ]}
+                width="100%"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-14 text-text-muted text-[11px]">{FILTER_LABEL.duration}</span>
+            <div className="flex-1">
+              <Select
+                value={filters.duration ?? ''}
+                onChange={(v) => setFilters({ duration: v || undefined })}
+                options={[
+                  { value: '', label: 'All' },
+                  { value: '< 5 мин', label: '< 5 мин' },
+                  { value: '< 30 мин', label: '< 30 мин' },
+                  { value: '< 2 ч', label: '< 2 ч' },
+                  { value: '2+ ч', label: '2+ ч' },
+                ]}
+                width="100%"
+              />
+            </div>
+          </div>
+          {activeCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="self-end mt-1 text-[11px] text-text-muted hover:text-text-primary"
+            >
+              Reset all
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function groupKey(item: ActionItem, by: ActionGrouping): string {
   switch (by) {
@@ -156,6 +295,7 @@ export function ActionsView() {
   const clearFilters = useGardenStore((s) => s.clearFilters);
   const hideCompleted = useGardenStore((s) => s.hideCompleted);
   const setHideCompleted = useGardenStore((s) => s.setHideCompleted);
+  const clearCompletedActions = useGardenStore((s) => s.clearCompletedActions);
   const projects = useGardenStore((s) => s.projects);
 
   useEffect(() => {
@@ -193,12 +333,18 @@ export function ActionsView() {
     [actions, today],
   );
 
-  const activeFilters = Object.entries(filters).filter(([, v]) => v);
+  const activeFilters = Object.entries(filters).filter(([, v]) => v) as Array<
+    [keyof ActionFilters, string]
+  >;
+  const completedTotal = useMemo(
+    () => actions.filter((a) => a.done).length,
+    [actions],
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between gap-3 mb-2">
           <h1 className="flex items-center gap-2 text-xl text-text-primary">
             <Zap size={20} className="text-accent" /> Next Actions
             <span className="text-text-muted text-sm">({filtered.filter((a) => !a.done).length})</span>
@@ -212,69 +358,47 @@ export function ActionsView() {
               )}
               width={140}
             />
-            <label className="flex items-center gap-1 text-text-muted">
-              <input
-                type="checkbox"
-                checked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-              />
-              hide done
-            </label>
+            <FilterPopover
+              filters={filters}
+              setFilters={setFilters}
+              clearFilters={clearFilters}
+              contexts={config?.contexts ?? []}
+              projects={projects}
+            />
+            <button
+              type="button"
+              onClick={() => setHideCompleted(!hideCompleted)}
+              className={clsx(
+                'inline-flex items-center gap-1 px-2.5 py-1 rounded border text-xs transition-colors',
+                hideCompleted
+                  ? 'border-accent/60 text-accent bg-accent/10'
+                  : 'border-border text-text-secondary hover:bg-surface-hover',
+              )}
+              title="Hide done items"
+            >
+              <Check size={12} /> Hide done
+            </button>
           </div>
         </div>
 
-        {/* filter row */}
-        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
-          <Select
-            value={filters.context ?? ''}
-            onChange={(v) => setFilters({ context: v || undefined })}
-            options={[
-              { value: '', label: 'All contexts' },
-              ...(config?.contexts ?? []).map((c) => ({ value: c, label: c })),
-            ]}
-            width={140}
-          />
-          <Select
-            value={filters.project ?? ''}
-            onChange={(v) => setFilters({ project: v || undefined })}
-            options={[
-              { value: '', label: 'All projects' },
-              ...projects.map((p) => ({ value: p.title, label: p.title })),
-            ]}
-            width={160}
-          />
-          <Select
-            value={filters.energy ?? ''}
-            onChange={(v) => setFilters({ energy: v || undefined })}
-            options={[
-              { value: '', label: 'All energy' },
-              { value: 'высокая', label: 'высокая' },
-              { value: 'средняя', label: 'средняя' },
-              { value: 'низкая', label: 'низкая' },
-            ]}
-            width={140}
-          />
-          <Select
-            value={filters.duration ?? ''}
-            onChange={(v) => setFilters({ duration: v || undefined })}
-            options={[
-              { value: '', label: 'All durations' },
-              { value: '< 5 мин', label: '< 5 мин' },
-              { value: '< 30 мин', label: '< 30 мин' },
-              { value: '< 2 ч', label: '< 2 ч' },
-              { value: '2+ ч', label: '2+ ч' },
-            ]}
-            width={140}
-          />
-          {activeFilters.length > 0 && (
-            <button
-              onClick={clearFilters}
-              className="px-2 py-0.5 rounded border border-border text-text-muted hover:text-text-primary"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
+        {/* Active filter chips */}
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {activeFilters.map(([key, value]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilters({ [key]: undefined } as Partial<ActionFilters>)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/12 text-accent text-[11px] hover:bg-accent/20"
+                title={`Remove ${FILTER_LABEL[key]} filter`}
+              >
+                <span className="text-text-muted">{FILTER_LABEL[key]}:</span>
+                <span>{value}</span>
+                <X size={10} />
+              </button>
+            ))}
+          </div>
+        )}
 
         {groups.length === 0 ? (
           <p className="text-text-muted text-sm py-8 text-center">
@@ -309,7 +433,24 @@ export function ActionsView() {
               <span className="inline-flex items-center gap-1.5">
                 <Check size={11} className="text-accent" /> Completed today
               </span>
-              <span>{completedToday.length}</span>
+              <div className="flex items-center gap-2">
+                {completedTotal > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = window.confirm(
+                        `Permanently delete ${completedTotal} completed action${completedTotal === 1 ? '' : 's'}?`,
+                      );
+                      if (ok) await clearCompletedActions();
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] normal-case text-text-muted hover:text-error"
+                    title="Delete every completed action"
+                  >
+                    <Eraser size={11} /> Clear all done ({completedTotal})
+                  </button>
+                )}
+                <span>{completedToday.length}</span>
+              </div>
             </header>
             <ul className="flex flex-col">
               {completedToday.map((item) => (
