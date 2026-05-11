@@ -44,7 +44,7 @@ export const useUIStore = create<UIState>()(
       palette: 'moss',
       sidebarCollapsed: false,
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-      rightPanelCollapsed: false,
+      rightPanelCollapsed: true,
       rightPanelTab: 'backlinks',
 
       setTheme: (theme) => set({ theme }),
