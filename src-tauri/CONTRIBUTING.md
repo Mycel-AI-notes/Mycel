@@ -31,6 +31,17 @@ This document explains how to set up a development environment, the conventions 
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By participating you agree to uphold its terms. Report unacceptable behavior to the maintainers via a GitHub issue or direct contact.
 
+## Contributor License Agreement (CLA)
+
+Before we can merge your first pull request, we ask you to sign the [**Mycel CLA**](../CLA.md). It is short, modelled on the Apache ICLA 2.0, and exists so the Project stays legally clean for everyone — including future open-source releases and any commercial editions.
+
+There are two equivalent ways to sign:
+
+1. **CLA Assistant bot (preferred).** On your first PR the bot posts a comment with a sign-in link. One click, one signature, covers all your future contributions.
+2. **Manual statement.** Comment on your PR with `I have read the Mycel CLA v1.0 and I agree to it. — (Your Name, @handle)`.
+
+You retain full copyright in your contribution — the CLA is a license, not an assignment. Read [`CLA.md`](../CLA.md) for the full text.
+
 ## Ways to contribute
 
 - **Report a bug** — open an issue using the bug-report template.
