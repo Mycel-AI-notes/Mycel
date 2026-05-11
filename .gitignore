@@ -20,3 +20,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Vault attachments (opt-in sync — large binaries shouldn't pollute history
+# by default; users who want to sync images flip this off in their vault).
+attachments/

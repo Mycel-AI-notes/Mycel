@@ -42,6 +42,8 @@ age = { version = "0.11", default-features = false, features = ["armor"] }
 rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 base64 = "0.22"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 
 [dev-dependencies]
 tempfile = "3"

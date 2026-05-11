@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7",
     "clsx": "^2",
     "d3-force": "^3.0.0",
+    "katex": "^0.16.45",
     "lucide-react": "^0.511",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@types/katex": "^0.16.8",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^7",

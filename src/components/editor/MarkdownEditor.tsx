@@ -15,10 +15,13 @@ import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { autocompletion } from '@codemirror/autocomplete';
+import 'katex/dist/katex.min.css';
 import { useVaultStore } from '@/stores/vault';
 import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
+import { mathDecorationPlugin, mathDecorationTheme } from './decorations/MathDecoration';
+import { imageDecorationPlugin, imageDecorationTheme } from './decorations/ImageDecoration';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
@@ -26,6 +29,15 @@ import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
+import {
+  downloadAttachment,
+  extFromMime,
+  insertImageLink,
+  isImageFilename,
+  rewriteImageSrc,
+  saveAttachmentBytes,
+  saveAttachmentFile,
+} from '@/lib/attachments';
 
 const themeCompartment = new Compartment();
 
@@ -172,6 +184,10 @@ export function MarkdownEditor({ path }: Props) {
         }),
         markdownPreviewPlugin,
         markdownPreviewTheme,
+        mathDecorationPlugin,
+        mathDecorationTheme,
+        imageDecorationPlugin,
+        imageDecorationTheme,
         editableTableWidgetPlugin(),
         editableTableWidgetTheme,
         databaseWidgetPlugin(path),
@@ -212,12 +228,97 @@ export function MarkdownEditor({ path }: Props) {
     };
     view.dom.addEventListener('mycel:open-db-picker', onOpenDbPicker);
 
+    // ── Paste: capture image bytes from clipboard ──────────────────────
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          void (async () => {
+            try {
+              const buf = new Uint8Array(await file.arrayBuffer());
+              const ext = extFromMime(file.type);
+              const rel = await saveAttachmentBytes(buf, ext);
+              insertImageLink(view, rel);
+            } catch (err) {
+              console.error('Paste image failed:', err);
+            }
+          })();
+          return;
+        }
+      }
+    };
+    view.dom.addEventListener('paste', onPaste);
+
+    // ── Drag-and-drop: copy dropped files into attachments/ ────────────
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault();
+        view.dom.classList.add('cm-drop-target');
+      }
+    };
+    const onDragLeave = () => view.dom.classList.remove('cm-drop-target');
+    const onDrop = (e: DragEvent) => {
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      const imageFiles = Array.from(files).filter(
+        (f) => f.type.startsWith('image/') || isImageFilename(f.name),
+      );
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      view.dom.classList.remove('cm-drop-target');
+      void (async () => {
+        for (const f of imageFiles) {
+          try {
+            // Tauri exposes the native path on File via a non-standard
+            // property; falling back to bytes preserves drag-from-browser.
+            const tauriPath = (f as unknown as { path?: string }).path;
+            const rel = tauriPath
+              ? await saveAttachmentFile(tauriPath)
+              : await saveAttachmentBytes(
+                  new Uint8Array(await f.arrayBuffer()),
+                  extFromMime(f.type) || (f.name.split('.').pop() ?? 'bin'),
+                );
+            insertImageLink(view, rel);
+          } catch (err) {
+            console.error('Drop image failed:', err);
+          }
+        }
+      })();
+    };
+    view.dom.addEventListener('dragover', onDragOver);
+    view.dom.addEventListener('dragleave', onDragLeave);
+    view.dom.addEventListener('drop', onDrop);
+
+    // ── External image: hover "save locally" button ────────────────────
+    const onDownloadExternal = (e: Event) => {
+      const detail = (e as CustomEvent<{ url: string }>).detail;
+      if (!detail?.url) return;
+      void (async () => {
+        try {
+          const rel = await downloadAttachment(detail.url);
+          rewriteImageSrc(view, detail.url, rel);
+        } catch (err) {
+          console.error('Download external image failed:', err);
+        }
+      })();
+    };
+    view.dom.addEventListener('mycel:download-external-image', onDownloadExternal);
+
     return () => {
       if (liveTimerRef.current) {
         clearTimeout(liveTimerRef.current);
         liveTimerRef.current = null;
       }
       view.dom.removeEventListener('mycel:open-db-picker', onOpenDbPicker);
+      view.dom.removeEventListener('paste', onPaste);
+      view.dom.removeEventListener('dragover', onDragOver);
+      view.dom.removeEventListener('dragleave', onDragLeave);
+      view.dom.removeEventListener('drop', onDrop);
+      view.dom.removeEventListener('mycel:download-external-image', onDownloadExternal);
       unregisterEditorView(path, view);
       view.destroy();
       viewRef.current = null;
