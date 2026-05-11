@@ -30,6 +30,12 @@ pub struct GraphDomain {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct GraphTag {
+    pub tag: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WikiEdge {
     pub from: String,
     pub to: String,
@@ -43,12 +49,20 @@ pub struct ExternalEdge {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct TagEdge {
+    pub from: String,
+    pub tag: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GraphData {
     pub notes: Vec<GraphNote>,
     pub folders: Vec<GraphFolder>,
     pub domains: Vec<GraphDomain>,
+    pub tags: Vec<GraphTag>,
     pub wiki_edges: Vec<WikiEdge>,
     pub external_edges: Vec<ExternalEdge>,
+    pub tag_edges: Vec<TagEdge>,
 }
 
 fn url_re() -> &'static Regex {
@@ -143,6 +157,8 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
     let mut wiki_edges: Vec<WikiEdge> = Vec::new();
     let mut domain_counts: HashMap<String, u32> = HashMap::new();
     let mut external_counts: HashMap<(String, String), u32> = HashMap::new();
+    let mut tag_counts: HashMap<String, u32> = HashMap::new();
+    let mut tag_edges: Vec<TagEdge> = Vec::new();
     let mut notes_out: Vec<GraphNote> = Vec::with_capacity(loaded.len());
 
     for note in &loaded {
@@ -181,6 +197,23 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             wiki_edges.push(WikiEdge {
                 from: note.path.clone(),
                 to: target_path.clone(),
+            });
+        }
+
+        // Tags — union of frontmatter and body, deduped per note.
+        let mut note_tags: HashSet<String> = HashSet::new();
+        for t in parsed.meta.tags.iter().chain(parsed.tags.iter()) {
+            let normalized = t.trim().trim_start_matches('#').to_lowercase();
+            if normalized.is_empty() {
+                continue;
+            }
+            note_tags.insert(normalized);
+        }
+        for tag in &note_tags {
+            *tag_counts.entry(tag.clone()).or_insert(0) += 1;
+            tag_edges.push(TagEdge {
+                from: note.path.clone(),
+                tag: tag.clone(),
             });
         }
 
@@ -250,12 +283,20 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
         .map(|((from, domain), count)| ExternalEdge { from, domain, count })
         .collect();
 
+    let mut tags_out: Vec<GraphTag> = tag_counts
+        .into_iter()
+        .map(|(tag, count)| GraphTag { tag, count })
+        .collect();
+    tags_out.sort_by(|a, b| b.count.cmp(&a.count).then(a.tag.cmp(&b.tag)));
+
     Ok(GraphData {
         notes: notes_out,
         folders: folders_out,
         domains: domains_out,
+        tags: tags_out,
         wiki_edges,
         external_edges,
+        tag_edges,
     })
 }
 

@@ -13,35 +13,42 @@ import {
 import { X, ZoomIn, ZoomOut, Maximize2, RotateCcw } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { TagSearch } from '@/components/search/TagSearch';
+
+const TAG_GROUP = '__tags__';
 
 // ── Wire types matching the Rust `graph_data` payload ───────────────────────
 
 interface GraphNote { path: string; title: string; folder: string; }
 interface GraphFolder { path: string; name: string; parent: string | null; }
 interface GraphDomain { domain: string; count: number; }
+interface GraphTag { tag: string; count: number; }
 interface WikiEdge { from: string; to: string; }
 interface ExternalEdge { from: string; domain: string; count: number; }
+interface TagEdge { from: string; tag: string; }
 interface GraphData {
   notes: GraphNote[];
   folders: GraphFolder[];
   domains: GraphDomain[];
+  tags: GraphTag[];
   wiki_edges: WikiEdge[];
   external_edges: ExternalEdge[];
+  tag_edges: TagEdge[];
 }
 
 // ── Internal simulation types ───────────────────────────────────────────────
 
-type NodeKind = 'folder' | 'note' | 'domain';
+type NodeKind = 'folder' | 'note' | 'domain' | 'tag';
 
 interface SimNode {
   id: string;
   kind: NodeKind;
   label: string;
-  /** For notes: parent folder path. For folders: parent folder. For domains: '__external__'. */
+  /** For notes: parent folder path. For folders: parent folder. For domains: '__external__'. For tags: '__tags__'. */
   group: string;
   /** Display radius. */
   r: number;
-  /** Domain count → external-edge sizing. */
+  /** Reference count — drives domain/tag node sizing. */
   count?: number;
   // d3-force will populate these
   x?: number;
@@ -55,7 +62,7 @@ interface SimNode {
 interface SimLink {
   source: string | SimNode;
   target: string | SimNode;
-  kind: 'contain' | 'wiki' | 'external';
+  kind: 'contain' | 'wiki' | 'external' | 'tag';
   /** Edge strength scaler (1 for normal, used for domain counts). */
   weight?: number;
 }
@@ -72,6 +79,7 @@ export function GraphView({ onClose }: Props) {
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hover, setHover] = useState<SimNode | null>(null);
+  const [tagQuery, setTagQuery] = useState<string | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
   const [, force] = useState(0); // tick re-render trigger
   const { openNote } = useVaultStore();
@@ -153,6 +161,41 @@ export function GraphView({ onClose }: Props) {
       });
     }
 
+    // Tag super-hub + individual tags. Notes connect to tags they carry —
+    // shared-tag notes naturally cluster around the tag node, giving a
+    // visual "soft" connection on top of explicit wikilinks.
+    if (data.tags.length > 0) {
+      nodes.push({
+        id: 'folder:__tags__',
+        kind: 'folder',
+        label: 'tags',
+        group: '',
+        r: 10,
+      });
+      for (const tg of data.tags) {
+        nodes.push({
+          id: `tag:${tg.tag}`,
+          kind: 'tag',
+          label: `#${tg.tag}`,
+          group: TAG_GROUP,
+          r: 4 + Math.min(7, Math.sqrt(tg.count) * 1.4),
+          count: tg.count,
+        });
+        links.push({
+          source: 'folder:__tags__',
+          target: `tag:${tg.tag}`,
+          kind: 'contain',
+        });
+      }
+      for (const e of data.tag_edges) {
+        links.push({
+          source: `note:${e.from}`,
+          target: `tag:${e.tag}`,
+          kind: 'tag',
+        });
+      }
+    }
+
     // External domain super-hub (so all domains float in their own region)
     // and individual domain nodes connected to it.
     if (data.domains.length > 0) {
@@ -206,11 +249,13 @@ export function GraphView({ onClose }: Props) {
           .distance((l) => {
             if (l.kind === 'contain') return 38;
             if (l.kind === 'wiki') return 95;
+            if (l.kind === 'tag') return 110;
             return 70; // external
           })
           .strength((l) => {
             if (l.kind === 'contain') return 0.9;
             if (l.kind === 'wiki') return 0.35;
+            if (l.kind === 'tag') return 0.12;
             return 0.15;
           }),
       )
@@ -332,6 +377,8 @@ export function GraphView({ onClose }: Props) {
       onClose();
     } else if (n.kind === 'domain') {
       openUrl(`https://${n.label}`).catch(console.error);
+    } else if (n.kind === 'tag') {
+      setTagQuery(n.id.replace(/^tag:/, ''));
     }
   };
 
@@ -380,8 +427,10 @@ export function GraphView({ onClose }: Props) {
     const dist = Math.hypot(dx, dy) || 1;
 
     if (l.kind === 'contain') {
-      // Curved hypha: subtle, neutral colour so it doesn't compete with the
-      // semantic wiki edges.
+      // Curved hypha: a soft accent so structure stays present without
+      // outshouting the semantic wiki edges. Hub→domain / hub→tag edges
+      // pick up their respective palette so the three "regions" of the
+      // graph (vault / web / tags) read at a glance.
       const seed = hash(
         `${typeof l.source === 'string' ? l.source : (l.source as SimNode).id}->${
           typeof l.target === 'string' ? l.target : (l.target as SimNode).id
@@ -400,14 +449,26 @@ export function GraphView({ onClose }: Props) {
       const exp = t.x! - (dx / dist) * t.r;
       const eyp = t.y! - (dy / dist) * t.r;
       const isDomainEdge = s.id === 'folder:__external__' || t.kind === 'domain';
+      const isTagHubEdge = s.id === 'folder:__tags__' || t.kind === 'tag';
+      const isFolderHierarchy =
+        s.kind === 'folder' &&
+        t.kind === 'folder' &&
+        s.id !== 'folder:__external__' &&
+        s.id !== 'folder:__tags__';
+      const cls = isDomainEdge
+        ? 'stroke-embedding/55'
+        : isTagHubEdge
+          ? 'stroke-tag/55'
+          : isFolderHierarchy
+            ? 'stroke-accent/65'
+            : 'stroke-accent/45';
       return (
         <path
           key={i}
           d={`M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`}
-          className={
-            isDomainEdge ? 'stroke-embedding/35' : 'stroke-text-muted/45'
-          }
-          strokeWidth={0.9}
+          className={cls}
+          strokeWidth={isFolderHierarchy ? 1.1 : 0.9}
+          strokeDasharray={isFolderHierarchy ? '1 4' : undefined}
           strokeLinecap="round"
           fill="none"
         />
@@ -443,6 +504,24 @@ export function GraphView({ onClose }: Props) {
       );
     }
 
+    if (l.kind === 'tag') {
+      // Note → tag: very thin, tag-coloured, dashed so they read as a
+      // "soft" semantic connection compared to wiki edges.
+      return (
+        <line
+          key={i}
+          x1={s.x}
+          y1={s.y}
+          x2={t.x}
+          y2={t.y}
+          strokeWidth={0.7}
+          strokeDasharray="2 3"
+          className="stroke-tag/45"
+          strokeLinecap="round"
+        />
+      );
+    }
+
     // External (note → domain): dashed
     return (
       <line
@@ -451,9 +530,9 @@ export function GraphView({ onClose }: Props) {
         y1={s.y}
         x2={t.x}
         y2={t.y}
-        strokeWidth={1}
+        strokeWidth={0.8}
         strokeDasharray="3 4"
-        className="stroke-embedding/40"
+        className="stroke-embedding/55"
         strokeLinecap="round"
       />
     );
@@ -529,6 +608,25 @@ export function GraphView({ onClose }: Props) {
               </text>
             )}
           </>
+        ) : n.kind === 'tag' ? (
+          <>
+            <circle
+              r={n.r}
+              className="fill-tag stroke-tag"
+              fillOpacity={0.7}
+              strokeWidth={1}
+            />
+            {n.count !== undefined && n.count > 1 && (
+              <text
+                y={3}
+                textAnchor="middle"
+                className="fill-text-primary pointer-events-none select-none"
+                style={{ fontSize: 9, fontWeight: 600 }}
+              >
+                {n.count}
+              </text>
+            )}
+          </>
         ) : (
           // Note: simple "mid-bud" — a small filled spore.
           <>
@@ -571,7 +669,7 @@ export function GraphView({ onClose }: Props) {
           {data && (
             <span className="text-xs text-text-muted">
               {data.notes.length} notes · {data.wiki_edges.length} links ·{' '}
-              {data.domains.length} domains
+              {data.tags.length} tags · {data.domains.length} domains
             </span>
           )}
         </div>
@@ -655,7 +753,12 @@ export function GraphView({ onClose }: Props) {
                 hyphae but still below the nodes. */}
             <g>
               {links
-                .filter((l) => l.kind === 'contain' || l.kind === 'external')
+                .filter(
+                  (l) =>
+                    l.kind === 'contain' ||
+                    l.kind === 'external' ||
+                    l.kind === 'tag',
+                )
                 .map((l, i) => renderLink(l, i))}
             </g>
             <g>
@@ -678,10 +781,18 @@ export function GraphView({ onClose }: Props) {
             Note
           </div>
           <div className="flex items-center gap-2">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-tag" />
+            Tag
+          </div>
+          <div className="flex items-center gap-2">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-embedding" />
             Domain
           </div>
         </div>
+
+        {tagQuery && (
+          <TagSearch tag={tagQuery} onClose={() => setTagQuery(null)} />
+        )}
 
         {/* Hover tooltip */}
         {hover && (
@@ -692,14 +803,18 @@ export function GraphView({ onClose }: Props) {
                 ? hover.id.replace(/^note:/, '')
                 : hover.kind === 'domain'
                   ? `domain · ${hover.count} link${hover.count === 1 ? '' : 's'}`
-                  : 'folder'}
+                  : hover.kind === 'tag'
+                    ? `tag · ${hover.count} note${hover.count === 1 ? '' : 's'}`
+                    : 'folder'}
             </div>
             <div className="text-text-muted mt-1 text-[10px]">
               {hover.kind === 'note'
                 ? 'double-click to open'
                 : hover.kind === 'domain'
                   ? 'double-click to open in browser'
-                  : 'drag to move'}
+                  : hover.kind === 'tag'
+                    ? 'double-click to search notes'
+                    : 'drag to move'}
             </div>
           </div>
         )}
