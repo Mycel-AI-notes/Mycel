@@ -13,7 +13,9 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
+import { useVaultStore } from '@/stores/vault';
 import type { GardenView } from '@/types/garden';
+import { parseGardenTabPath } from '@/lib/garden-tab';
 import { GardenHelp } from './GardenHelp';
 
 interface RowProps {
@@ -63,11 +65,12 @@ export function GardenSidebar() {
     sectionOpen,
     toggleSection,
     counts,
-    view,
-    setView,
     openCapture,
     refreshCounts,
   } = useGardenStore();
+  const activeTabPath = useVaultStore((s) => s.activeTabPath);
+  const openGardenTab = useVaultStore((s) => s.openGardenTab);
+  const view = activeTabPath ? parseGardenTabPath(activeTabPath) : null;
   const [helpOpen, setHelpOpen] = useState(false);
 
   // Refresh counts whenever the section opens — cheap, keeps badges fresh
@@ -124,7 +127,7 @@ export function GardenSidebar() {
             label="Inbox"
             count={counts.inbox}
             active={isView('inbox')}
-            onClick={() => setView({ kind: 'inbox' })}
+            onClick={() => openGardenTab({ kind: 'inbox' }, { preview: true })}
             warn={counts.inbox > 0}
           />
           <Row
@@ -132,27 +135,27 @@ export function GardenSidebar() {
             label="Next Actions"
             count={counts.actions}
             active={isView('actions')}
-            onClick={() => setView({ kind: 'actions' })}
+            onClick={() => openGardenTab({ kind: 'actions' }, { preview: true })}
           />
           <Row
             icon={<ClipboardList size={14} className="text-accent-deep" />}
             label="Projects"
             count={counts.projects}
             active={isView('projects') || isView('project-detail')}
-            onClick={() => setView({ kind: 'projects' })}
+            onClick={() => openGardenTab({ kind: 'projects' }, { preview: true })}
           />
           <Row
             icon={<Hourglass size={14} className="text-text-muted" />}
             label="Waiting For"
             count={counts.waiting}
             active={isView('waiting')}
-            onClick={() => setView({ kind: 'waiting' })}
+            onClick={() => openGardenTab({ kind: 'waiting' }, { preview: true })}
           />
           <Row
             icon={<Lightbulb size={14} className="text-text-muted" />}
             label="Someday"
             active={isView('someday')}
-            onClick={() => setView({ kind: 'someday' })}
+            onClick={() => openGardenTab({ kind: 'someday' }, { preview: true })}
           />
         </div>
       )}

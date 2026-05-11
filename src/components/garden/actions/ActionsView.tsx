@@ -5,6 +5,7 @@ import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
 import type { ActionGrouping, ActionItem } from '@/types/garden';
 import { DurationBadge, EnergyBadge, PageLink, ProjectChip } from '../shared/badges';
+import { Select } from '@/components/ui/Select';
 
 const GROUPING_LABEL: Record<ActionGrouping, string> = {
   context: 'By context',
@@ -134,15 +135,12 @@ function InlineAdd({ defaultContext }: { defaultContext: string }) {
         placeholder="What needs to be done? Press Enter to add."
         className="flex-1 bg-transparent outline-none text-sm placeholder:text-text-muted"
       />
-      <select
+      <Select
         value={context}
-        onChange={(e) => setContext(e.target.value)}
-        className="bg-surface-0 border border-border rounded text-xs px-1 py-0.5"
-      >
-        {contexts.map((c) => (
-          <option key={c} value={c}>{c}</option>
-        ))}
-      </select>
+        onChange={setContext}
+        options={contexts.map((c) => ({ value: c, label: c }))}
+        width={130}
+      />
     </div>
   );
 }
@@ -206,15 +204,14 @@ export function ActionsView() {
             <span className="text-text-muted text-sm">({filtered.filter((a) => !a.done).length})</span>
           </h1>
           <div className="flex items-center gap-2 text-xs">
-            <select
+            <Select<ActionGrouping>
               value={grouping}
-              onChange={(e) => setGrouping(e.target.value as ActionGrouping)}
-              className="bg-surface-0 border border-border rounded px-1 py-1"
-            >
-              {(Object.keys(GROUPING_LABEL) as ActionGrouping[]).map((g) => (
-                <option key={g} value={g}>{GROUPING_LABEL[g]}</option>
-              ))}
-            </select>
+              onChange={setGrouping}
+              options={(Object.keys(GROUPING_LABEL) as ActionGrouping[]).map(
+                (g) => ({ value: g, label: GROUPING_LABEL[g] }),
+              )}
+              width={140}
+            />
             <label className="flex items-center gap-1 text-text-muted">
               <input
                 type="checkbox"
@@ -228,47 +225,47 @@ export function ActionsView() {
 
         {/* filter row */}
         <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
-          <select
+          <Select
             value={filters.context ?? ''}
-            onChange={(e) => setFilters({ context: e.target.value || undefined })}
-            className="bg-surface-0 border border-border rounded px-1 py-0.5"
-          >
-            <option value="">All contexts</option>
-            {(config?.contexts ?? []).map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => setFilters({ context: v || undefined })}
+            options={[
+              { value: '', label: 'All contexts' },
+              ...(config?.contexts ?? []).map((c) => ({ value: c, label: c })),
+            ]}
+            width={140}
+          />
+          <Select
             value={filters.project ?? ''}
-            onChange={(e) => setFilters({ project: e.target.value || undefined })}
-            className="bg-surface-0 border border-border rounded px-1 py-0.5"
-          >
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.title}>{p.title}</option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => setFilters({ project: v || undefined })}
+            options={[
+              { value: '', label: 'All projects' },
+              ...projects.map((p) => ({ value: p.title, label: p.title })),
+            ]}
+            width={160}
+          />
+          <Select
             value={filters.energy ?? ''}
-            onChange={(e) => setFilters({ energy: e.target.value || undefined })}
-            className="bg-surface-0 border border-border rounded px-1 py-0.5"
-          >
-            <option value="">All energy</option>
-            <option value="высокая">высокая</option>
-            <option value="средняя">средняя</option>
-            <option value="низкая">низкая</option>
-          </select>
-          <select
+            onChange={(v) => setFilters({ energy: v || undefined })}
+            options={[
+              { value: '', label: 'All energy' },
+              { value: 'высокая', label: '🔴 высокая' },
+              { value: 'средняя', label: '🟡 средняя' },
+              { value: 'низкая', label: '🟢 низкая' },
+            ]}
+            width={140}
+          />
+          <Select
             value={filters.duration ?? ''}
-            onChange={(e) => setFilters({ duration: e.target.value || undefined })}
-            className="bg-surface-0 border border-border rounded px-1 py-0.5"
-          >
-            <option value="">All durations</option>
-            <option value="< 5 мин">{'< 5 мин'}</option>
-            <option value="< 30 мин">{'< 30 мин'}</option>
-            <option value="< 2 ч">{'< 2 ч'}</option>
-            <option value="2+ ч">{'2+ ч'}</option>
-          </select>
+            onChange={(v) => setFilters({ duration: v || undefined })}
+            options={[
+              { value: '', label: 'All durations' },
+              { value: '< 5 мин', label: '< 5 мин' },
+              { value: '< 30 мин', label: '< 30 мин' },
+              { value: '< 2 ч', label: '< 2 ч' },
+              { value: '2+ ч', label: '2+ ч' },
+            ]}
+            width={140}
+          />
           {activeFilters.length > 0 && (
             <button
               onClick={clearFilters}

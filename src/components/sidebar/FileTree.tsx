@@ -432,9 +432,11 @@ export function FileTree() {
   // Whenever the user opens a note (file tree click, quick switcher, palette,
   // or Garden's "Create page"), expand every ancestor folder so the file is
   // visible in the tree. Without this, freshly-created notes inside a
-  // collapsed folder stay invisible until the user manually expands.
+  // collapsed folder stay invisible until the user manually expands. Skip
+  // synthetic garden tab paths — they don't map to disk.
   useEffect(() => {
     if (!activeTabPath) return;
+    if (activeTabPath.startsWith('garden:')) return;
     const parts = activeTabPath.split('/');
     if (parts.length <= 1) return;
     const ancestors: string[] = [];

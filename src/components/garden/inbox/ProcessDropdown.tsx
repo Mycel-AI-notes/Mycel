@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
 import type { InboxItem, ProcessTarget } from '@/types/garden';
+import { Select } from '@/components/ui/Select';
 
 interface Props {
   item: InboxItem;
@@ -140,17 +141,14 @@ export function ProcessDropdown({ item }: Props) {
               <div className="text-text-muted">{item.text}</div>
               <label className="flex items-center gap-2">
                 <span className="w-16 text-text-muted">Context</span>
-                <select
-                  className="flex-1 bg-surface-0 border border-border rounded px-1 py-0.5"
-                  value={stage.context}
-                  onChange={(e) => setStage({ ...stage, context: e.target.value })}
-                >
-                  {contexts.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex-1">
+                  <Select
+                    value={stage.context}
+                    onChange={(v) => setStage({ ...stage, context: v })}
+                    options={contexts.map((c) => ({ value: c, label: c }))}
+                    width="100%"
+                  />
+                </div>
               </label>
               <label className="flex items-center gap-2">
                 <span className="w-16 text-text-muted">Project</span>
@@ -169,30 +167,36 @@ export function ProcessDropdown({ item }: Props) {
               </label>
               <label className="flex items-center gap-2">
                 <span className="w-16 text-text-muted">Energy</span>
-                <select
-                  className="flex-1 bg-surface-0 border border-border rounded px-1 py-0.5"
-                  value={stage.energy}
-                  onChange={(e) => setStage({ ...stage, energy: e.target.value })}
-                >
-                  <option value="">—</option>
-                  <option value="высокая">высокая</option>
-                  <option value="средняя">средняя</option>
-                  <option value="низкая">низкая</option>
-                </select>
+                <div className="flex-1">
+                  <Select
+                    value={stage.energy}
+                    onChange={(v) => setStage({ ...stage, energy: v })}
+                    options={[
+                      { value: '', label: '—' },
+                      { value: 'высокая', label: '🔴 высокая' },
+                      { value: 'средняя', label: '🟡 средняя' },
+                      { value: 'низкая', label: '🟢 низкая' },
+                    ]}
+                    width="100%"
+                  />
+                </div>
               </label>
               <label className="flex items-center gap-2">
                 <span className="w-16 text-text-muted">Time</span>
-                <select
-                  className="flex-1 bg-surface-0 border border-border rounded px-1 py-0.5"
-                  value={stage.duration}
-                  onChange={(e) => setStage({ ...stage, duration: e.target.value })}
-                >
-                  <option value="">—</option>
-                  <option value="< 5 мин">{'< 5 мин'}</option>
-                  <option value="< 30 мин">{'< 30 мин'}</option>
-                  <option value="< 2 ч">{'< 2 ч'}</option>
-                  <option value="2+ ч">{'2+ ч'}</option>
-                </select>
+                <div className="flex-1">
+                  <Select
+                    value={stage.duration}
+                    onChange={(v) => setStage({ ...stage, duration: v })}
+                    options={[
+                      { value: '', label: '—' },
+                      { value: '< 5 мин', label: '< 5 мин' },
+                      { value: '< 30 мин', label: '< 30 мин' },
+                      { value: '< 2 ч', label: '< 2 ч' },
+                      { value: '2+ ч', label: '2+ ч' },
+                    ]}
+                    width="100%"
+                  />
+                </div>
               </label>
               <div className="flex justify-end gap-2 mt-1">
                 <button
@@ -234,17 +238,12 @@ export function ProcessDropdown({ item }: Props) {
                 value={stage.firstAction}
                 onChange={(e) => setStage({ ...stage, firstAction: e.target.value })}
               />
-              <select
-                className="bg-surface-0 border border-border rounded px-1 py-0.5"
+              <Select
                 value={stage.actionContext}
-                onChange={(e) => setStage({ ...stage, actionContext: e.target.value })}
-              >
-                {contexts.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setStage({ ...stage, actionContext: v })}
+                options={contexts.map((c) => ({ value: c, label: c }))}
+                width="100%"
+              />
               <div className="flex justify-end gap-2 mt-1">
                 <button
                   className="px-2 py-1 text-text-muted hover:text-text-primary"
@@ -309,17 +308,12 @@ export function ProcessDropdown({ item }: Props) {
 
           {stage.kind === 'someday' && (
             <div className="p-3 flex flex-col gap-2 text-xs">
-              <select
-                className="bg-surface-0 border border-border rounded px-1 py-0.5"
+              <Select
                 value={stage.area}
-                onChange={(e) => setStage({ ...stage, area: e.target.value })}
-              >
-                {areas.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setStage({ ...stage, area: v })}
+                options={areas.map((a) => ({ value: a, label: a }))}
+                width="100%"
+              />
               <div className="flex justify-end gap-2 mt-1">
                 <button
                   className="px-2 py-1 text-text-muted hover:text-text-primary"

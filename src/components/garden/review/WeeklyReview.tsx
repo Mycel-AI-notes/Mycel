@@ -11,6 +11,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
+import { useVaultStore } from '@/stores/vault';
 import { ProcessDropdown } from '../inbox/ProcessDropdown';
 
 const STEPS = [
@@ -23,7 +24,7 @@ const STEPS = [
 ] as const;
 
 export function WeeklyReview() {
-  const setView = useGardenStore((s) => s.setView);
+  const openGardenTab = useVaultStore((s) => s.openGardenTab);
   const refreshAll = useGardenStore((s) => s.refreshAll);
   const inbox = useGardenStore((s) => s.inbox);
   const actions = useGardenStore((s) => s.actions);
@@ -109,7 +110,7 @@ export function WeeklyReview() {
             <div>💭 Someday: {snapshot.someday} → {finalCounts.someday}</div>
           </div>
           <button
-            onClick={() => setView({ kind: 'actions' })}
+            onClick={() => openGardenTab({ kind: 'actions' }, { preview: false })}
             className="mt-6 px-4 py-2 rounded bg-accent/15 text-accent hover:bg-accent/25 text-sm"
           >
             Done

@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, SaveCheckedResult, SaveConflict, Tab } from '@/types';
+import type { GardenView } from '@/types/garden';
 import { reparseBody } from '@/lib/markdown-parse';
 import { displayName } from '@/lib/note-name';
 import { replaceEditorContent } from '@/lib/editor-registry';
+import { gardenTabPath, gardenTabTitle } from '@/lib/garden-tab';
 import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
 import { useCryptoStore } from './crypto';
@@ -32,6 +34,10 @@ interface VaultState {
    *  save would write back over the freshly pulled content. */
   reloadFromDisk: () => Promise<void>;
   openNote: (path: string, options?: { preview?: boolean }) => Promise<void>;
+  /** Open a Garden view inside the tab strip. Uses the same preview/pin
+   *  semantics as notes — single click is a preview tab that the next
+   *  preview replaces; double-click pins. */
+  openGardenTab: (view: GardenView, options?: { preview?: boolean }) => void;
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
   pinTab: (path: string) => void;
@@ -203,9 +209,6 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   openNote: async (path, options) => {
     const preview = options?.preview ?? false;
-    // Opening a note from anywhere — file tree, quick switcher, palette,
-    // backlinks — should exit the Garden view so the editor is visible.
-    useGardenStore.getState().setView(null);
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
@@ -269,6 +272,50 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     } else {
       set((s) => ({
         openTabs: [...s.openTabs, { path, title, isDirty: false, isPreview: false }],
+      }));
+    }
+    set({ activeTabPath: path });
+  },
+
+  openGardenTab: (view, options) => {
+    const preview = options?.preview ?? false;
+    const path = gardenTabPath(view);
+    const title = gardenTabTitle(view);
+    const { openTabs } = get();
+    const alreadyOpen = openTabs.find((t) => t.path === path);
+
+    if (alreadyOpen) {
+      if (alreadyOpen.isPreview && !preview) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t) =>
+            t.path === path ? { ...t, isPreview: false } : t,
+          ),
+        }));
+      }
+    } else if (preview) {
+      const existingIdx = openTabs.findIndex((t) => t.isPreview);
+      if (existingIdx >= 0) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t, i) =>
+            i === existingIdx
+              ? { path, title, isDirty: false, isPreview: true }
+              : t,
+          ),
+        }));
+      } else {
+        set((s) => ({
+          openTabs: [
+            ...s.openTabs,
+            { path, title, isDirty: false, isPreview: true },
+          ],
+        }));
+      }
+    } else {
+      set((s) => ({
+        openTabs: [
+          ...s.openTabs,
+          { path, title, isDirty: false, isPreview: false },
+        ],
       }));
     }
     set({ activeTabPath: path });

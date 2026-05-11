@@ -8,7 +8,6 @@ import type {
   GardenConfig,
   GardenCounts,
   GardenList,
-  GardenView,
   InboxItem,
   ProcessTarget,
   ProjectDetail,
@@ -18,8 +17,6 @@ import type {
 } from '@/types/garden';
 
 export interface GardenUIState {
-  /** Active garden screen, or null when the editor area shows notes. */
-  view: GardenView | null;
   /** Sidebar Garden section open/closed. */
   sectionOpen: boolean;
   /** Quick-capture Cmd+I modal visibility. */
@@ -42,7 +39,6 @@ interface GardenState extends GardenUIState {
   hideCompleted: boolean;
 
   // ---- Navigation ----
-  setView: (view: GardenView | null) => void;
   toggleSection: () => void;
   openCapture: () => void;
   closeCapture: () => void;
@@ -177,7 +173,6 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 }
 
 export const useGardenStore = create<GardenState>((set, get) => ({
-  view: null,
   // Sidebar section starts collapsed so the file tree owns the space until
   // the user opts into Garden. Restored from localStorage below.
   sectionOpen: typeof window !== 'undefined'
@@ -195,7 +190,6 @@ export const useGardenStore = create<GardenState>((set, get) => ({
   filters: {},
   hideCompleted: false,
 
-  setView: (view) => set({ view }),
   toggleSection: () => set((s) => {
     const next = !s.sectionOpen;
     if (typeof window !== 'undefined') {
@@ -383,7 +377,6 @@ export const useGardenStore = create<GardenState>((set, get) => ({
   setHideCompleted: (v) => set({ hideCompleted: v }),
 
   reset: () => set({
-    view: null,
     captureOpen: false,
     counts: EMPTY_COUNTS,
     inbox: [],

@@ -4,9 +4,10 @@ import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
 import type { ProjectItem } from '@/types/garden';
 import { KNOWLEDGE_BASE_DIR } from '@/types';
+import { Select } from '@/components/ui/Select';
 
 function ProjectRow({ project }: { project: ProjectItem }) {
-  const setView = useGardenStore((s) => s.setView);
+  const openGardenTab = useVaultStore((s) => s.openGardenTab);
   const actions = useGardenStore((s) => s.actions);
   const openNote = useVaultStore((s) => s.openNote);
 
@@ -18,7 +19,7 @@ function ProjectRow({ project }: { project: ProjectItem }) {
   return (
     <button
       type="button"
-      onClick={() => setView({ kind: 'project-detail', id: project.id })}
+      onClick={() => openGardenTab({ kind: 'project-detail', id: project.id }, { preview: true })}
       className="w-full text-left border border-border rounded-md bg-surface-1 hover:bg-surface-2 p-3 flex items-start gap-3"
     >
       <ClipboardList size={16} className="text-accent-deep mt-0.5 shrink-0" />
@@ -211,7 +212,8 @@ export function ProjectsView() {
 }
 
 export function ProjectDetailView({ id }: { id: string }) {
-  const setView = useGardenStore((s) => s.setView);
+  const openGardenTab = useVaultStore((s) => s.openGardenTab);
+  const closeTab = useVaultStore((s) => s.closeTab);
   const updateProject = useGardenStore((s) => s.updateProject);
   const deleteProject = useGardenStore((s) => s.deleteProject);
   const completeAction = useGardenStore((s) => s.completeAction);
@@ -243,7 +245,7 @@ export function ProjectDetailView({ id }: { id: string }) {
         Project not found.
         <button
           className="ml-2 underline"
-          onClick={() => setView({ kind: 'projects' })}
+          onClick={() => openGardenTab({ kind: 'projects' }, { preview: true })}
         >
           Back
         </button>
@@ -287,7 +289,7 @@ export function ProjectDetailView({ id }: { id: string }) {
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-3xl mx-auto">
         <button
-          onClick={() => setView({ kind: 'projects' })}
+          onClick={() => openGardenTab({ kind: 'projects' }, { preview: true })}
           className="text-xs text-text-muted hover:text-text-primary mb-2"
         >
           ← Projects
@@ -303,15 +305,16 @@ export function ProjectDetailView({ id }: { id: string }) {
               <p className="text-text-muted text-sm mt-1">Outcome: {project.outcome}</p>
             )}
             <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
-              <select
+              <Select
                 value={project.status}
-                onChange={(e) => updateProject(project.id, { status: e.target.value })}
-                className="bg-surface-0 border border-border rounded px-1 py-0.5"
-              >
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="done">done</option>
-              </select>
+                onChange={(v) => updateProject(project.id, { status: v })}
+                options={[
+                  { value: 'active', label: 'active' },
+                  { value: 'paused', label: 'paused' },
+                  { value: 'done', label: 'done' },
+                ]}
+                width={110}
+              />
               {project.deadline && <span className="text-amber-500">⚠ {project.deadline}</span>}
             </div>
           </div>
@@ -334,8 +337,10 @@ export function ProjectDetailView({ id }: { id: string }) {
               onClick={async () => {
                 const ok = window.confirm(`Delete project "${project.title}"?`);
                 if (ok) {
+                  // Close this detail tab and bounce to the projects list.
+                  closeTab(`garden:project/${project.id}`);
                   await deleteProject(project.id);
-                  setView({ kind: 'projects' });
+                  openGardenTab({ kind: 'projects' }, { preview: true });
                 }
               }}
               className="px-2 py-1 rounded text-xs text-error hover:bg-error/15"
@@ -375,15 +380,12 @@ export function ProjectDetailView({ id }: { id: string }) {
               placeholder="+ Add next action"
               className="flex-1 bg-surface-0 border border-border rounded px-2 py-1 text-sm"
             />
-            <select
+            <Select
               value={actionContext}
-              onChange={(e) => setActionContext(e.target.value)}
-              className="bg-surface-0 border border-border rounded text-xs px-1 py-1"
-            >
-              {(config?.contexts ?? []).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+              onChange={setActionContext}
+              options={(config?.contexts ?? []).map((c) => ({ value: c, label: c }))}
+              width={130}
+            />
           </div>
         </section>
 

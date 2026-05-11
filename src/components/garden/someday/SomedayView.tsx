@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Lightbulb, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
+import { Select } from '@/components/ui/Select';
 
 export function SomedayView() {
   const someday = useGardenStore((s) => s.someday);
@@ -46,18 +47,15 @@ export function SomedayView() {
             placeholder="An idea, a dream, a someday…"
             className="flex-1 bg-surface-0 border border-border rounded px-2 py-1.5 text-sm"
           />
-          <select
+          <Select
             value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="bg-surface-0 border border-border rounded text-xs px-1 py-1.5"
-          >
-            <option value="">— area —</option>
-            {(config?.areas ?? []).map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            onChange={setArea}
+            options={[
+              { value: '', label: '— area —' },
+              ...(config?.areas ?? []).map((a) => ({ value: a, label: a })),
+            ]}
+            width={130}
+          />
           <button
             onClick={submit}
             disabled={!text.trim()}

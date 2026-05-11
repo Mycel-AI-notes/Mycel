@@ -19,6 +19,7 @@ import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
 import { SettingsDialog } from '@/components/ui/SettingsDialog';
+import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -48,14 +49,16 @@ export default function App() {
   useTheme();
   useAutoLock();
 
-  const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const gardenEnabled = useUIStore((s) => s.features.garden);
   const openSettings = useUIStore((s) => s.openSettings);
-  const gardenView = useGardenStore((s) => s.view);
-  const setGardenView = useGardenStore((s) => s.setView);
   const openGardenCapture = useGardenStore((s) => s.openCapture);
   const toggleGardenSection = useGardenStore((s) => s.toggleSection);
+
+  // Determine which view to render in the main area: a Garden tab, a note,
+  // or the empty state.
+  const activeGardenView = gardenEnabled ? parseGardenTabPath(activeTabPath ?? '') : null;
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
@@ -101,11 +104,11 @@ export default function App() {
       } else if (gardenEnabled && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         // Cmd+Shift+A — Open Next Actions.
         e.preventDefault();
-        if (vaultRoot) setGardenView({ kind: 'actions' });
+        if (vaultRoot) openGardenTab({ kind: 'actions' }, { preview: true });
       } else if (gardenEnabled && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         // Cmd+Shift+P — Open Projects.
         e.preventDefault();
-        if (vaultRoot) setGardenView({ kind: 'projects' });
+        if (vaultRoot) openGardenTab({ kind: 'projects' }, { preview: true });
       } else if (gardenEnabled && e.key === '`') {
         // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
         e.preventDefault();
@@ -114,7 +117,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot, openGardenCapture, setGardenView, toggleGardenSection, gardenEnabled]);
+  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
@@ -229,31 +232,15 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar />}
 
-        {/* Editor area — replaced by Garden views when one is active. */}
+        {/* Editor area — Garden tabs and notes share the same tab strip. */}
         <main className="flex flex-col flex-1 min-w-0">
-          {gardenEnabled && gardenView ? (
-            <>
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface-0 text-xs">
-                <span className="text-text-muted">Garden</span>
-                <button
-                  onClick={() => setGardenView(null)}
-                  className="text-text-muted hover:text-text-primary"
-                  title="Back to notes"
-                >
-                  ✕ Close
-                </button>
-              </div>
-              <GardenView />
-            </>
+          <EditorTabs />
+          {activeGardenView ? (
+            <GardenView view={activeGardenView} />
+          ) : activeTabPath && !isGardenTabPath(activeTabPath) ? (
+            <MarkdownEditor key={activeTabPath} path={activeTabPath} />
           ) : (
-            <>
-              <EditorTabs />
-              {activeTabPath ? (
-                <MarkdownEditor key={activeTabPath} path={activeTabPath} />
-              ) : (
-                <EmptyEditor />
-              )}
-            </>
+            <EmptyEditor />
           )}
         </main>
 
