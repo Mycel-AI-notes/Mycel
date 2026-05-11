@@ -30,11 +30,9 @@ import { insertDbFence } from '@/lib/database/insert';
 import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
 import {
-  downloadAttachment,
   extFromMime,
   insertImageLink,
   isImageFilename,
-  rewriteImageSrc,
   saveAttachmentBytes,
   saveAttachmentFile,
 } from '@/lib/attachments';
@@ -293,21 +291,6 @@ export function MarkdownEditor({ path }: Props) {
     view.dom.addEventListener('dragleave', onDragLeave);
     view.dom.addEventListener('drop', onDrop);
 
-    // ── External image: hover "save locally" button ────────────────────
-    const onDownloadExternal = (e: Event) => {
-      const detail = (e as CustomEvent<{ url: string }>).detail;
-      if (!detail?.url) return;
-      void (async () => {
-        try {
-          const rel = await downloadAttachment(detail.url);
-          rewriteImageSrc(view, detail.url, rel);
-        } catch (err) {
-          console.error('Download external image failed:', err);
-        }
-      })();
-    };
-    view.dom.addEventListener('mycel:download-external-image', onDownloadExternal);
-
     return () => {
       if (liveTimerRef.current) {
         clearTimeout(liveTimerRef.current);
@@ -318,7 +301,6 @@ export function MarkdownEditor({ path }: Props) {
       view.dom.removeEventListener('dragover', onDragOver);
       view.dom.removeEventListener('dragleave', onDragLeave);
       view.dom.removeEventListener('drop', onDrop);
-      view.dom.removeEventListener('mycel:download-external-image', onDownloadExternal);
       unregisterEditorView(path, view);
       view.destroy();
       viewRef.current = null;

@@ -23,6 +23,7 @@ import {
 import { EditorState, StateField } from '@codemirror/state';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
+import { downloadAttachment, rewriteImageSrc } from '@/lib/attachments';
 
 export interface ImageMatch {
   /** Document offset of the opening `!` */
@@ -84,14 +85,11 @@ class ImageWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-image-preview';
     wrap.contentEditable = 'false';
-
-    // Stop bubbling so clicks inside the widget never steal focus from
-    // the surrounding editor — that was causing the preview to flicker
-    // and the action buttons to become unclickable.
-    const stop = (e: Event) => e.stopPropagation();
-    wrap.addEventListener('mousedown', stop);
-    wrap.addEventListener('mouseup', stop);
-    wrap.addEventListener('click', stop);
+    // The widget is "atomic" via ignoreEvent() below — CodeMirror won't
+    // turn clicks here into caret moves. We deliberately do NOT call
+    // stopPropagation on mouse events, because that was making the
+    // action buttons feel inert (CodeMirror still needs to see the
+    // mousedown finish so the click on the button actually fires).
 
     const img = document.createElement('img');
     img.alt = this.alt;
@@ -131,13 +129,31 @@ class ImageWidget extends WidgetType {
 
     if (this.external) {
       const save = makeButton('⬇ Save locally', 'Download to attachments/ and rewrite the link');
-      save.addEventListener('click', () => {
-        wrap.dispatchEvent(
-          new CustomEvent('mycel:download-external-image', {
-            bubbles: true,
-            detail: { url: this.src },
-          }),
-        );
+      const url = this.src;
+      save.addEventListener('click', async () => {
+        const label = save.textContent ?? '';
+        save.disabled = true;
+        save.textContent = '⏳ Downloading…';
+        save.title = url;
+        try {
+          const rel = await downloadAttachment(url);
+          rewriteImageSrc(view, url, rel);
+          // The doc change will rebuild the widget with a local img, so
+          // the button state doesn't need to be reset here.
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          save.classList.add('cm-image-btn-danger');
+          save.textContent = '⚠ Failed — hover for details';
+          save.title = `Download failed: ${msg}`;
+          save.disabled = false;
+          // Reset to "Save locally" so the user can retry after a fix.
+          setTimeout(() => {
+            save.classList.remove('cm-image-btn-danger');
+            save.textContent = label;
+            save.title = 'Download to attachments/ and rewrite the link';
+          }, 4000);
+          console.error('Download external image failed:', err);
+        }
       });
       toolbar.appendChild(save);
     } else {

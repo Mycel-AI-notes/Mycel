@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { openPath } from '@tauri-apps/plugin-opener';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { Maximize2, Minimize2, ExternalLink } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
@@ -17,6 +18,7 @@ interface Props {
 export function ImageViewer({ path }: Props) {
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
   const [actualSize, setActualSize] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
 
   if (!vaultRoot) {
     return (
@@ -45,17 +47,18 @@ export function ImageViewer({ path }: Props) {
           </button>
           <button
             onClick={async () => {
+              setOpenError(null);
               try {
-                const { openPath } = await import('@tauri-apps/plugin-opener');
                 await openPath(absPath);
-              } catch {
-                // Best-effort.
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOpenError(msg);
               }
             }}
             className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Open in system viewer"
+            title={openError ? `Failed: ${openError}` : 'Open in system viewer'}
           >
-            <ExternalLink size={12} /> Open
+            <ExternalLink size={12} /> {openError ? 'Failed' : 'Open'}
           </button>
         </div>
       </div>
