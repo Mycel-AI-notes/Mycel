@@ -136,22 +136,83 @@ export function ConflictDialog() {
   );
 }
 
+/** How many unchanged lines to keep as context around each changed block
+ *  before collapsing the rest into a "… N lines unchanged …" placeholder.
+ *  Mirrors the default git uses for unified diffs. */
+const CONTEXT_LINES = 3;
+
 function DiffView({ local, disk }: { local: string; disk: string }) {
   const rows = useMemo(() => buildLineDiff(local, disk), [local, disk]);
+  const blocks = useMemo(() => foldUnchanged(rows, CONTEXT_LINES), [rows]);
+
+  if (rows.every((r) => r.kind === 'same')) {
+    return (
+      <div className="rounded-md border border-border bg-surface-0 px-3 py-2 text-xs text-text-muted">
+        No textual differences — the files are identical line by line. The
+        on-disk version may differ only in trailing whitespace or line
+        endings.
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-md border border-border overflow-hidden">
-      <div className="grid grid-cols-2 text-[10px] uppercase tracking-wider bg-surface-0 text-text-muted border-b border-border">
-        <div className="px-3 py-1.5 border-r border-border">Yours (in editor)</div>
+      <div className="grid grid-cols-[3rem_1fr_3rem_1fr] text-[10px] uppercase tracking-wider bg-surface-0 text-text-muted border-b border-border">
+        <div className="px-2 py-1.5 text-right border-r border-border">#</div>
+        <div className="px-3 py-1.5 border-r border-border">Yours (editor)</div>
+        <div className="px-2 py-1.5 text-right border-r border-border">#</div>
         <div className="px-3 py-1.5">On disk (remote)</div>
       </div>
       <div className="max-h-[50vh] overflow-auto font-mono text-[11px]">
-        {rows.map((row, i) => (
-          <div key={i} className="grid grid-cols-2 border-b border-border/30">
-            <DiffCell line={row.local} kind={row.kind === 'same' ? 'same' : 'local'} />
-            <DiffCell line={row.disk} kind={row.kind === 'same' ? 'same' : 'disk'} />
-          </div>
-        ))}
+        {blocks.map((block, bi) => {
+          if (block.kind === 'gap') {
+            return (
+              <div
+                key={`gap-${bi}`}
+                className="grid grid-cols-[3rem_1fr_3rem_1fr] bg-surface-0/60 text-text-muted text-[10px] italic border-y border-border/40"
+              >
+                <div className="px-2 py-1 text-right border-r border-border/40">⋯</div>
+                <div className="px-3 py-1 col-span-3">
+                  {block.count} unchanged line{block.count === 1 ? '' : 's'}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={`row-${bi}`}
+              className="grid grid-cols-[3rem_1fr_3rem_1fr] border-b border-border/30"
+            >
+              <LineNumber n={block.row.localLine} kind={block.row.kind} side="local" />
+              <DiffCell line={block.row.local} kind={block.row.kind} side="local" />
+              <LineNumber n={block.row.diskLine} kind={block.row.kind} side="disk" />
+              <DiffCell line={block.row.disk} kind={block.row.kind} side="disk" />
+            </div>
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function LineNumber({
+  n,
+  kind,
+  side,
+}: {
+  n: number | null;
+  kind: 'same' | 'diff';
+  side: 'local' | 'disk';
+}) {
+  const bg = kind === 'same' ? '' : side === 'local' ? 'bg-error/10' : 'bg-accent/10';
+  return (
+    <div
+      className={clsx(
+        'px-2 py-0.5 text-right text-text-muted border-r border-border/30 select-none',
+        bg,
+      )}
+    >
+      {n === null ? '' : n}
     </div>
   );
 }
@@ -159,16 +220,16 @@ function DiffView({ local, disk }: { local: string; disk: string }) {
 function DiffCell({
   line,
   kind,
+  side,
 }: {
   line: string | null;
-  kind: 'same' | 'local' | 'disk';
+  kind: 'same' | 'diff';
+  side: 'local' | 'disk';
 }) {
+  const isMissing = line === null;
   const bg =
-    kind === 'same'
-      ? ''
-      : kind === 'local'
-        ? 'bg-error/10'
-        : 'bg-accent/10';
+    kind === 'same' ? '' : side === 'local' ? 'bg-error/10' : 'bg-accent/10';
+  const marker = kind === 'same' ? ' ' : side === 'local' ? '−' : '+';
   return (
     <div
       className={clsx(
@@ -176,7 +237,14 @@ function DiffCell({
         bg,
       )}
     >
-      {line === null ? <span className="text-text-muted/50">·</span> : line || ' '}
+      {isMissing ? (
+        <span className="text-text-muted/40">·</span>
+      ) : (
+        <>
+          <span className="text-text-muted/60 select-none mr-1">{marker}</span>
+          {line || ' '}
+        </>
+      )}
     </div>
   );
 }
@@ -185,17 +253,53 @@ interface DiffRow {
   kind: 'same' | 'diff';
   local: string | null;
   disk: string | null;
+  /** 1-based line number in the local doc, or null for added-on-remote rows. */
+  localLine: number | null;
+  /** 1-based line number in the disk doc, or null for added-on-local rows. */
+  diskLine: number | null;
 }
 
-/** Side-by-side line diff using a Myers-style LCS table. Linear in the
- *  product of the two file lengths — fine for note-sized files. */
+type DiffBlock =
+  | { kind: 'row'; row: DiffRow }
+  | { kind: 'gap'; count: number };
+
+/** Replace runs of >2*CONTEXT same rows with a "N unchanged" gap placeholder,
+ *  keeping `context` lines on each side of every changed block. */
+function foldUnchanged(rows: DiffRow[], context: number): DiffBlock[] {
+  // Mark which rows must remain visible: any diff row, and `context` rows on
+  // either side of one.
+  const keep = new Array(rows.length).fill(false);
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind !== 'diff') continue;
+    for (let k = Math.max(0, i - context); k <= Math.min(rows.length - 1, i + context); k++) {
+      keep[k] = true;
+    }
+  }
+
+  const out: DiffBlock[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (keep[i]) {
+      out.push({ kind: 'row', row: rows[i] });
+      i++;
+    } else {
+      let j = i;
+      while (j < rows.length && !keep[j]) j++;
+      out.push({ kind: 'gap', count: j - i });
+      i = j;
+    }
+  }
+  return out;
+}
+
+/** Side-by-side line diff using an LCS table. Linear in the product of
+ *  the two file lengths — fine for note-sized files. */
 function buildLineDiff(a: string, b: string): DiffRow[] {
   const la = a.split('\n');
   const lb = b.split('\n');
   const n = la.length;
   const m = lb.length;
 
-  // Build LCS table.
   const lcs: number[][] = Array.from({ length: n + 1 }, () =>
     new Array(m + 1).fill(0),
   );
@@ -208,29 +312,58 @@ function buildLineDiff(a: string, b: string): DiffRow[] {
     }
   }
 
-  // Walk the table to produce paired rows.
   const rows: DiffRow[] = [];
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
     if (la[i] === lb[j]) {
-      rows.push({ kind: 'same', local: la[i], disk: lb[j] });
+      rows.push({
+        kind: 'same',
+        local: la[i],
+        disk: lb[j],
+        localLine: i + 1,
+        diskLine: j + 1,
+      });
       i++;
       j++;
     } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      rows.push({ kind: 'diff', local: la[i], disk: null });
+      rows.push({
+        kind: 'diff',
+        local: la[i],
+        disk: null,
+        localLine: i + 1,
+        diskLine: null,
+      });
       i++;
     } else {
-      rows.push({ kind: 'diff', local: null, disk: lb[j] });
+      rows.push({
+        kind: 'diff',
+        local: null,
+        disk: lb[j],
+        localLine: null,
+        diskLine: j + 1,
+      });
       j++;
     }
   }
   while (i < n) {
-    rows.push({ kind: 'diff', local: la[i], disk: null });
+    rows.push({
+      kind: 'diff',
+      local: la[i],
+      disk: null,
+      localLine: i + 1,
+      diskLine: null,
+    });
     i++;
   }
   while (j < m) {
-    rows.push({ kind: 'diff', local: null, disk: lb[j] });
+    rows.push({
+      kind: 'diff',
+      local: null,
+      disk: lb[j],
+      localLine: null,
+      diskLine: j + 1,
+    });
     j++;
   }
   return rows;
