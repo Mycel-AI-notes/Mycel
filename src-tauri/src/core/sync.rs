@@ -254,12 +254,15 @@ fn merge_upstream(
         return Ok(MergeResult::UpToDate);
     }
 
+    // Count "incoming" commits BEFORE we touch refs or commit a merge —
+    // after a merge commit the local branch contains upstream as an
+    // ancestor and `behind` collapses to 0, which would make the caller
+    // think nothing was pulled.
+    let (_, behind_before) = count_ahead_behind(repo, branch).unwrap_or((0, 0));
+
     let local_branch_ref = format!("refs/heads/{}", branch);
 
     if analysis.is_unborn() || analysis.is_fast_forward() {
-        // Count commits we are about to apply.
-        let (_, behind) = count_ahead_behind(repo, branch).unwrap_or((0, 0));
-
         // Move local branch ref to upstream, then checkout.
         let target = upstream_oid;
         match repo.find_reference(&local_branch_ref) {
@@ -274,7 +277,7 @@ fn merge_upstream(
         let mut co = CheckoutBuilder::new();
         co.force();
         repo.checkout_head(Some(&mut co))?;
-        return Ok(MergeResult::FastForwarded(behind));
+        return Ok(MergeResult::FastForwarded(behind_before));
     }
 
     // Real merge needed. Default options leave conflicts in the index/working
@@ -312,8 +315,7 @@ fn merge_upstream(
     )?;
     repo.cleanup_state()?;
 
-    let (_, behind) = count_ahead_behind(repo, branch).unwrap_or((0, 0));
-    Ok(MergeResult::Merged(behind))
+    Ok(MergeResult::Merged(behind_before))
 }
 
 fn push(repo: &Repository, branch: &str, token: Option<&str>) -> Result<()> {

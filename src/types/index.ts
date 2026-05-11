@@ -50,6 +50,29 @@ export interface Note {
   /** Backend signals that the on-disk file was `.md.age` and we decrypted
    *  it. The save round-trip re-encrypts transparently. */
   encrypted?: boolean;
+  /** SHA-256 of the raw on-disk bytes at the moment we last loaded / saved
+   *  this note. Passed back to `note_save_checked` so the backend can refuse
+   *  to silently overwrite remote edits that landed between read and save. */
+  disk_hash: string;
+}
+
+export type SaveCheckedResult =
+  | { kind: 'saved'; disk_hash: string }
+  | { kind: 'conflict'; disk_hash: string; disk_content: string; encrypted: boolean };
+
+/** Stored on the vault store when a `note_save_checked` came back as
+ *  `conflict`. The UI mounts a modal off this; resolving the conflict
+ *  clears it. */
+export interface SaveConflict {
+  path: string;
+  /** Content the user has in the editor — what they were trying to save. */
+  localContent: string;
+  /** Content currently on disk (post-pull, decrypted if applicable). */
+  diskContent: string;
+  /** Hash of the current disk bytes; used as the expected hash on the
+   *  forced "keep mine" / "keep both" save so we don't bounce a second
+   *  time if nothing else has changed. */
+  diskHash: string;
 }
 
 export interface CryptoStatus {

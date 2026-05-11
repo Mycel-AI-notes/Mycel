@@ -103,6 +103,16 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({ lastOutcome: outcome });
       const status = await invoke<SyncStatus>('sync_status');
       set({ status });
+      // Always re-read open tabs and the tree after a successful sync. We
+      // used to gate this on `pulled`/`pulled_and_pushed`, but counting
+      // pulled commits after a real merge collapses to zero and the sync
+      // underreports as `pushed`, leaving the UI stale. The cost is one
+      // tree read plus one file read per open tab — negligible compared
+      // to the network round-trip we just made. The conflict path also
+      // needs the reload so the user sees the freshly-written conflict
+      // markers in the editor.
+      const { useVaultStore } = await import('./vault');
+      await useVaultStore.getState().reloadFromDisk();
       return outcome;
     } catch (e) {
       set({ lastError: String(e) });
