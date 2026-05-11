@@ -1,19 +1,16 @@
 /**
- * CodeMirror ViewPlugin that swaps `$…$` and `$$…$$` math spans with
- * KaTeX-rendered widgets. The same plugin handles both kinds because
- * they share a single document scan (see `parseMathRanges`) — splitting
- * them would double the work and risk the two scans disagreeing about
- * which `$` belongs to which span.
+ * CodeMirror plugin that swaps `$…$` and `$$…$$` math spans with
+ * KaTeX-rendered widgets. Block math is a block widget, so the whole
+ * thing lives in a StateField (CodeMirror disallows block decorations
+ * from plain ViewPlugins).
  */
 import {
   Decoration,
   DecorationSet,
   EditorView,
-  ViewPlugin,
-  ViewUpdate,
   WidgetType,
 } from '@codemirror/view';
-import { EditorSelection, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, EditorSelection, StateField } from '@codemirror/state';
 import { parseMathRanges, type MathRange } from '@/lib/math';
 import { renderKatex } from '../math/katex-render';
 
@@ -37,9 +34,8 @@ class MathWidget extends WidgetType {
     if (error) {
       el.classList.add('cm-math-error');
       el.title = error;
-      // Show the raw source so the user can see what failed without
-      // exiting the widget. The error tooltip carries the KaTeX message.
-      el.textContent = (this.displayMode ? '$$' : '$') + this.body + (this.displayMode ? '$$' : '$');
+      el.textContent =
+        (this.displayMode ? '$$' : '$') + this.body + (this.displayMode ? '$$' : '$');
     } else {
       el.innerHTML = html;
     }
@@ -47,9 +43,6 @@ class MathWidget extends WidgetType {
   }
 
   ignoreEvent(): boolean {
-    // Let CodeMirror handle clicks — clicking on the widget should move
-    // the caret into the underlying math source so we get a smooth
-    // "click to edit" flow.
     return false;
   }
 }
@@ -58,56 +51,54 @@ function selectionTouches(sel: EditorSelection, r: MathRange): boolean {
   return sel.ranges.some((s) => s.from <= r.to && s.to >= r.from);
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
-  const ranges = parseMathRanges(view.state);
-  const builder = new RangeSetBuilder<Decoration>();
-  const sel = view.state.selection;
-  // Decorations must be appended in ascending `from`. `parseMathRanges`
-  // already yields them in order because it scans the doc linearly.
+function buildMathDecorations(state: EditorState): DecorationSet {
+  const ranges = parseMathRanges(state);
+  const sel = state.selection;
+
+  const decos: { from: number; to: number; deco: Decoration }[] = [];
   for (const r of ranges) {
     if (selectionTouches(sel, r)) {
-      // Mark the raw source so the user can see they're "inside" math —
-      // monospace + dim background mimics the spec's "raw LaTeX with
-      // syntax highlight" without pulling in a full language mode.
-      builder.add(
-        r.from,
-        r.to,
-        Decoration.mark({ class: r.kind === 'block' ? 'cm-math-source cm-math-source-block' : 'cm-math-source' }),
-      );
+      decos.push({
+        from: r.from,
+        to: r.to,
+        deco: Decoration.mark({
+          class:
+            r.kind === 'block'
+              ? 'cm-math-source cm-math-source-block'
+              : 'cm-math-source',
+        }),
+      });
       continue;
     }
-    builder.add(
-      r.from,
-      r.to,
-      Decoration.replace({
+    decos.push({
+      from: r.from,
+      to: r.to,
+      deco: Decoration.replace({
         widget: new MathWidget(r.body, r.kind === 'block'),
         block: r.kind === 'block',
       }),
-    );
+    });
   }
-  return builder.finish();
+
+  decos.sort((a, b) => a.from - b.from || a.to - b.to);
+  return Decoration.set(
+    decos.map((d) => d.deco.range(d.from, d.to)),
+    true,
+  );
 }
 
-export const mathDecorationPlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = buildDecorations(view);
-    }
-    update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        this.decorations = buildDecorations(update.view);
-      }
-    }
+export const mathDecorationField = StateField.define<DecorationSet>({
+  create(state) {
+    return buildMathDecorations(state);
   },
-  {
-    decorations: (v) => v.decorations,
-    provide: (plugin) =>
-      EditorView.atomicRanges.of((view) => {
-        return view.plugin(plugin)?.decorations ?? Decoration.none;
-      }),
+  update(value, tr) {
+    if (tr.docChanged || tr.selection) {
+      return buildMathDecorations(tr.state);
+    }
+    return value;
   },
-);
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 export const mathDecorationTheme = EditorView.baseTheme({
   '.cm-math-inline': {

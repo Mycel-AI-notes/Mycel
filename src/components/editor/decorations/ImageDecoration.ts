@@ -8,16 +8,17 @@
  * can load files outside the dev server's root. Remote URLs are rendered
  * directly; if they fail we swap in a placeholder so the editor never
  * shows a broken-image icon.
+ *
+ * Implemented as a StateField — CodeMirror requires block widgets to
+ * come from a state field, never from a plugin.
  */
 import {
   Decoration,
   DecorationSet,
   EditorView,
-  ViewPlugin,
-  ViewUpdate,
   WidgetType,
 } from '@codemirror/view';
-import { RangeSetBuilder } from '@codemirror/state';
+import { EditorState, StateField } from '@codemirror/state';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 
@@ -26,8 +27,6 @@ export interface ImageMatch {
   from: number;
   /** Document offset just past the closing `)` */
   to: number;
-  /** Line end position — where the widget gets attached. */
-  lineEnd: number;
   alt: string;
   src: string;
   isExternal: boolean;
@@ -46,7 +45,6 @@ export function findImageMatches(text: string, offset: number): ImageMatch[] {
     out.push({
       from: offset + m.index,
       to: offset + m.index + m[0].length,
-      lineEnd: 0,
       alt: m[1],
       src: m[2],
       isExternal: isExternal(m[2]),
@@ -95,13 +93,9 @@ class ImageWidget extends WidgetType {
     });
 
     // Single click — let CodeMirror place the caret in the markdown source
-    // so the user can edit the alt/src. Double click on local files —
-    // open in the system viewer.
+    // so the user can edit the alt/src.
     img.addEventListener('click', (e) => {
       e.preventDefault();
-      // Move the caret onto the markdown line so the source becomes
-      // visible (we hide the widget when the cursor is on the same line
-      // via selectionTouches, which keeps editing smooth).
       const pos = view.posAtDOM(wrap);
       view.dispatch({ selection: { anchor: pos } });
       view.focus();
@@ -115,7 +109,7 @@ class ImageWidget extends WidgetType {
           const root = useVaultStore.getState().vaultRoot;
           if (root) await openPath(`${root}/${this.src}`);
         } catch {
-          // Best-effort: failures here are not actionable for the user.
+          // Best-effort: failures here aren't actionable for the user.
         }
       });
     }
@@ -150,49 +144,6 @@ class ImageWidget extends WidgetType {
   }
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
-  const { doc } = view.state;
-  const sel = view.state.selection;
-
-  // Iterate over visible lines so we don't render off-screen previews.
-  type Item = { pos: number; widget: ImageWidget };
-  const items: Item[] = [];
-
-  for (const { from, to } of view.visibleRanges) {
-    let p = from;
-    while (p <= to) {
-      const line = doc.lineAt(p);
-      const matches = findImageMatches(line.text, line.from);
-      for (const m of matches) {
-        // If cursor is on the line, the source is being edited — skip the
-        // widget so the user sees their markdown directly.
-        const cursorOnLine = sel.ranges.some(
-          (r) => r.from <= line.to && r.to >= line.from,
-        );
-        if (cursorOnLine) continue;
-        const resolved = m.isExternal ? m.src : convertFileSrc(absoluteAttachmentPath(m.src));
-        items.push({
-          pos: line.to,
-          widget: new ImageWidget(m.alt, m.src, resolved, m.isExternal),
-        });
-      }
-      p = line.to + 1;
-    }
-  }
-
-  items.sort((a, b) => a.pos - b.pos);
-  for (const it of items) {
-    builder.add(
-      it.pos,
-      it.pos,
-      Decoration.widget({ widget: it.widget, side: 1, block: true }),
-    );
-  }
-
-  return builder.finish();
-}
-
 function absoluteAttachmentPath(relative: string): string {
   const root = useVaultStore.getState().vaultRoot;
   if (!root) return relative;
@@ -200,20 +151,54 @@ function absoluteAttachmentPath(relative: string): string {
   return `${root}/${clean}`;
 }
 
-export const imageDecorationPlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = buildDecorations(view);
+function buildImageDecorations(state: EditorState): DecorationSet {
+  const { doc, selection: sel } = state;
+
+  type Item = { pos: number; deco: Decoration };
+  const items: Item[] = [];
+
+  for (let n = 1; n <= doc.lines; n++) {
+    const line = doc.line(n);
+    const matches = findImageMatches(line.text, line.from);
+    if (matches.length === 0) continue;
+    const cursorOnLine = sel.ranges.some(
+      (r) => r.from <= line.to && r.to >= line.from,
+    );
+    if (cursorOnLine) continue;
+    for (const m of matches) {
+      const resolved = m.isExternal
+        ? m.src
+        : convertFileSrc(absoluteAttachmentPath(m.src));
+      items.push({
+        pos: line.to,
+        deco: Decoration.widget({
+          widget: new ImageWidget(m.alt, m.src, resolved, m.isExternal),
+          side: 1,
+          block: true,
+        }),
+      });
     }
-    update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        this.decorations = buildDecorations(update.view);
-      }
-    }
+  }
+
+  items.sort((a, b) => a.pos - b.pos);
+  return Decoration.set(
+    items.map((it) => it.deco.range(it.pos)),
+    true,
+  );
+}
+
+export const imageDecorationField = StateField.define<DecorationSet>({
+  create(state) {
+    return buildImageDecorations(state);
   },
-  { decorations: (v) => v.decorations },
-);
+  update(value, tr) {
+    if (tr.docChanged || tr.selection) {
+      return buildImageDecorations(tr.state);
+    }
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 export const imageDecorationTheme = EditorView.baseTheme({
   '.cm-image-preview': {
