@@ -15,6 +15,9 @@ pub struct Backlink {
     pub path: String,
     pub title: String,
     pub context: String,
+    /// Vault-relative parent folder of the linking note. Empty string for
+    /// notes in the vault root. Useful for showing "where does this live".
+    pub folder: String,
 }
 
 #[tauri::command]
@@ -106,10 +109,22 @@ pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<V
 
         let parsed = parse_note(&content);
 
-        let has_link = parsed
-            .wikilinks
-            .iter()
-            .any(|wl| wl.target.to_lowercase() == target_stem);
+        // Match the target loosely: accept wikilinks written as `[[Note]]`,
+        // `[[folder/Note]]`, or `[[Note.md]]` — strip any path prefix and the
+        // optional `.md` extension before comparing. Heading anchors after `#`
+        // are also ignored.
+        let has_link = parsed.wikilinks.iter().any(|wl| {
+            let mut t = wl.target.to_lowercase();
+            if let Some(idx) = t.find('#') {
+                t.truncate(idx);
+            }
+            let t = t.trim();
+            let stem = std::path::Path::new(t)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| t.to_string());
+            stem == target_stem
+        });
 
         if has_link {
             let title = parsed.meta.title.unwrap_or_else(|| {
@@ -134,9 +149,69 @@ pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<V
                 .take(120)
                 .collect();
 
-            backlinks.push(Backlink { path: rel, title, context });
+            let folder = std::path::Path::new(&rel)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            backlinks.push(Backlink { path: rel, title, context, folder });
         }
     }
 
+    backlinks.sort_by(|a, b| a.folder.cmp(&b.folder).then(a.title.cmp(&b.title)));
     Ok(backlinks)
+}
+
+#[tauri::command]
+pub async fn notes_by_tag(tag: String, state: State<'_, AppState>) -> Result<Vec<NoteSummary>, String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+
+    let needle = tag.trim_start_matches('#').to_lowercase();
+    if needle.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut matches = Vec::new();
+    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.extension().map(|e| e == "md").unwrap_or(false) {
+            continue;
+        }
+        let rel = path
+            .strip_prefix(&vault_root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        if rel.contains("/.") || rel.starts_with('.') {
+            continue;
+        }
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let parsed = parse_note(&content);
+        let in_body = parsed.tags.iter().any(|t| t.to_lowercase() == needle);
+        let in_meta = parsed
+            .meta
+            .tags
+            .iter()
+            .any(|t| t.to_lowercase() == needle);
+        if !in_body && !in_meta {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let title = parsed.meta.title.unwrap_or(stem);
+        matches.push(NoteSummary { path: rel, title });
+    }
+    matches.sort_by(|a, b| a.title.cmp(&b.title));
+    Ok(matches)
 }
