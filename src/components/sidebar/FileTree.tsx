@@ -304,7 +304,8 @@ function FileTreeNode({
                         { title: `Decrypt "${stem}"?`, kind: 'warning' },
                       );
                       if (!ok) return;
-                      await decryptNote(entry.path);
+                      const newPath = await decryptNote(entry.path);
+                      await useVaultStore.getState().relocateNote(entry.path, newPath);
                     } else {
                       // Warn before encrypting an existing plaintext
                       // note. Only skip the warning if the body is
@@ -326,9 +327,9 @@ function FileTreeNode({
                         );
                         if (!ok) return;
                       }
-                      await encryptNote(entry.path);
+                      const newPath = await encryptNote(entry.path);
+                      await useVaultStore.getState().relocateNote(entry.path, newPath);
                     }
-                    await useVaultStore.getState().refreshTree();
                   } catch (err) {
                     console.error(err);
                   }

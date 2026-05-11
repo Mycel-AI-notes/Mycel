@@ -42,6 +42,11 @@ interface VaultState {
   createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
+  /** Update open tabs / noteCache after a file was renamed on disk by some
+   *  other action (e.g. encrypt/decrypt, which writes `<name>.md.age` and
+   *  removes `<name>.md`). The next save would otherwise target a stale
+   *  path with a stale `disk_hash` and trigger a spurious conflict. */
+  relocateNote: (oldPath: string, newPath: string) => Promise<void>;
   markDirty: (path: string, dirty: boolean) => void;
   /** Drop every cached body and every open tab for `.md.age` notes.
    *  Called by the crypto store when the vault is locked so plaintext
@@ -519,6 +524,62 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         activeTabPath: s.activeTabPath === oldPath ? newPath : s.activeTabPath,
       };
     });
+    await get().refreshTree();
+  },
+
+  relocateNote: async (oldPath, newPath) => {
+    if (oldPath === newPath) return;
+    const { openTabs, activeTabPath } = get();
+    const oldTab = openTabs.find((t) => t.path === oldPath);
+    if (!oldTab) {
+      // Nothing was open against the old path — caller still wants the tree
+      // refreshed so the sidebar picks up the rename.
+      await get().refreshTree();
+      return;
+    }
+    const wasDirty = oldTab.isDirty;
+
+    // Re-read the new file so disk_hash, encrypted flag and parsed metadata
+    // all reflect what's actually on disk now. Encrypt/decrypt rewrites the
+    // bytes entirely, so the previous cached hash is unusable.
+    let newNote: Note | null = null;
+    try {
+      const note = await invoke<Note>('note_read', { path: newPath });
+      const reparsed = reparseBody(note.content);
+      newNote = { ...note, parsed: { ...note.parsed, ...reparsed } };
+    } catch {
+      // Read can fail (e.g. encrypted note while the vault is locked).
+      // Leave the cache empty for `newPath`; openNote will re-fetch on demand.
+    }
+
+    const newTitle = newNote?.parsed.meta.title ?? displayName(newPath);
+
+    set((s) => {
+      const nextCache = new Map(s.noteCache);
+      nextCache.delete(oldPath);
+      if (newNote) nextCache.set(newPath, newNote);
+      return {
+        noteCache: nextCache,
+        openTabs: s.openTabs.map((t) =>
+          t.path === oldPath ? { ...t, path: newPath, title: newTitle } : t,
+        ),
+        activeTabPath: activeTabPath === oldPath ? newPath : activeTabPath,
+      };
+    });
+
+    // For a clean tab, sync the editor's buffer with the freshly read content
+    // (decrypt may produce subtly different bytes — trailing newline, etc.).
+    // For a dirty tab, leave the user's in-flight edits alone.
+    if (!wasDirty && newNote) {
+      if (replaceEditorContent(newPath, newNote.content)) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t) =>
+            t.path === newPath ? { ...t, isDirty: false } : t,
+          ),
+        }));
+      }
+    }
+
     await get().refreshTree();
   },
 
