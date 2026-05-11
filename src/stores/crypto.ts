@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { CryptoStatus } from '@/types';
+import { useVaultStore } from './vault';
 
 interface CryptoState {
   status: CryptoStatus | null;
@@ -66,11 +67,16 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
 
   lock: async () => {
     await run(set, () => invoke<void>('crypto_lock'));
+    // Drop every plaintext body the JS side cached and close every open
+    // `.md.age` tab. Otherwise the wrap secret is gone from Rust but the
+    // already-decrypted markdown lingers in memory and tabs keep working.
+    useVaultStore.getState().purgeEncryptedFromMemory();
     await get().refresh();
   },
 
   reset: async () => {
     await run(set, () => invoke<void>('crypto_reset'));
+    useVaultStore.getState().purgeEncryptedFromMemory();
     await get().refresh();
   },
 

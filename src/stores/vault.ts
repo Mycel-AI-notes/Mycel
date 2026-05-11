@@ -32,6 +32,10 @@ interface VaultState {
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
   markDirty: (path: string, dirty: boolean) => void;
+  /** Drop every cached body and every open tab for `.md.age` notes.
+   *  Called by the crypto store when the vault is locked so plaintext
+   *  doesn't outlive the in-memory X25519 secret. */
+  purgeEncryptedFromMemory: () => void;
 }
 
 export const useVaultStore = create<VaultState>((set, get) => ({
@@ -92,14 +96,17 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
-      // Encrypted notes need an unlocked session before `note_read` can
-      // decrypt them. If the session is locked, try unlocking first so the
-      // user only sees one prompt (keyring → biometrics) instead of an
-      // opaque "Vault is locked" error.
+      // Encrypted notes require an explicitly unlocked session. We do NOT
+      // auto-unlock here — that would defeat the Lock button, since OS
+      // keyrings hand back the wrap secret silently to the same user. If
+      // the user wants to read this note, they have to go through the
+      // shield → Unlock action explicitly.
       if (path.endsWith('.md.age')) {
         const crypto = useCryptoStore.getState();
-        if (!crypto.status?.unlocked && crypto.status?.keyring_present) {
-          await crypto.unlock();
+        if (!crypto.status?.unlocked) {
+          throw new Error(
+            'This note is encrypted. Unlock the vault (shield icon) to open it.',
+          );
         }
       }
       const note = await invoke<Note>('note_read', { path });
@@ -265,5 +272,21 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set((s) => ({
       openTabs: s.openTabs.map((t) => (t.path === path ? { ...t, isDirty: dirty } : t)),
     }));
+  },
+
+  purgeEncryptedFromMemory: () => {
+    set((s) => {
+      const nextCache = new Map(s.noteCache);
+      for (const key of Array.from(nextCache.keys())) {
+        if (key.endsWith('.md.age')) nextCache.delete(key);
+      }
+      const nextTabs = s.openTabs.filter((t) => !t.path.endsWith('.md.age'));
+      const activeStillOpen = nextTabs.some((t) => t.path === s.activeTabPath);
+      return {
+        noteCache: nextCache,
+        openTabs: nextTabs,
+        activeTabPath: activeStillOpen ? s.activeTabPath : nextTabs[0]?.path ?? null,
+      };
+    });
   },
 }));

@@ -286,7 +286,10 @@ function FileTreeNode({
                   try {
                     if (isEnc) {
                       if (!cryptoStatus.unlocked) {
-                        await useCryptoStore.getState().unlock();
+                        // Refuse silently-unlocking from a per-file action.
+                        // The user must go through the shield → Unlock so
+                        // Lock actually means something.
+                        throw new Error('Vault is locked. Click the shield icon to unlock first.');
                       }
                       await decryptNote(entry.path);
                     } else {
