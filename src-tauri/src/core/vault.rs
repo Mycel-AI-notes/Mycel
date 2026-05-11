@@ -115,6 +115,12 @@ impl Vault {
     }
 }
 
+/// Hidden from the file tree but kept on disk. The user accesses
+/// these through the inline image widget and the image tab view —
+/// listing them in the sidebar would clutter the tree without giving
+/// any extra interaction since they aren't editable as text.
+pub const ATTACHMENTS_DIR: &str = "attachments";
+
 /// Read the KB registry from `<root>/.mycel/kb-dirs.json`. Missing file or
 /// parse error → return `None`; callers should treat that as an empty
 /// registry rather than failing the whole tree scan.
@@ -171,6 +177,13 @@ fn read_dir_recursive(
             .unwrap_or(&path)
             .to_string_lossy()
             .to_string();
+
+        // The attachments folder is intentionally hidden from the tree
+        // — images are surfaced inline in notes and through the image
+        // tab view, never as standalone tree entries.
+        if rel_path == ATTACHMENTS_DIR {
+            continue;
+        }
 
         if path.is_dir() {
             let mut children = read_dir_recursive(&path, vault_root, kb_paths)?;

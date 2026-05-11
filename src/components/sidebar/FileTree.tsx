@@ -22,7 +22,7 @@ import type { FileEntry } from '@/types';
 import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
-import { stripNoteExt } from '@/lib/note-name';
+import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
 const DRAG_MIME = 'application/x-mycel-path';
@@ -94,6 +94,8 @@ function FileTreeNode({
     });
   }, [entry.path, setExpanded]);
 
+  const { openImageTab } = useVaultStore();
+
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
       // KB-promoted folders open their index.md on plain click; the chevron
@@ -103,10 +105,17 @@ function FileTreeNode({
       } else {
         toggleExpand();
       }
-    } else {
-      openNote(entry.path, { preview: true });
+      return;
     }
-  }, [entry, isKbDir, openNote, toggleExpand]);
+    if (isAttachmentPath(entry.path)) {
+      // Attachments aren't notes — render them in the image tab view
+      // instead of routing through the markdown reader, which would
+      // choke on binary bytes.
+      openImageTab(entry.path, { preview: true });
+      return;
+    }
+    openNote(entry.path, { preview: true });
+  }, [entry, isKbDir, openNote, openImageTab, toggleExpand]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {

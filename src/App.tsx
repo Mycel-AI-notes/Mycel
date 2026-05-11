@@ -9,6 +9,7 @@ import { useRecentVaults } from '@/stores/recentVaults';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { EditorTabs } from '@/components/editor/EditorTabs';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
+import { ImageViewer } from '@/components/editor/ImageViewer';
 import { EmptyEditor } from '@/components/editor/EmptyEditor';
 import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
@@ -20,6 +21,7 @@ import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
 import { SettingsDialog } from '@/components/ui/SettingsDialog';
 import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
+import { isAttachmentPath } from '@/lib/note-name';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -245,6 +247,8 @@ export default function App() {
           <EditorTabs />
           {activeGardenView ? (
             <GardenView view={activeGardenView} />
+          ) : activeTabPath && isAttachmentPath(activeTabPath) ? (
+            <ImageViewer key={activeTabPath} path={activeTabPath} />
           ) : activeTabPath && !isGardenTabPath(activeTabPath) ? (
             <MarkdownEditor key={activeTabPath} path={activeTabPath} />
           ) : (

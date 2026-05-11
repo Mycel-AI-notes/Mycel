@@ -120,6 +120,10 @@ pub fn run() {
             commands::garden::garden_counts,
             commands::garden::garden_create_page,
             commands::garden::garden_bind_page,
+            commands::attachments::attachment_save_file,
+            commands::attachments::attachment_save_bytes,
+            commands::attachments::attachment_list,
+            commands::attachments::attachment_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

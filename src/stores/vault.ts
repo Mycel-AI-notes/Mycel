@@ -38,6 +38,11 @@ interface VaultState {
    *  semantics as notes — single click is a preview tab that the next
    *  preview replaces; double-click pins. */
   openGardenTab: (view: GardenView, options?: { preview?: boolean }) => void;
+  /** Open an attachment (image) inside the tab strip. Image paths live
+   *  in the vault file tree alongside notes and reuse the same preview/
+   *  pin semantics, so the user can flip between an image and a note
+   *  with the same tab interactions. */
+  openImageTab: (path: string, options?: { preview?: boolean }) => void;
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
   pinTab: (path: string) => void;
@@ -282,6 +287,49 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const path = gardenTabPath(view);
     const title = gardenTabTitle(view);
     const { openTabs } = get();
+    const alreadyOpen = openTabs.find((t) => t.path === path);
+
+    if (alreadyOpen) {
+      if (alreadyOpen.isPreview && !preview) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t) =>
+            t.path === path ? { ...t, isPreview: false } : t,
+          ),
+        }));
+      }
+    } else if (preview) {
+      const existingIdx = openTabs.findIndex((t) => t.isPreview);
+      if (existingIdx >= 0) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t, i) =>
+            i === existingIdx
+              ? { path, title, isDirty: false, isPreview: true }
+              : t,
+          ),
+        }));
+      } else {
+        set((s) => ({
+          openTabs: [
+            ...s.openTabs,
+            { path, title, isDirty: false, isPreview: true },
+          ],
+        }));
+      }
+    } else {
+      set((s) => ({
+        openTabs: [
+          ...s.openTabs,
+          { path, title, isDirty: false, isPreview: false },
+        ],
+      }));
+    }
+    set({ activeTabPath: path });
+  },
+
+  openImageTab: (path, options) => {
+    const preview = options?.preview ?? false;
+    const { openTabs } = get();
+    const title = path.split('/').pop() ?? path;
     const alreadyOpen = openTabs.find((t) => t.path === path);
 
     if (alreadyOpen) {
