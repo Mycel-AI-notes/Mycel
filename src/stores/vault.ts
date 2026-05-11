@@ -203,6 +203,9 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   openNote: async (path, options) => {
     const preview = options?.preview ?? false;
+    // Opening a note from anywhere — file tree, quick switcher, palette,
+    // backlinks — should exit the Garden view so the editor is visible.
+    useGardenStore.getState().setView(null);
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {

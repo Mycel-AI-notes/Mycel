@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Zap, Plus, Trash2, Check, X } from 'lucide-react';
+import { Zap, Trash2, Check } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
@@ -102,13 +102,7 @@ function ActionRow({ item }: { item: ActionItem }) {
   );
 }
 
-function InlineAdd({
-  defaultContext,
-  onDone,
-}: {
-  defaultContext: string;
-  onDone: () => void;
-}) {
+function InlineAdd({ defaultContext }: { defaultContext: string }) {
   const addAction = useGardenStore((s) => s.addAction);
   const config = useGardenStore((s) => s.config);
   const [text, setText] = useState('');
@@ -132,14 +126,12 @@ function InlineAdd({
     <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded">
       <span className="w-3 h-3 rounded-full border border-text-muted" />
       <input
-        autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') submit();
-          if (e.key === 'Escape') onDone();
         }}
-        placeholder="What needs to be done?"
+        placeholder="What needs to be done? Press Enter to add."
         className="flex-1 bg-transparent outline-none text-sm placeholder:text-text-muted"
       />
       <select
@@ -151,21 +143,6 @@ function InlineAdd({
           <option key={c} value={c}>{c}</option>
         ))}
       </select>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!text.trim()}
-        className="px-2 py-1 rounded text-xs bg-accent/15 text-accent hover:bg-accent/25 disabled:opacity-40"
-      >
-        Add
-      </button>
-      <button
-        type="button"
-        onClick={onDone}
-        className="p-1 rounded text-text-muted hover:bg-surface-hover"
-      >
-        <X size={14} />
-      </button>
     </div>
   );
 }
@@ -182,8 +159,6 @@ export function ActionsView() {
   const hideCompleted = useGardenStore((s) => s.hideCompleted);
   const setHideCompleted = useGardenStore((s) => s.setHideCompleted);
   const projects = useGardenStore((s) => s.projects);
-
-  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     void loadActions();
@@ -231,12 +206,6 @@ export function ActionsView() {
             <span className="text-text-muted text-sm">({filtered.filter((a) => !a.done).length})</span>
           </h1>
           <div className="flex items-center gap-2 text-xs">
-            <button
-              onClick={() => setAdding(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-accent/15 text-accent hover:bg-accent/25"
-            >
-              <Plus size={12} /> Add
-            </button>
             <select
               value={grouping}
               onChange={(e) => setGrouping(e.target.value as ActionGrouping)}
@@ -310,15 +279,6 @@ export function ActionsView() {
           )}
         </div>
 
-        {adding && (
-          <div className="mb-3">
-            <InlineAdd
-              defaultContext={config?.contexts?.[0] ?? '@везде'}
-              onDone={() => setAdding(false)}
-            />
-          </div>
-        )}
-
         {groups.length === 0 ? (
           <p className="text-text-muted text-sm py-8 text-center">
             Nothing to do here. Add an action or check your inbox.
@@ -341,7 +301,12 @@ export function ActionsView() {
           </div>
         )}
 
-        {completedToday.length > 0 && (
+        {/* Always-visible inline add — no separate Add button. */}
+        <div className="mt-4">
+          <InlineAdd defaultContext={config?.contexts?.[0] ?? '@везде'} />
+        </div>
+
+        {!hideCompleted && completedToday.length > 0 && (
           <section className="mt-8">
             <header className="flex items-center justify-between text-xs uppercase tracking-wider text-text-muted px-3 py-1 border-b border-border">
               <span>✓ Completed today</span>

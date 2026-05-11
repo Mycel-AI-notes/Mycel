@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   ChevronDown,
@@ -10,9 +10,11 @@ import {
   Lightbulb,
   Sprout,
   Plus,
+  HelpCircle,
 } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
 import type { GardenView } from '@/types/garden';
+import { GardenHelp } from './GardenHelp';
 
 interface RowProps {
   icon: React.ReactNode;
@@ -66,6 +68,7 @@ export function GardenSidebar() {
     openCapture,
     refreshCounts,
   } = useGardenStore();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Refresh counts whenever the section opens — cheap, keeps badges fresh
   // even after edits in views that don't touch them directly.
@@ -92,15 +95,27 @@ export function GardenSidebar() {
           <Sprout size={13} className="text-accent" />
           <span>Garden</span>
         </button>
-        <button
-          type="button"
-          onClick={openCapture}
-          className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
-          title="Quick capture (⌘I)"
-        >
-          <Plus size={14} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+            title="How Garden works"
+          >
+            <HelpCircle size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={openCapture}
+            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+            title="Quick capture (⌘I)"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
+
+      {helpOpen && <GardenHelp onClose={() => setHelpOpen(false)} />}
 
       {sectionOpen && (
         <div className="px-1 pb-1 flex flex-col gap-0.5">

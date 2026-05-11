@@ -279,6 +279,7 @@ export function ProjectDetailView({ id }: { id: string }) {
       await openNote(path);
     } catch (e) {
       console.error(e);
+      window.alert(`Couldn't create page: ${e}`);
     }
   };
 

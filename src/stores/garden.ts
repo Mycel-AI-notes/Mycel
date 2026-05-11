@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { useVaultStore } from './vault';
 import type {
   ActionFilters,
   ActionGrouping,
@@ -177,7 +178,11 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 
 export const useGardenStore = create<GardenState>((set, get) => ({
   view: null,
-  sectionOpen: true,
+  // Sidebar section starts collapsed so the file tree owns the space until
+  // the user opts into Garden. Restored from localStorage below.
+  sectionOpen: typeof window !== 'undefined'
+    ? window.localStorage.getItem('mycel.garden.sectionOpen') === '1'
+    : false,
   captureOpen: false,
   counts: EMPTY_COUNTS,
   inbox: [],
@@ -191,7 +196,13 @@ export const useGardenStore = create<GardenState>((set, get) => ({
   hideCompleted: false,
 
   setView: (view) => set({ view }),
-  toggleSection: () => set((s) => ({ sectionOpen: !s.sectionOpen })),
+  toggleSection: () => set((s) => {
+    const next = !s.sectionOpen;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mycel.garden.sectionOpen', next ? '1' : '0');
+    }
+    return { sectionOpen: next };
+  }),
   openCapture: () => set({ captureOpen: true }),
   closeCapture: () => set({ captureOpen: false }),
 
@@ -260,6 +271,11 @@ export const useGardenStore = create<GardenState>((set, get) => ({
       get().loadSomeday(),
       get().refreshCounts(),
     ]);
+    // Reference creates a new note in the vault — refresh the file tree so
+    // it shows up in the sidebar.
+    if (target.kind === 'reference') {
+      await useVaultStore.getState().refreshTree();
+    }
   },
 
   addAction: async (item) => {
@@ -351,6 +367,7 @@ export const useGardenStore = create<GardenState>((set, get) => ({
       notePath: note_path,
       title,
     });
+    await useVaultStore.getState().refreshTree();
     switch (list) {
       case 'inbox': await get().loadInbox(); break;
       case 'actions': await get().loadActions(); break;

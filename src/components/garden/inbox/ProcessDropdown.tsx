@@ -37,9 +37,13 @@ export function ProcessDropdown({ item }: Props) {
   const submit = async (target: ProcessTarget) => {
     try {
       await processInbox(item.id, target);
-    } finally {
       setOpen(false);
       setStage({ kind: 'menu' });
+    } catch (e) {
+      // Surface the failure so the user knows why nothing happened (e.g.
+      // reference path collides with an existing note).
+      console.error('process failed:', e);
+      window.alert(`Couldn't process item: ${e}`);
     }
   };
 
