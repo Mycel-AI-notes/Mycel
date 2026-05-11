@@ -126,10 +126,11 @@ export function GraphView({ onClose }: Props) {
       });
     }
 
-    // Folder→subfolder containment edges.
+    // Folder→subfolder containment edges. Skip edges pointing at the
+    // synthetic root ('') since we no longer render it as a node — d3-force
+    // throws on unresolved IDs and the whole simulation dies silently.
     for (const f of data.folders) {
-      if (f.parent === null) continue;
-      // Both endpoints must exist as nodes.
+      if (f.parent === null || f.parent === '') continue;
       links.push({
         source: `folder:${f.parent}`,
         target: `folder:${f.path}`,
@@ -137,7 +138,10 @@ export function GraphView({ onClose }: Props) {
       });
     }
 
-    // Note nodes + folder→note edges.
+    // Note nodes + folder→note edges. Notes that live in the vault root
+    // (n.folder === '') get no containment edge — there's no folder node
+    // to attach them to. They float free, pulled by their tags / wiki
+    // links / domains.
     for (const n of data.notes) {
       nodes.push({
         id: `note:${n.path}`,
@@ -146,11 +150,13 @@ export function GraphView({ onClose }: Props) {
         group: n.folder,
         r: 6,
       });
-      links.push({
-        source: `folder:${n.folder}`,
-        target: `note:${n.path}`,
-        kind: 'contain',
-      });
+      if (n.folder !== '') {
+        links.push({
+          source: `folder:${n.folder}`,
+          target: `note:${n.path}`,
+          kind: 'contain',
+        });
+      }
     }
 
     // Wiki edges (note↔note).
