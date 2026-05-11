@@ -19,7 +19,6 @@ import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
-import { markdownTableField, markdownTableTheme } from '@/lib/codemirror/markdown-table-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
 import { tableSlashCommand } from '@/lib/codemirror/table-slash';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
@@ -171,8 +170,6 @@ export function MarkdownEditor({ path }: Props) {
         }),
         markdownPreviewPlugin,
         markdownPreviewTheme,
-        markdownTableField,
-        markdownTableTheme,
         editableTableWidgetPlugin(),
         editableTableWidgetTheme,
         tableSlashCommand(),

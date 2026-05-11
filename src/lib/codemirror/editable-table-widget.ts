@@ -18,56 +18,51 @@ import { EditableTable } from '@/components/table/EditableTable';
 import { parseTable, serializeTable, type TableData } from '@/lib/table/serialize';
 
 interface MdTableBlock {
-  fenceFrom: number;
-  fenceTo: number;
-  contentStart: number;
-  contentEnd: number;
-  content: string;
+  from: number;
+  to: number;
+  startLine: number;
+  endLine: number;
+  raw: string;
 }
 
-const FENCE_OPEN = /^```mdtable\s*$/;
-const FENCE_CLOSE = /^```\s*$/;
+const SEPARATOR_RE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;
+const TABLE_LINE_RE = /\|/;
 
 function findBlocks(state: EditorState): MdTableBlock[] {
   const doc = state.doc;
   const out: MdTableBlock[] = [];
-  let line = 1;
-  while (line <= doc.lines) {
-    const l = doc.line(line);
-    if (FENCE_OPEN.test(l.text)) {
-      const openFrom = l.from;
-      const contentStart = l.to + 1;
-      let endLine = line + 1;
-      let contentEnd = contentStart;
-      let fenceTo = l.to;
-      let closed = false;
-      while (endLine <= doc.lines) {
-        const el = doc.line(endLine);
-        if (FENCE_CLOSE.test(el.text)) {
-          contentEnd = el.from > contentStart ? el.from - 1 : contentStart;
-          fenceTo = el.to;
-          closed = true;
-          break;
-        }
-        endLine += 1;
-      }
-      if (closed) {
-        const content = doc.sliceString(
-          contentStart,
-          Math.max(contentStart, contentEnd),
-        );
-        out.push({
-          fenceFrom: openFrom,
-          fenceTo,
-          contentStart,
-          contentEnd,
-          content,
-        });
-        line = endLine + 1;
-        continue;
-      }
+  let n = 1;
+  while (n <= doc.lines) {
+    if (n + 1 > doc.lines) break;
+    const header = doc.line(n);
+    if (!TABLE_LINE_RE.test(header.text)) {
+      n++;
+      continue;
     }
-    line += 1;
+    const sep = doc.line(n + 1);
+    if (!SEPARATOR_RE.test(sep.text)) {
+      n++;
+      continue;
+    }
+    let endLine = n + 1;
+    let m = n + 2;
+    while (m <= doc.lines) {
+      const l = doc.line(m);
+      if (!TABLE_LINE_RE.test(l.text) || l.text.trim() === '') break;
+      endLine = m;
+      m++;
+    }
+    const startLine = n;
+    const from = header.from;
+    const to = doc.line(endLine).to;
+    out.push({
+      from,
+      to,
+      startLine,
+      endLine,
+      raw: doc.sliceString(from, to),
+    });
+    n = endLine + 1;
   }
   return out;
 }
@@ -76,13 +71,13 @@ class EditableTableWidget extends WidgetType {
   private root?: Root;
   private currentData: TableData;
 
-  constructor(public readonly content: string) {
+  constructor(public readonly raw: string) {
     super();
-    this.currentData = parseTable(content);
+    this.currentData = parseTable(raw);
   }
 
   eq(other: EditableTableWidget): boolean {
-    return this.content === other.content;
+    return this.raw === other.raw;
   }
 
   get estimatedHeight() {
@@ -99,8 +94,6 @@ class EditableTableWidget extends WidgetType {
     container.className = 'cm-md-table-block';
     container.contentEditable = 'false';
 
-    // Stop CodeMirror from interpreting clicks inside the widget as cursor
-    // moves into the underlying fence range.
     const stop = (e: Event) => e.stopPropagation();
     container.addEventListener('mousedown', stop);
     container.addEventListener('mouseup', stop);
@@ -108,7 +101,7 @@ class EditableTableWidget extends WidgetType {
 
     const findThis = () => {
       const blocks = findBlocks(view.state);
-      return blocks.find((b) => b.content === this.content);
+      return blocks.find((b) => b.raw === this.raw);
     };
 
     const handleChange = (next: TableData) => {
@@ -118,8 +111,8 @@ class EditableTableWidget extends WidgetType {
       const text = serializeTable(next);
       view.dispatch({
         changes: {
-          from: target.contentStart,
-          to: target.contentEnd,
+          from: target.from,
+          to: target.to,
           insert: text,
         },
       });
@@ -129,8 +122,8 @@ class EditableTableWidget extends WidgetType {
       const target = findThis();
       if (!target) return;
       const docLen = view.state.doc.length;
-      const to = Math.min(docLen, target.fenceTo + 1);
-      view.dispatch({ changes: { from: target.fenceFrom, to, insert: '' } });
+      const to = Math.min(docLen, target.to + 1);
+      view.dispatch({ changes: { from: target.from, to, insert: '' } });
     };
 
     const initial = this.currentData;
@@ -154,13 +147,6 @@ class EditableTableWidget extends WidgetType {
     return container;
   }
 
-  updateDOM(_dom: HTMLElement): boolean {
-    if (!this.root) return false;
-    // Re-render with the latest parsed data so downstream document edits
-    // (undo, external rewrites) propagate into the widget.
-    return false;
-  }
-
   destroy() {
     if (this.root) {
       const r = this.root;
@@ -179,10 +165,10 @@ function buildDecorations(state: EditorState): DecorationSet {
   const blocks = findBlocks(state);
   for (const b of blocks) {
     builder.add(
-      b.fenceFrom,
-      b.fenceTo,
+      b.from,
+      b.to,
       Decoration.replace({
-        widget: new EditableTableWidget(b.content),
+        widget: new EditableTableWidget(b.raw),
         block: true,
       }),
     );
@@ -198,9 +184,7 @@ function buildGutterMarkers(state: EditorState): RangeSet<GutterMarker> {
   const builder = new RangeSetBuilder<GutterMarker>();
   const blocks = findBlocks(state);
   for (const b of blocks) {
-    const startLine = state.doc.lineAt(b.fenceFrom);
-    const endLine = state.doc.lineAt(b.fenceTo);
-    for (let n = startLine.number; n <= endLine.number; n++) {
+    for (let n = b.startLine; n <= b.endLine; n++) {
       const ln = state.doc.line(n);
       builder.add(ln.from, ln.from, fenceGutterMarker);
     }
