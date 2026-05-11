@@ -173,10 +173,17 @@ fn read_dir_recursive(
             .to_string();
 
         if path.is_dir() {
-            let children = read_dir_recursive(&path, vault_root, kb_paths)?;
+            let mut children = read_dir_recursive(&path, vault_root, kb_paths)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
             let is_quick = rel_path == QUICK_NOTES_DIR;
             let is_kb_dir = kb_paths.contains(&rel_path);
+            // For KB-promoted directories, the `index.md` is the KB page
+            // itself — surfaced by clicking the folder. Hide it from the
+            // file tree so it doesn't clutter the sidebar.
+            if is_kb_dir {
+                let index_rel = format!("{rel_path}/index.md");
+                children.retain(|c| c.path != index_rel);
+            }
             entries.push(FileEntry {
                 name,
                 path: rel_path,
