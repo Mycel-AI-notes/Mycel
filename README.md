@@ -241,6 +241,10 @@ npm run lint           # before pushing
 
 Open a PR against `main` with a short summary of *why* the change matters. Commits roughly follow Conventional Commits (`feat(editor): …`, `fix(graph): …`).
 
+### 📝 Contributor License Agreement
+
+Before your first PR is merged, please sign the [**Mycel CLA**](./CLA.md) — it's short, modelled on the Apache ICLA 2.0, and exists so the project stays legally clean as it grows (including future commercial editions that fund development). You keep full copyright in your contribution. The [CLA Assistant bot](https://cla-assistant.io/) will prompt you automatically on your first PR; a one-line manual statement also works.
+
 ### Frontend-only dev (no Tauri shell)
 
 If you just want to hack on the UI:
