@@ -36,3 +36,16 @@ export function scrollEditorToLine(path: string, line: number) {
   });
   view.focus();
 }
+
+/** Replace the editor doc entirely. Used when the on-disk content was
+ *  changed by sync (or by the conflict-resolution "Reload" action) and we
+ *  need to push the new text into the live CodeMirror view without
+ *  unmounting the editor. Returns true if a view was found. */
+export function replaceEditorContent(path: string, content: string): boolean {
+  const view = views.get(path);
+  if (!view) return false;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: content },
+  });
+  return true;
+}

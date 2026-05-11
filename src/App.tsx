@@ -14,6 +14,7 @@ import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
+import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -229,6 +230,9 @@ export default function App() {
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}
+
+      {/* Save-conflict resolution. The store decides whether to render. */}
+      <ConflictDialog />
     </div>
   );
 }

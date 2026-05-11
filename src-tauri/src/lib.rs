@@ -40,6 +40,7 @@ pub fn run() {
             commands::vault::vault_root,
             commands::notes::note_read,
             commands::notes::note_save,
+            commands::notes::note_save_checked,
             commands::notes::note_create,
             commands::notes::note_delete,
             commands::notes::note_rename,
