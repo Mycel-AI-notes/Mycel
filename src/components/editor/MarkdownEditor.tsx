@@ -14,13 +14,13 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
+import { autocompletion } from '@codemirror/autocomplete';
 import { useVaultStore } from '@/stores/vault';
-import { wikilinkAutocomplete } from './WikilinkCompletion';
+import { wikilinkCompletions } from './WikilinkCompletion';
+import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
-import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
-import { tableSlashCommand } from '@/lib/codemirror/table-slash';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
@@ -172,16 +172,12 @@ export function MarkdownEditor({ path }: Props) {
         markdownPreviewTheme,
         editableTableWidgetPlugin(),
         editableTableWidgetTheme,
-        tableSlashCommand(),
         databaseWidgetPlugin(path),
         databaseWidgetTheme,
-        databaseSlashCommand({
-          openPicker: (from, to) => {
-            slashRangeRef.current = { from, to };
-            setPickerOpen(true);
-          },
+        autocompletion({
+          override: [slashCompletions, wikilinkCompletions],
+          activateOnTyping: true,
         }),
-        wikilinkAutocomplete,
         themeCompartment.of(
           [
             mycelEditorTheme(isDark),
@@ -205,11 +201,21 @@ export function MarkdownEditor({ path }: Props) {
     viewRef.current = view;
     registerEditorView(path, view);
 
+    const onOpenDbPicker = (e: Event) => {
+      const detail = (e as CustomEvent<{ from: number; to: number }>).detail;
+      slashRangeRef.current = detail
+        ? { from: detail.from, to: detail.to }
+        : null;
+      setPickerOpen(true);
+    };
+    view.dom.addEventListener('mycel:open-db-picker', onOpenDbPicker);
+
     return () => {
       if (liveTimerRef.current) {
         clearTimeout(liveTimerRef.current);
         liveTimerRef.current = null;
       }
+      view.dom.removeEventListener('mycel:open-db-picker', onOpenDbPicker);
       unregisterEditorView(path, view);
       view.destroy();
       viewRef.current = null;

@@ -24,7 +24,7 @@ export function invalidateNotesCache() {
   notesCache = [];
 }
 
-function wikilinkCompletions(context: CompletionContext): CompletionResult | null {
+export function wikilinkCompletions(context: CompletionContext): CompletionResult | null {
   // Match [[ followed by any text (no closing bracket yet)
   const match = context.matchBefore(/\[\[[^\]]*$/);
   if (!match) return null;
