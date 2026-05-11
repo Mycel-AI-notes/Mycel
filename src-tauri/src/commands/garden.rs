@@ -121,7 +121,7 @@ pub async fn garden_inbox_process(
                 &root,
                 g::NewAction {
                     action: item.text.clone(),
-                    context: context.unwrap_or_else(|| "@везде".into()),
+                    context: context.unwrap_or_else(|| "@anywhere".into()),
                     project,
                     energy,
                     duration,
@@ -152,7 +152,7 @@ pub async fn garden_inbox_process(
                     &root,
                     g::NewAction {
                         action: action_text,
-                        context: action_context.unwrap_or_else(|| "@везде".into()),
+                        context: action_context.unwrap_or_else(|| "@anywhere".into()),
                         project: Some(title),
                         energy: None,
                         duration: None,

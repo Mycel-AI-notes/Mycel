@@ -173,13 +173,16 @@ pub struct GardenConfig {
 impl Default for GardenConfig {
     fn default() -> Self {
         Self {
+            // English deep-work / energy-driven contexts. The traditional
+            // place-based set (@computer, @home, @errands) is meaningless for
+            // a laptop-bound developer or researcher, which is Mycel's audience.
             contexts: vec![
-                "@компьютер".into(),
-                "@звонок".into(),
-                "@встреча".into(),
-                "@дом".into(),
-                "@магазин".into(),
-                "@везде".into(),
+                "@deep".into(),     // sustained focus, real thinking
+                "@quick".into(),    // < 15 min, low energy is fine
+                "@reply".into(),    // async writes — email, DM, comments
+                "@call".into(),     // synchronous — calls + meetings
+                "@errand".into(),   // physical world
+                "@anywhere".into(), // no specific context
             ],
             areas: vec![
                 "work".into(),
@@ -716,7 +719,80 @@ pub fn delete_someday(vault_root: &Path, id: &str) -> Result<()> {
     write_someday(vault_root, &f)
 }
 
-// ---- Config ----
+// ---- Legacy migration ----
+
+const LEGACY_RU_CONTEXTS: &[&str] = &[
+    "@компьютер",
+    "@звонок",
+    "@встреча",
+    "@дом",
+    "@магазин",
+    "@везде",
+];
+
+fn map_legacy_context(ru: &str) -> Option<&'static str> {
+    Some(match ru {
+        "@компьютер" => "@deep",
+        "@звонок" => "@call",
+        "@встреча" => "@call",
+        "@дом" => "@anywhere",
+        "@магазин" => "@errand",
+        "@везде" => "@anywhere",
+        _ => return None,
+    })
+}
+
+fn map_legacy_energy(ru: &str) -> Option<&'static str> {
+    Some(match ru {
+        "высокая" => "high",
+        "средняя" => "medium",
+        "низкая" => "low",
+        _ => return None,
+    })
+}
+
+fn map_legacy_duration(ru: &str) -> Option<&'static str> {
+    Some(match ru {
+        "< 5 мин" => "< 5 min",
+        "< 30 мин" => "< 30 min",
+        "< 2 ч" => "< 2 h",
+        "2+ ч" => "2+ h",
+        _ => return None,
+    })
+}
+
+/// One-time rename for users who started on the old Russian defaults.
+/// Updates every action row's `context` / `energy` / `duration` field and
+/// is safe to call repeatedly — once nothing matches the legacy strings,
+/// it's a no-op.
+fn migrate_legacy_action_fields(vault_root: &Path) -> Result<()> {
+    let mut f = read_actions(vault_root)?;
+    let mut dirty = false;
+    for a in f.items.iter_mut() {
+        if let Some(new) = map_legacy_context(&a.context) {
+            a.context = new.to_string();
+            dirty = true;
+        }
+        if let Some(e) = a.energy.as_ref() {
+            if let Some(new) = map_legacy_energy(e) {
+                a.energy = Some(new.to_string());
+                dirty = true;
+            }
+        }
+        if let Some(d) = a.duration.as_ref() {
+            if let Some(new) = map_legacy_duration(d) {
+                a.duration = Some(new.to_string());
+                dirty = true;
+            }
+        }
+    }
+    if dirty {
+        write_actions(vault_root, &f)?;
+    }
+    Ok(())
+}
+
+// ---- Config (with lazy migration) ----
 
 pub fn read_config(vault_root: &Path) -> Result<GardenConfig> {
     let path = config_path(vault_root);
@@ -727,7 +803,28 @@ pub fn read_config(vault_root: &Path) -> Result<GardenConfig> {
         return Ok(cfg);
     }
     let raw = std::fs::read_to_string(&path)?;
-    Ok(serde_json::from_str(&raw).unwrap_or_default())
+    let mut cfg: GardenConfig = serde_json::from_str(&raw).unwrap_or_default();
+
+    // One-time migration off the original Russian defaults. Only fires when
+    // the contexts list *exactly* matches the legacy set — anyone who edited
+    // their config keeps their customisations.
+    let is_legacy = cfg.contexts.len() == LEGACY_RU_CONTEXTS.len()
+        && cfg
+            .contexts
+            .iter()
+            .zip(LEGACY_RU_CONTEXTS.iter())
+            .all(|(a, b)| a == b);
+    if is_legacy {
+        cfg.contexts = GardenConfig::default().contexts;
+        write_pretty(&path, &cfg)?;
+        // Best-effort: also rename context / energy / duration on existing
+        // action rows so the data lines up with the new defaults. Failing
+        // here doesn't prevent the config rewrite — the next garden_*
+        // command will get to try again.
+        let _ = migrate_legacy_action_fields(vault_root);
+    }
+
+    Ok(cfg)
 }
 
 pub fn write_config(vault_root: &Path, cfg: &GardenConfig) -> Result<()> {

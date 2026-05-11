@@ -56,7 +56,7 @@ export function ProcessDropdown({ item }: Props) {
     }
   };
 
-  const contexts = config?.contexts ?? ['@везде'];
+  const contexts = config?.contexts ?? ['@anywhere'];
   const areas = config?.areas ?? ['work', 'personal', 'study', 'hobby'];
 
   return (
@@ -78,7 +78,7 @@ export function ProcessDropdown({ item }: Props) {
                   onClick={() =>
                     setStage({
                       kind: 'next',
-                      context: contexts[0] ?? '@везде',
+                      context: contexts[0] ?? '@anywhere',
                       project: '',
                       energy: '',
                       duration: '',
@@ -96,7 +96,7 @@ export function ProcessDropdown({ item }: Props) {
                       kind: 'project',
                       outcome: '',
                       firstAction: '',
-                      actionContext: contexts[0] ?? '@везде',
+                      actionContext: contexts[0] ?? '@anywhere',
                     })
                   }
                 >
@@ -181,9 +181,9 @@ export function ProcessDropdown({ item }: Props) {
                     onChange={(v) => setStage({ ...stage, energy: v })}
                     options={[
                       { value: '', label: '—' },
-                      { value: 'высокая', label: 'высокая' },
-                      { value: 'средняя', label: 'средняя' },
-                      { value: 'низкая', label: 'низкая' },
+                      { value: 'high', label: 'high' },
+                      { value: 'medium', label: 'medium' },
+                      { value: 'low', label: 'low' },
                     ]}
                     width="100%"
                   />
@@ -197,10 +197,10 @@ export function ProcessDropdown({ item }: Props) {
                     onChange={(v) => setStage({ ...stage, duration: v })}
                     options={[
                       { value: '', label: '—' },
-                      { value: '< 5 мин', label: '< 5 мин' },
-                      { value: '< 30 мин', label: '< 30 мин' },
-                      { value: '< 2 ч', label: '< 2 ч' },
-                      { value: '2+ ч', label: '2+ ч' },
+                      { value: '< 5 min', label: '< 5 min' },
+                      { value: '< 30 min', label: '< 30 min' },
+                      { value: '< 2 h', label: '< 2 h' },
+                      { value: '2+ h', label: '2+ h' },
                     ]}
                     width="100%"
                   />

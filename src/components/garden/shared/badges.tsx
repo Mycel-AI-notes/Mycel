@@ -2,12 +2,14 @@ import { clsx } from 'clsx';
 import { FileText, ClipboardList } from 'lucide-react';
 
 const ENERGY_DOT: Record<string, string> = {
-  'высокая': 'bg-rose-500',
-  'средняя': 'bg-amber-500',
-  'низкая': 'bg-emerald-500',
+  // English current values + Russian legacy values still found on disk
+  // until the user touches each row.
   high: 'bg-rose-500',
   medium: 'bg-amber-500',
   low: 'bg-emerald-500',
+  'высокая': 'bg-rose-500',
+  'средняя': 'bg-amber-500',
+  'низкая': 'bg-emerald-500',
 };
 
 export function EnergyBadge({ energy }: { energy?: string | null }) {

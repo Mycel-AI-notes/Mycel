@@ -24,7 +24,7 @@ function PromoteDropdown({ item }: { item: SomedayItem }) {
   const capture = useGardenStore((s) => s.capture);
   const deleteSomeday = useGardenStore((s) => s.deleteSomeday);
   const config = useGardenStore((s) => s.config);
-  const contexts = config?.contexts ?? ['@везде'];
+  const contexts = config?.contexts ?? ['@anywhere'];
 
   useEffect(() => {
     if (!open) return;
@@ -65,7 +65,7 @@ function PromoteDropdown({ item }: { item: SomedayItem }) {
               <li>
                 <button
                   className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
-                  onClick={() => setStage({ kind: 'action', context: contexts[0] ?? '@везде' })}
+                  onClick={() => setStage({ kind: 'action', context: contexts[0] ?? '@anywhere' })}
                 >
                   <Zap size={13} className="text-accent" /> Next Action
                 </button>

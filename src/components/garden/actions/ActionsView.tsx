@@ -113,9 +113,9 @@ function FilterPopover({
                 onChange={(v) => setFilters({ energy: v || undefined })}
                 options={[
                   { value: '', label: 'All' },
-                  { value: 'высокая', label: 'высокая' },
-                  { value: 'средняя', label: 'средняя' },
-                  { value: 'низкая', label: 'низкая' },
+                  { value: 'high', label: 'high' },
+                  { value: 'medium', label: 'medium' },
+                  { value: 'low', label: 'low' },
                 ]}
                 width="100%"
               />
@@ -129,10 +129,10 @@ function FilterPopover({
                 onChange={(v) => setFilters({ duration: v || undefined })}
                 options={[
                   { value: '', label: 'All' },
-                  { value: '< 5 мин', label: '< 5 мин' },
-                  { value: '< 30 мин', label: '< 30 мин' },
-                  { value: '< 2 ч', label: '< 2 ч' },
-                  { value: '2+ ч', label: '2+ ч' },
+                  { value: '< 5 min', label: '< 5 min' },
+                  { value: '< 30 min', label: '< 30 min' },
+                  { value: '< 2 h', label: '< 2 h' },
+                  { value: '2+ h', label: '2+ h' },
                 ]}
                 width="100%"
               />
@@ -155,7 +155,7 @@ function FilterPopover({
 
 function groupKey(item: ActionItem, by: ActionGrouping): string {
   switch (by) {
-    case 'context': return item.context || '@везде';
+    case 'context': return item.context || '@anywhere';
     case 'project': return item.project || '— no project';
     case 'energy': return item.energy || '— no energy';
     case 'duration': return item.duration || '— no duration';
@@ -248,7 +248,7 @@ function InlineAdd({ defaultContext }: { defaultContext: string }) {
   const [text, setText] = useState('');
   const [context, setContext] = useState(defaultContext);
   const [busy, setBusy] = useState(false);
-  const contexts = config?.contexts ?? ['@везде'];
+  const contexts = config?.contexts ?? ['@anywhere'];
 
   const submit = async () => {
     const trimmed = text.trim();
@@ -424,7 +424,7 @@ export function ActionsView() {
 
         {/* Always-visible inline add — no separate Add button. */}
         <div className="mt-4">
-          <InlineAdd defaultContext={config?.contexts?.[0] ?? '@везде'} />
+          <InlineAdd defaultContext={config?.contexts?.[0] ?? '@anywhere'} />
         </div>
 
         {!hideCompleted && completedToday.length > 0 && (

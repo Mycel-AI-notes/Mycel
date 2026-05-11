@@ -242,7 +242,7 @@ export function ProjectDetailView({ id }: { id: string }) {
 
   const project = projects.find((p) => p.id === id);
   const [newAction, setNewAction] = useState('');
-  const [actionContext, setActionContext] = useState(config?.contexts?.[0] ?? '@везде');
+  const [actionContext, setActionContext] = useState(config?.contexts?.[0] ?? '@anywhere');
 
   useEffect(() => {
     void loadProjects();
