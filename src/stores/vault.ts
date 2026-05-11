@@ -7,6 +7,7 @@ import { replaceEditorContent } from '@/lib/editor-registry';
 import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
 import { useCryptoStore } from './crypto';
+import { useGardenStore } from './garden';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -100,6 +101,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     // fresh per-vault status so the UI shows the correct lock state.
     useCryptoStore.getState().reset_for_new_vault();
     void useCryptoStore.getState().refresh();
+
+    // Garden lives under .mycel/garden/ — load it so the sidebar badges
+    // populate before the user clicks anything.
+    useGardenStore.getState().reset();
+    void useGardenStore.getState().refreshAll();
   },
 
   closeVault: () => {
@@ -115,6 +121,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     useRecentVaults.getState().clearLastOpened();
     useSyncStore.getState().reset();
     useCryptoStore.getState().reset_for_new_vault();
+    useGardenStore.getState().reset();
   },
 
   refreshTree: async () => {

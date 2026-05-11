@@ -1,5 +1,6 @@
 pub mod crypto;
 pub mod database;
+pub mod garden;
 pub mod graph;
 pub mod notes;
 pub mod search;

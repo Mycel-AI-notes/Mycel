@@ -4,6 +4,7 @@ import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
+import { useGardenStore } from '@/stores/garden';
 import { useRecentVaults } from '@/stores/recentVaults';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { EditorTabs } from '@/components/editor/EditorTabs';
@@ -15,6 +16,8 @@ import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
+import { GardenView } from '@/components/garden/GardenView';
+import { QuickCapture } from '@/components/garden/QuickCapture';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -45,6 +48,10 @@ export default function App() {
 
   const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
+  const gardenView = useGardenStore((s) => s.view);
+  const setGardenView = useGardenStore((s) => s.setView);
+  const openGardenCapture = useGardenStore((s) => s.openCapture);
+  const toggleGardenSection = useGardenStore((s) => s.toggleSection);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
@@ -69,7 +76,7 @@ export default function App() {
     });
   }, [vaultRoot, openVault]);
 
-  // In-app keyboard shortcuts (Quick Switcher).
+  // In-app keyboard shortcuts (Quick Switcher, Garden navigation).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -79,13 +86,31 @@ export default function App() {
         e.preventDefault();
         if (vaultRoot) setQuickSwitcherOpen(true);
       } else if (e.key === 'g' || e.key === 'G') {
+        // Plain Cmd+G keeps Graph; Cmd+Shift+G could be reused later.
+        if (e.shiftKey) return;
         e.preventDefault();
         if (vaultRoot) setGraphOpen((g) => !g);
+      } else if (e.key === 'i' || e.key === 'I') {
+        // Cmd+I — Garden quick capture.
+        e.preventDefault();
+        if (vaultRoot) openGardenCapture();
+      } else if (e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        // Cmd+Shift+A — Open Next Actions.
+        e.preventDefault();
+        if (vaultRoot) setGardenView({ kind: 'actions' });
+      } else if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        // Cmd+Shift+P — Open Projects.
+        e.preventDefault();
+        if (vaultRoot) setGardenView({ kind: 'projects' });
+      } else if (e.key === '`') {
+        // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
+        e.preventDefault();
+        toggleGardenSection();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot]);
+  }, [vaultRoot, openGardenCapture, setGardenView, toggleGardenSection]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
@@ -200,13 +225,31 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar />}
 
-        {/* Editor area */}
+        {/* Editor area — replaced by Garden views when one is active. */}
         <main className="flex flex-col flex-1 min-w-0">
-          <EditorTabs />
-          {activeTabPath ? (
-            <MarkdownEditor key={activeTabPath} path={activeTabPath} />
+          {gardenView ? (
+            <>
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface-0 text-xs">
+                <span className="text-text-muted">Garden</span>
+                <button
+                  onClick={() => setGardenView(null)}
+                  className="text-text-muted hover:text-text-primary"
+                  title="Back to notes"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <GardenView />
+            </>
           ) : (
-            <EmptyEditor />
+            <>
+              <EditorTabs />
+              {activeTabPath ? (
+                <MarkdownEditor key={activeTabPath} path={activeTabPath} />
+              ) : (
+                <EmptyEditor />
+              )}
+            </>
           )}
         </main>
 
@@ -233,6 +276,9 @@ export default function App() {
 
       {/* Save-conflict resolution. The store decides whether to render. */}
       <ConflictDialog />
+
+      {/* Garden quick-capture (⌘I). Self-renders when open. */}
+      <QuickCapture />
     </div>
   );
 }
