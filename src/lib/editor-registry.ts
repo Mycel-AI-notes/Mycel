@@ -40,12 +40,26 @@ export function scrollEditorToLine(path: string, line: number) {
 /** Replace the editor doc entirely. Used when the on-disk content was
  *  changed by sync (or by the conflict-resolution "Reload" action) and we
  *  need to push the new text into the live CodeMirror view without
- *  unmounting the editor. Returns true if a view was found. */
+ *  unmounting the editor. Preserves the caret position and scroll offset
+ *  (clamped to the new length) so the user doesn't get yanked back to
+ *  position 0. Returns true if a view was found. */
 export function replaceEditorContent(path: string, content: string): boolean {
   const view = views.get(path);
   if (!view) return false;
+  // Skip when nothing actually changed — avoids a needless dispatch that
+  // would still fire updateListener and re-mark the tab dirty.
+  if (view.state.doc.toString() === content) return true;
+  const prevMain = view.state.selection.main;
+  const scrollTop = view.scrollDOM.scrollTop;
+  const anchor = Math.min(prevMain.anchor, content.length);
+  const head = Math.min(prevMain.head, content.length);
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: content },
+    selection: { anchor, head },
+    // We're restoring scroll manually below — don't let CM auto-scroll the
+    // (possibly relocated) selection into view.
+    scrollIntoView: false,
   });
+  view.scrollDOM.scrollTop = scrollTop;
   return true;
 }
