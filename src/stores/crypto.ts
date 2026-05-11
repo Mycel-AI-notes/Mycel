@@ -8,6 +8,18 @@ import { useVaultStore } from './vault';
  *  Keychain's idle-lock window). */
 export const AUTO_LOCK_IDLE_MS = 5 * 60 * 1000;
 
+/**
+ * Module-level deferred promise used by `requireUnlock`. Callers that
+ * need an unlocked vault (e.g. `openNote` on a `.md.age`) call
+ * `requireUnlock()`, which opens the crypto panel in unlock mode and
+ * resolves the promise once the user successfully unlocks — or rejects
+ * if they close the panel.
+ *
+ * Kept outside the store because Zustand's state should stay JSON-able
+ * and we don't want to serialize React-shaped data.
+ */
+let pendingUnlock: { resolve: () => void; reject: (e: Error) => void } | null = null;
+
 interface CryptoState {
   status: CryptoStatus | null;
   /** Last error from setup/unlock/encrypt/decrypt. UI surfaces this. */
@@ -16,6 +28,10 @@ interface CryptoState {
   busy: boolean;
   /** Epoch-ms of the last user input. Set by `useAutoLock`. */
   lastActivityAt: number;
+  /** Whether the crypto panel (the modal opened by the toolbar shield)
+   *  is shown. Centralised in the store so other code paths (clicking a
+   *  locked `.md.age` in the file tree) can open it too. */
+  panelOpen: boolean;
 
   refresh: () => Promise<void>;
   setup: (passphrase: string) => Promise<string>;
@@ -34,6 +50,13 @@ interface CryptoState {
   reset_for_new_vault: () => void;
   /** Called by `useAutoLock` on user input. */
   markActivity: () => void;
+  openPanel: () => void;
+  closePanel: () => void;
+  /** Used by callers that need an unlocked vault to proceed. Opens the
+   *  crypto panel (which renders the unlock prompt) and returns a
+   *  promise that resolves on successful unlock or rejects if the
+   *  user closes the panel without unlocking. */
+  requireUnlock: () => Promise<void>;
 }
 
 async function run<T>(set: (p: Partial<CryptoState>) => void, fn: () => Promise<T>): Promise<T> {
@@ -54,6 +77,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   error: null,
   busy: false,
   lastActivityAt: Date.now(),
+  panelOpen: false,
 
   refresh: async () => {
     try {
@@ -78,6 +102,14 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   unlock: async (passphrase) => {
     await run(set, () => invoke<void>('crypto_unlock', { args: { passphrase } }));
     await get().refresh();
+    // If somebody was waiting for an unlock (a click on a locked
+    // `.md.age` note, for instance), resolve their promise and close
+    // the panel so they return straight to the editor.
+    if (pendingUnlock) {
+      pendingUnlock.resolve();
+      pendingUnlock = null;
+      set({ panelOpen: false });
+    }
   },
 
   setPassphrase: async (passphrase) => {
@@ -130,4 +162,28 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     set({ status: null, error: null, busy: false, lastActivityAt: Date.now() }),
 
   markActivity: () => set({ lastActivityAt: Date.now() }),
+
+  openPanel: () => set({ panelOpen: true }),
+
+  closePanel: () => {
+    set({ panelOpen: false });
+    // Any caller that was awaiting an unlock has effectively been
+    // cancelled by the user closing the panel.
+    if (pendingUnlock) {
+      pendingUnlock.reject(new Error('Unlock cancelled'));
+      pendingUnlock = null;
+    }
+  },
+
+  requireUnlock: () => {
+    if (get().status?.unlocked) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      // If two callers race, the older one is superseded — it would be
+      // weird to "succeed" both because the second wanted a fresh
+      // gesture from the user anyway.
+      if (pendingUnlock) pendingUnlock.reject(new Error('Superseded'));
+      pendingUnlock = { resolve, reject };
+      set({ panelOpen: true });
+    });
+  },
 }));

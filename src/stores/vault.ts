@@ -96,17 +96,19 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
-      // Encrypted notes require an explicitly unlocked session. We do NOT
-      // auto-unlock here — that would defeat the Lock button, since OS
-      // keyrings hand back the wrap secret silently to the same user. If
-      // the user wants to read this note, they have to go through the
-      // shield → Unlock action explicitly.
+      // Encrypted note + locked vault: pop the unlock prompt instead of
+      // failing silently. After the user types the passphrase, the
+      // promise resolves and we proceed straight to note_read.
       if (path.endsWith('.md.age')) {
         const crypto = useCryptoStore.getState();
         if (!crypto.status?.unlocked) {
-          throw new Error(
-            'This note is encrypted. Unlock the vault (shield icon) to open it.',
-          );
+          try {
+            await crypto.requireUnlock();
+          } catch {
+            // User closed the panel without unlocking. Drop the open
+            // attempt quietly — they explicitly cancelled.
+            return;
+          }
         }
       }
       const note = await invoke<Note>('note_read', { path });

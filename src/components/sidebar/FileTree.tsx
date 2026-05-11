@@ -286,7 +286,14 @@ function FileTreeNode({
                   try {
                     if (isEnc) {
                       if (!cryptoStatus.unlocked) {
-                        throw new Error('Vault is locked. Click the shield icon to unlock first.');
+                        // Pop the unlock prompt automatically. If the
+                        // user cancels, bail without warning — they
+                        // explicitly declined to proceed.
+                        try {
+                          await useCryptoStore.getState().requireUnlock();
+                        } catch {
+                          return;
+                        }
                       }
                       // Decrypt = file goes back to plaintext on disk.
                       // Subsequent saves and the next sync will push it
@@ -299,23 +306,22 @@ function FileTreeNode({
                       if (!ok) return;
                       await decryptNote(entry.path);
                     } else {
-                      // Warn before encrypting an existing plaintext note —
-                      // its prior content (saved or synced before this
-                      // moment) is NOT protected by encrypting now. Skip
-                      // the warning for "fresh" notes where the body is
-                      // just the auto-generated heading, since there's
-                      // nothing to leak yet.
+                      // Warn before encrypting an existing plaintext
+                      // note. Only skip the warning if the body is
+                      // literally untouched — empty or just the
+                      // auto-generated heading. Anything else (even
+                      // five characters the user typed) might already
+                      // have been auto-saved, indexed, swapped out, or
+                      // synced as plaintext, and encrypting now does
+                      // not retroactively scrub that.
                       const cached = useVaultStore.getState().noteCache.get(entry.path);
-                      const body = (cached?.content ?? '').trim();
+                      const trimmed = (cached?.content ?? '').trim();
                       const stem = entry.name.replace(/\.md$/, '');
-                      const isFresh =
-                        body === '' ||
-                        body === `# ${stem}` ||
-                        body === `# ${stem}\n` ||
-                        body.length < 32;
-                      if (!isFresh) {
+                      const isUntouched =
+                        trimmed === '' || trimmed === `# ${stem}`;
+                      if (!isUntouched) {
                         const ok = await confirm(
-                          'Anything you have saved or synced before this moment stays plaintext — in git history, in iCloud/Time Machine/Windows backups, in the GitHub remote. Encrypting now only protects FUTURE writes. Continue?',
+                          'Anything you have already typed in this note may have been auto-saved to disk, synced to GitHub, or paged into swap. Encrypting now only protects FUTURE writes — the earlier content is NOT scrubbed. Continue?',
                           { title: `Encrypt "${stem}"?`, kind: 'warning' },
                         );
                         if (!ok) return;

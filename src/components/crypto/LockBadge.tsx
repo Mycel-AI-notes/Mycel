@@ -19,8 +19,10 @@ import { confirm } from '@tauri-apps/plugin-dialog';
 export function LockBadge() {
   const status = useCryptoStore((s) => s.status);
   const busy = useCryptoStore((s) => s.busy);
+  const open = useCryptoStore((s) => s.panelOpen);
+  const openPanel = useCryptoStore((s) => s.openPanel);
+  const closePanel = useCryptoStore((s) => s.closePanel);
   const vaultRoot = useVaultStore((s) => s.vaultRoot);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (vaultRoot) void useCryptoStore.getState().refresh();
@@ -53,7 +55,7 @@ export function LockBadge() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={openPanel}
         disabled={busy}
         className={clsx(
           'p-1.5 rounded hover:bg-surface-hover transition-colors',
@@ -65,7 +67,7 @@ export function LockBadge() {
         {icon}
       </button>
 
-      {open && <CryptoPanel onClose={() => setOpen(false)} />}
+      {open && <CryptoPanel onClose={closePanel} />}
     </>
   );
 }

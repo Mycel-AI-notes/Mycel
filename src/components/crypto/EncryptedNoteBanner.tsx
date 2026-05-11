@@ -116,6 +116,19 @@ function EncryptedNoteInfo({ path, onClose }: { path: string; onClose: () => voi
           </section>
 
           <section className="space-y-2">
+            <h3 className="text-text-primary font-semibold">What this does NOT protect</h3>
+            <p className="leading-relaxed bg-warning/10 text-warning p-2 rounded text-[11px]">
+              Anything that lived in this note <em>before</em> it became{' '}
+              <code className="px-1 bg-surface-2 rounded">.md.age</code> may
+              still exist as plaintext: in git history, in the GitHub remote,
+              in iCloud / Time Machine / Windows backups, in swap or
+              hibernation files. Encryption only protects writes from the
+              moment of conversion onward — it does not retroactively scrub
+              the past.
+            </p>
+          </section>
+
+          <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-text-primary font-semibold">
                 On disk (what GitHub / Sync see)
