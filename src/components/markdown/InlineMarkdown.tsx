@@ -7,7 +7,7 @@ type Token =
   | { kind: 'italic'; inner: string }
   | { kind: 'strike'; inner: string }
   | { kind: 'link'; label: string; href: string }
-  | { kind: 'wikilink'; label: string };
+  | { kind: 'wikilink'; label: string; target: string };
 
 interface PatternMatch {
   index: number;
@@ -29,7 +29,11 @@ const PATTERNS: Array<{
   {
     re: /\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g,
     priority: 1,
-    build: (m) => ({ kind: 'wikilink', label: (m[2] ?? m[1]).trim() }),
+    build: (m) => ({
+      kind: 'wikilink',
+      label: (m[2] ?? m[1]).trim(),
+      target: m[1].trim(),
+    }),
   },
   {
     re: /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
@@ -127,6 +131,7 @@ function renderToken(t: Token, key: number): ReactNode {
           key={key}
           className="cm-md-link"
           href={t.href}
+          title={t.href}
           target="_blank"
           rel="noopener noreferrer"
           onMouseDown={(e) => e.stopPropagation()}
@@ -136,7 +141,12 @@ function renderToken(t: Token, key: number): ReactNode {
       );
     case 'wikilink':
       return (
-        <span key={key} className="cm-wikilink">
+        <span
+          key={key}
+          className="cm-wikilink"
+          title={t.target === t.label ? t.target : `${t.label} → ${t.target}`}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           {t.label}
         </span>
       );
