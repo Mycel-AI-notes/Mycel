@@ -107,19 +107,20 @@ export function GraphView({ onClose }: Props) {
     const nodes: SimNode[] = [];
     const links: SimLink[] = [];
 
-    // Folder nodes. Root ('') is implicit; sized by descendant count later.
+    // Folder nodes. The synthetic root ('') is intentionally not rendered —
+    // it carries no semantic meaning and only leaves top-level folders with
+    // a phantom edge into the void. Top-level folders therefore float free.
     const folderNoteCount = new Map<string, number>();
     for (const n of data.notes) {
       folderNoteCount.set(n.folder, (folderNoteCount.get(n.folder) ?? 0) + 1);
     }
     for (const f of data.folders) {
+      if (f.path === '') continue;
       const noteCount = folderNoteCount.get(f.path) ?? 0;
-      // Skip root if it's empty AND has no children folders.
-      if (f.path === '' && noteCount === 0 && data.folders.length === 1) continue;
       nodes.push({
         id: `folder:${f.path}`,
         kind: 'folder',
-        label: f.path === '' ? 'vault' : f.name,
+        label: f.name,
         group: f.parent ?? '',
         r: 9 + Math.min(8, Math.sqrt(noteCount) * 2.4),
       });
@@ -467,36 +468,50 @@ export function GraphView({ onClose }: Props) {
       );
     }
 
+    // Helper: trim endpoints to circumferences + perpendicular Bezier curve.
+    const curvedPath = (curveScale: number, prefix: string) => {
+      const seed = hash(`${prefix}:${s.id}->${t.id}`);
+      const sign = (seed & 1) === 0 ? 1 : -1;
+      const curve = sign * (0.1 + ((seed >>> 1) % 14) / 80) * dist * curveScale;
+      const mx = (s.x! + t.x!) / 2;
+      const my = (s.y! + t.y!) / 2;
+      const nx = -dy / dist;
+      const ny = dx / dist;
+      const cxp = mx + nx * curve;
+      const cyp = my + ny * curve;
+      const sxp = s.x! + (dx / dist) * s.r;
+      const syp = s.y! + (dy / dist) * s.r;
+      const exp = t.x! - (dx / dist) * t.r;
+      const eyp = t.y! - (dy / dist) * t.r;
+      return `M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`;
+    };
+
     if (l.kind === 'tag') {
       return (
-        <line
+        <path
           key={i}
-          x1={s.x}
-          y1={s.y}
-          x2={t.x}
-          y2={t.y}
+          d={curvedPath(1, 't')}
           strokeWidth={1.1}
           strokeDasharray="2 3"
           className="stroke-tag"
           strokeOpacity={0.85}
           strokeLinecap="round"
+          fill="none"
         />
       );
     }
 
     // External (note → domain): dashed
     return (
-      <line
+      <path
         key={i}
-        x1={s.x}
-        y1={s.y}
-        x2={t.x}
-        y2={t.y}
+        d={curvedPath(0.85, 'e')}
         strokeWidth={1.1}
         strokeDasharray="3 4"
         className="stroke-embedding"
         strokeOpacity={0.85}
         strokeLinecap="round"
+        fill="none"
       />
     );
   };
@@ -573,22 +588,32 @@ export function GraphView({ onClose }: Props) {
           </>
         ) : n.kind === 'tag' ? (
           <>
+            {/* Outer ring to distinguish tags from folders — folder uses a
+                solid multi-layer globe, tag is an open ringed marker. */}
+            <circle
+              r={n.r + 2}
+              fill="none"
+              className="stroke-tag"
+              strokeOpacity={0.45}
+              strokeWidth={0.8}
+              strokeDasharray="1 2"
+            />
             <circle
               r={n.r}
-              className="fill-tag stroke-tag"
-              fillOpacity={0.7}
-              strokeWidth={1}
+              className="fill-surface-0 stroke-tag"
+              strokeWidth={1.2}
             />
-            {n.count !== undefined && n.count > 1 && (
-              <text
-                y={3}
-                textAnchor="middle"
-                className="fill-text-primary pointer-events-none select-none"
-                style={{ fontSize: 9, fontWeight: 600 }}
-              >
-                {n.count}
-              </text>
-            )}
+            <text
+              y={3}
+              textAnchor="middle"
+              className="fill-tag pointer-events-none select-none"
+              style={{
+                fontSize: Math.max(8, n.r * 1.1),
+                fontWeight: 700,
+              }}
+            >
+              #
+            </text>
           </>
         ) : (
           // Note: simple "mid-bud" — a small filled spore.
