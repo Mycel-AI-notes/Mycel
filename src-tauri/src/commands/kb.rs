@@ -3,7 +3,6 @@ use crate::AppState;
 use chrono::Utc;
 use indexmap::IndexMap;
 use serde::Serialize;
-use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, State};
@@ -44,42 +43,12 @@ fn index_path_for_dir(dir_rel: &str) -> String {
 fn default_kb_database() -> Database {
     let mut schema: IndexMap<String, ColumnDef> = IndexMap::new();
     schema.insert(
-        "title".into(),
-        ColumnDef {
-            col_type: ColumnType::Text,
-            label: "Title".into(),
-            options: None,
-            width: Some(300),
-            extra: HashMap::new(),
-        },
-    );
-    schema.insert(
-        "tags".into(),
-        ColumnDef {
-            col_type: ColumnType::MultiSelect,
-            label: "Tags".into(),
-            options: Some(Vec::new()),
-            width: Some(200),
-            extra: HashMap::new(),
-        },
-    );
-    schema.insert(
-        "status".into(),
-        ColumnDef {
-            col_type: ColumnType::Select,
-            label: "Status".into(),
-            options: Some(vec!["todo".into(), "in-progress".into(), "done".into()]),
-            width: Some(120),
-            extra: HashMap::new(),
-        },
-    );
-    schema.insert(
         "notes".into(),
         ColumnDef {
             col_type: ColumnType::RichText,
             label: "Notes".into(),
             options: None,
-            width: Some(250),
+            width: Some(400),
             extra: HashMap::new(),
         },
     );
@@ -90,16 +59,9 @@ fn default_kb_database() -> Database {
         ViewDef {
             label: "All files".into(),
             // `__page__` is the built-in file-link pseudo-column (see
-            // PAGE_COL in src/types/database.ts) — putting it first means
-            // every freshly activated KB shows the .md filename right
-            // next to the user-editable Title/Tags/Status/Notes columns.
-            visible_columns: vec![
-                "__page__".into(),
-                "title".into(),
-                "tags".into(),
-                "status".into(),
-                "notes".into(),
-            ],
+            // PAGE_COL in src/types/database.ts). Default KB starts with
+            // just Page + Notes; the user adds more columns as needed.
+            visible_columns: vec!["__page__".into(), "notes".into()],
             sort: None,
             filters: Vec::new(),
             row_limit: None,
@@ -115,47 +77,6 @@ fn default_kb_database() -> Database {
         rows: Vec::new(),
         extra: HashMap::new(),
     }
-}
-
-/// Extract a sensible row title for a freshly-scanned `.md` file. Priority:
-/// YAML frontmatter `title:`, then the first `# H1`, then the filename stem.
-/// Bare-bones parser — the goal is to populate the column on activation, not
-/// to be a full YAML implementation.
-fn extract_title(abs: &Path, file_stem: &str) -> String {
-    let raw = match std::fs::read_to_string(abs) {
-        Ok(s) => s,
-        Err(_) => return file_stem.to_string(),
-    };
-
-    let mut lines = raw.lines();
-    if let Some(first) = lines.next() {
-        if first.trim() == "---" {
-            for line in lines.by_ref() {
-                let trimmed = line.trim();
-                if trimmed == "---" {
-                    break;
-                }
-                if let Some(rest) = trimmed.strip_prefix("title:") {
-                    let val = rest.trim().trim_matches('"').trim_matches('\'');
-                    if !val.is_empty() {
-                        return val.to_string();
-                    }
-                }
-            }
-        }
-    }
-
-    for line in raw.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("# ") {
-            let title = rest.trim();
-            if !title.is_empty() {
-                return title.to_string();
-            }
-        }
-    }
-
-    file_stem.to_string()
 }
 
 /// Walk a single directory (non-recursive) and collect rows for every `.md`
@@ -180,18 +101,12 @@ fn scan_dir_rows(abs_dir: &Path, dir_rel: &str) -> Result<Vec<Row>, String> {
         if !name.ends_with(".md") {
             continue;
         }
-        let stem = name.trim_end_matches(".md");
-        let title = extract_title(&path, stem);
         let rel = format!("{}/{}", dir_rel.trim_matches('/'), name);
-
-        let mut values: HashMap<String, JsonValue> = HashMap::new();
-        values.insert("title".into(), JsonValue::String(title));
-        values.insert("tags".into(), json!([]));
 
         rows.push(Row {
             id: Uuid::new_v4().to_string(),
             page: Some(rel),
-            values,
+            values: HashMap::new(),
         });
     }
 
