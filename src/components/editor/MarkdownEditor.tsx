@@ -19,6 +19,7 @@ import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
+import { markdownTableField, markdownTableTheme } from '@/lib/codemirror/markdown-table-widget';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
@@ -168,6 +169,8 @@ export function MarkdownEditor({ path }: Props) {
         }),
         markdownPreviewPlugin,
         markdownPreviewTheme,
+        markdownTableField,
+        markdownTableTheme,
         databaseWidgetPlugin(path),
         databaseWidgetTheme,
         databaseSlashCommand({
