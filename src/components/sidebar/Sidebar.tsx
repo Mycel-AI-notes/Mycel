@@ -6,12 +6,15 @@ import {
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
 } from '@/stores/ui';
+import { SyncStatusBadge } from '@/components/sync/SyncStatusBadge';
+import { SyncPanel } from '@/components/sync/SyncPanel';
 
 export function Sidebar() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
   const asideRef = useRef<HTMLElement>(null);
   const [resizing, setResizing] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const startResize = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -63,6 +66,12 @@ export function Sidebar() {
       style={{ width: `${sidebarWidth}px` }}
     >
       <FileTree />
+
+      <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-t border-border bg-surface-0">
+        <SyncStatusBadge onClick={() => setSyncOpen(true)} />
+      </div>
+
+      {syncOpen && <SyncPanel onClose={() => setSyncOpen(false)} />}
 
       <div
         role="separator"

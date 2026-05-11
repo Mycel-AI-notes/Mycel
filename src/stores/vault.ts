@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, Tab } from '@/types';
 import { reparseBody } from '@/lib/markdown-parse';
 import { useRecentVaults } from './recentVaults';
+import { useSyncStore } from './sync';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -50,6 +51,14 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       vaultVersion: 0,
     });
     useRecentVaults.getState().push(path);
+
+    // Refresh sync state for the new vault, and try an opportunistic initial
+    // sync so the user sees up-to-date notes from other devices.
+    await useSyncStore.getState().loadForVault();
+    const { config, status } = useSyncStore.getState();
+    if (config?.auto_sync && status?.configured && status.has_token) {
+      void useSyncStore.getState().syncNow();
+    }
   },
 
   closeVault: () => {
@@ -62,6 +71,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       vaultVersion: 0,
     });
     useRecentVaults.getState().clearLastOpened();
+    useSyncStore.getState().reset();
   },
 
   refreshTree: async () => {
@@ -146,6 +156,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   saveNote: async (path, content) => {
     await invoke('note_save', { path, content });
+    useSyncStore.getState().scheduleAutoSync();
     const existing = get().noteCache.get(path)?.parsed;
     const reparsed = reparseBody(content);
     set((s) => {
