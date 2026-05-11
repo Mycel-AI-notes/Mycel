@@ -120,7 +120,12 @@ class ImageWidget extends WidgetType {
 
     const meta = document.createElement('span');
     meta.className = 'cm-image-meta';
-    meta.textContent = this.src;
+    // Prefer the user-facing alt; fall back to the filename so the
+    // toolbar always carries a human-readable label rather than the
+    // full `attachments/…` path.
+    const filename = this.src.split('/').pop() ?? this.src;
+    meta.textContent = this.alt || filename;
+    meta.title = this.src;
     toolbar.appendChild(meta);
 
     const spacer = document.createElement('span');
@@ -180,29 +185,45 @@ function absoluteAttachmentPath(relative: string): string {
 function buildImageDecorations(state: EditorState): DecorationSet {
   const { doc } = state;
 
-  type Item = { pos: number; deco: Decoration };
+  type Item = { from: number; to: number; deco: Decoration };
   const items: Item[] = [];
 
   for (let n = 1; n <= doc.lines; n++) {
     const line = doc.line(n);
     const matches = findImageMatches(line.text, line.from);
     if (matches.length === 0) continue;
+
+    // "Image-only" line — the markdown contributes nothing but the
+    // image link itself (modulo whitespace). Replace the whole line
+    // with the widget so the raw `![alt](src)` never shows. Lines
+    // that mix prose and images keep their text visible with the
+    // preview appearing below.
+    const onlyImage =
+      matches.length === 1 &&
+      line.text.trim() === line.text.slice(matches[0].from - line.from, matches[0].to - line.from).trim();
+
     for (const m of matches) {
       const resolved = convertFileSrc(absoluteAttachmentPath(m.src));
-      items.push({
-        pos: line.to,
-        deco: Decoration.widget({
-          widget: new ImageWidget(m.alt, m.src, resolved, m.from, m.to),
-          side: 1,
-          block: true,
-        }),
-      });
+      const widget = new ImageWidget(m.alt, m.src, resolved, m.from, m.to);
+      if (onlyImage) {
+        items.push({
+          from: line.from,
+          to: line.to,
+          deco: Decoration.replace({ widget, block: true }),
+        });
+      } else {
+        items.push({
+          from: line.to,
+          to: line.to,
+          deco: Decoration.widget({ widget, side: 1, block: true }),
+        });
+      }
     }
   }
 
-  items.sort((a, b) => a.pos - b.pos);
+  items.sort((a, b) => a.from - b.from);
   return Decoration.set(
-    items.map((it) => it.deco.range(it.pos)),
+    items.map((it) => it.deco.range(it.from, it.to)),
     true,
   );
 }
