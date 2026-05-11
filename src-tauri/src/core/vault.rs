@@ -78,6 +78,12 @@ impl Vault {
     }
 }
 
+/// Hidden from the file tree but kept on disk. The user accesses
+/// these through the inline image widget and the image tab view —
+/// listing them in the sidebar would clutter the tree without giving
+/// any extra interaction since they aren't editable as text.
+pub const ATTACHMENTS_DIR: &str = "attachments";
+
 fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
 
@@ -110,6 +116,13 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
             .unwrap_or(&path)
             .to_string_lossy()
             .to_string();
+
+        // The attachments folder is intentionally hidden from the tree
+        // — images are surfaced inline in notes and through the image
+        // tab view, never as standalone tree entries.
+        if rel_path == ATTACHMENTS_DIR {
+            continue;
+        }
 
         if path.is_dir() {
             let children = read_dir_recursive(&path, vault_root)?;

@@ -5,6 +5,12 @@ import {
 } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
 import { insertTableFence } from '@/lib/table/insert';
+import { open } from '@tauri-apps/plugin-dialog';
+import {
+  insertImageLink,
+  saveAttachmentFile,
+  SUPPORTED_IMAGE_EXTS,
+} from '@/lib/attachments';
 
 export interface SlashCommand {
   label: string;
@@ -20,6 +26,61 @@ const COMMANDS: SlashCommand[] = [
     keywords: ['table', 'tbl', 'grid'],
     run: (view, from, to) => {
       insertTableFence(view, { replaceFrom: from, replaceTo: to });
+    },
+  },
+  {
+    label: 'Image',
+    detail: 'Pick an image to attach',
+    keywords: ['image', 'img', 'picture', 'photo'],
+    run: (view, from, to) => {
+      // Strip the slash trigger first so the editor's selection is clean
+      // while the OS file picker is open. If the user cancels we leave
+      // the cursor where the slash used to be.
+      view.dispatch({
+        changes: { from, to, insert: '' },
+        selection: { anchor: from },
+      });
+      void (async () => {
+        try {
+          const picked = await open({
+            multiple: false,
+            directory: false,
+            filters: [{ name: 'Images', extensions: SUPPORTED_IMAGE_EXTS }],
+          });
+          if (typeof picked !== 'string') return;
+          const rel = await saveAttachmentFile(picked);
+          insertImageLink(view, rel, { from, to: from });
+        } catch (e) {
+          console.error('Insert image failed:', e);
+        }
+      })();
+    },
+  },
+  {
+    label: 'Math',
+    detail: 'Insert a LaTeX math block',
+    keywords: ['math', 'latex', 'equation', 'formula'],
+    run: (view, from, to) => {
+      // `\n` around the body is the convention KaTeX block parsing
+      // expects and matches what the spec shows in code samples.
+      const text = '$$\n\n$$';
+      view.dispatch({
+        changes: { from, to, insert: text },
+        // Park the caret on the empty middle line.
+        selection: { anchor: from + 3 },
+      });
+    },
+  },
+  {
+    label: 'Inline math',
+    detail: 'Insert an inline LaTeX span',
+    keywords: ['imath', 'inline', 'latex', 'math', 'formula'],
+    run: (view, from, to) => {
+      const text = '$$';
+      view.dispatch({
+        changes: { from, to, insert: text },
+        selection: { anchor: from + 1 },
+      });
     },
   },
   {

@@ -24,3 +24,13 @@ export function displayName(path: string): string {
 export function isEncryptedPath(path: string): boolean {
   return path.endsWith(ENC_SUFFIX);
 }
+
+const ATTACHMENT_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+
+/** True if `path` points at a binary attachment we surface in the
+ *  tree but should not try to open as a note. */
+export function isAttachmentPath(path: string): boolean {
+  const tail = path.split('/').pop() ?? path;
+  const ext = tail.split('.').pop()?.toLowerCase();
+  return !!ext && ATTACHMENT_EXTS.includes(ext);
+}

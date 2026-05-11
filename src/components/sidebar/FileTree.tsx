@@ -20,7 +20,7 @@ import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
-import { stripNoteExt } from '@/lib/note-name';
+import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
 
 const DRAG_MIME = 'application/x-mycel-path';
 
@@ -88,13 +88,22 @@ function FileTreeNode({
     });
   }, [entry.path, setExpanded]);
 
+  const { openImageTab } = useVaultStore();
+
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
       toggleExpand();
-    } else {
-      openNote(entry.path, { preview: true });
+      return;
     }
-  }, [entry, openNote, toggleExpand]);
+    if (isAttachmentPath(entry.path)) {
+      // Attachments aren't notes — render them in the image tab view
+      // instead of routing through the markdown reader, which would
+      // choke on binary bytes.
+      openImageTab(entry.path, { preview: true });
+      return;
+    }
+    openNote(entry.path, { preview: true });
+  }, [entry, openNote, openImageTab, toggleExpand]);
 
   const handleDoubleClick = useCallback(() => {
     if (!entry.is_dir) {
