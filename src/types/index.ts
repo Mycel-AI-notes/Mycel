@@ -5,9 +5,26 @@ export interface FileEntry {
   children?: FileEntry[];
   is_knowledge_base?: boolean;
   is_quick_notes?: boolean;
+  /** True if this directory has been promoted to a Knowledge Base via
+   *  `kb_init`. Distinct from `is_knowledge_base` (single protected root
+   *  folder). KB folders render with a 🗃 icon and clicking them opens
+   *  `<dir>/index.md` instead of toggling the tree. */
+  is_kb_dir?: boolean;
   /** True for `*.md.age` notes — file tree shows a lock icon and reads go
    *  through the decrypt path. */
   is_encrypted?: boolean;
+}
+
+export interface KbEntry {
+  path: string;
+  db: string;
+  created_at: string;
+}
+
+export interface KbInitResult {
+  index_path: string;
+  db_path: string;
+  rows_created: number;
 }
 
 export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
