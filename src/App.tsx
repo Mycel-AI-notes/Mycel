@@ -18,6 +18,7 @@ import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
+import { SettingsDialog } from '@/components/ui/SettingsDialog';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -34,6 +35,7 @@ import {
   Zap,
   FolderSearch,
   Share2,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
@@ -48,6 +50,8 @@ export default function App() {
 
   const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
+  const gardenEnabled = useUIStore((s) => s.features.garden);
+  const openSettings = useUIStore((s) => s.openSettings);
   const gardenView = useGardenStore((s) => s.view);
   const setGardenView = useGardenStore((s) => s.setView);
   const openGardenCapture = useGardenStore((s) => s.openCapture);
@@ -90,19 +94,19 @@ export default function App() {
         if (e.shiftKey) return;
         e.preventDefault();
         if (vaultRoot) setGraphOpen((g) => !g);
-      } else if (e.key === 'i' || e.key === 'I') {
+      } else if (gardenEnabled && (e.key === 'i' || e.key === 'I')) {
         // Cmd+I — Garden quick capture.
         e.preventDefault();
         if (vaultRoot) openGardenCapture();
-      } else if (e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      } else if (gardenEnabled && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         // Cmd+Shift+A — Open Next Actions.
         e.preventDefault();
         if (vaultRoot) setGardenView({ kind: 'actions' });
-      } else if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+      } else if (gardenEnabled && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
         // Cmd+Shift+P — Open Projects.
         e.preventDefault();
         if (vaultRoot) setGardenView({ kind: 'projects' });
-      } else if (e.key === '`') {
+      } else if (gardenEnabled && e.key === '`') {
         // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
         e.preventDefault();
         toggleGardenSection();
@@ -110,7 +114,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot, openGardenCapture, setGardenView, toggleGardenSection]);
+  }, [vaultRoot, openGardenCapture, setGardenView, toggleGardenSection, gardenEnabled]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
@@ -227,7 +231,7 @@ export default function App() {
 
         {/* Editor area — replaced by Garden views when one is active. */}
         <main className="flex flex-col flex-1 min-w-0">
-          {gardenView ? (
+          {gardenEnabled && gardenView ? (
             <>
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface-0 text-xs">
                 <span className="text-text-muted">Garden</span>
@@ -256,7 +260,7 @@ export default function App() {
         {!rightPanelCollapsed && <RightPanel />}
       </div>
 
-      {/* Bottom status bar — vault + theme settings */}
+      {/* Bottom status bar — vault + theme + settings */}
       <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
         <button
           onClick={closeVault}
@@ -264,6 +268,13 @@ export default function App() {
           title="Manage vaults — back to vault picker"
         >
           <FolderSearch size={14} />
+        </button>
+        <button
+          onClick={openSettings}
+          className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+          title="Settings"
+        >
+          <SettingsIcon size={14} />
         </button>
         <PalettePicker />
       </footer>
@@ -278,7 +289,10 @@ export default function App() {
       <ConflictDialog />
 
       {/* Garden quick-capture (⌘I). Self-renders when open. */}
-      <QuickCapture />
+      {gardenEnabled && <QuickCapture />}
+
+      {/* Settings dialog. Self-renders when open. */}
+      <SettingsDialog />
     </div>
   );
 }

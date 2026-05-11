@@ -13,6 +13,7 @@ import { GardenSidebar } from '@/components/garden/GardenSidebar';
 export function Sidebar() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const gardenEnabled = useUIStore((s) => s.features.garden);
   const asideRef = useRef<HTMLElement>(null);
   const [resizing, setResizing] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -67,7 +68,7 @@ export function Sidebar() {
       style={{ width: `${sidebarWidth}px` }}
     >
       <div className="flex flex-col min-h-0 flex-1">
-        <GardenSidebar />
+        {gardenEnabled && <GardenSidebar />}
         <div className="flex-1 min-h-0 overflow-hidden">
           <FileTree />
         </div>

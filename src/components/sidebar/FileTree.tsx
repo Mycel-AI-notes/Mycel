@@ -402,7 +402,8 @@ function FileTreeNode({
 }
 
 export function FileTree() {
-  const { fileTree, vaultRoot, createNote, createFolder, renameNote } = useVaultStore();
+  const { fileTree, vaultRoot, createNote, createFolder, renameNote, activeTabPath } =
+    useVaultStore();
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -427,6 +428,31 @@ export function FileTree() {
       return next;
     });
   }, [fileTree]);
+
+  // Whenever the user opens a note (file tree click, quick switcher, palette,
+  // or Garden's "Create page"), expand every ancestor folder so the file is
+  // visible in the tree. Without this, freshly-created notes inside a
+  // collapsed folder stay invisible until the user manually expands.
+  useEffect(() => {
+    if (!activeTabPath) return;
+    const parts = activeTabPath.split('/');
+    if (parts.length <= 1) return;
+    const ancestors: string[] = [];
+    for (let i = 1; i < parts.length; i += 1) {
+      ancestors.push(parts.slice(0, i).join('/'));
+    }
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const p of ancestors) {
+        if (!next.has(p)) {
+          next.add(p);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [activeTabPath]);
 
   const startCreate = useCallback((type: CreatingType, parent: string) => {
     setNewName('');
