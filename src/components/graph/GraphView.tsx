@@ -161,74 +161,45 @@ export function GraphView({ onClose }: Props) {
       });
     }
 
-    // Tag super-hub + individual tags. Notes connect to tags they carry —
-    // shared-tag notes naturally cluster around the tag node, giving a
-    // visual "soft" connection on top of explicit wikilinks.
-    if (data.tags.length > 0) {
+    // Tag nodes float freely — no hub. Each tag is pulled toward the notes
+    // that reference it, so shared-tag notes form a visible cluster
+    // around the tag with short, readable edges.
+    for (const tg of data.tags) {
       nodes.push({
-        id: 'folder:__tags__',
-        kind: 'folder',
-        label: 'tags',
-        group: '',
-        r: 10,
+        id: `tag:${tg.tag}`,
+        kind: 'tag',
+        label: `#${tg.tag}`,
+        group: TAG_GROUP,
+        r: 4 + Math.min(7, Math.sqrt(tg.count) * 1.4),
+        count: tg.count,
       });
-      for (const tg of data.tags) {
-        nodes.push({
-          id: `tag:${tg.tag}`,
-          kind: 'tag',
-          label: `#${tg.tag}`,
-          group: TAG_GROUP,
-          r: 4 + Math.min(7, Math.sqrt(tg.count) * 1.4),
-          count: tg.count,
-        });
-        links.push({
-          source: 'folder:__tags__',
-          target: `tag:${tg.tag}`,
-          kind: 'contain',
-        });
-      }
-      for (const e of data.tag_edges) {
-        links.push({
-          source: `note:${e.from}`,
-          target: `tag:${e.tag}`,
-          kind: 'tag',
-        });
-      }
+    }
+    for (const e of data.tag_edges) {
+      links.push({
+        source: `note:${e.from}`,
+        target: `tag:${e.tag}`,
+        kind: 'tag',
+      });
     }
 
-    // External domain super-hub (so all domains float in their own region)
-    // and individual domain nodes connected to it.
-    if (data.domains.length > 0) {
+    // Domains: same treatment — drift to whoever cites them.
+    for (const d of data.domains) {
       nodes.push({
-        id: 'folder:__external__',
-        kind: 'folder',
-        label: 'web',
-        group: '',
-        r: 11,
+        id: `domain:${d.domain}`,
+        kind: 'domain',
+        label: d.domain,
+        group: EXTERNAL_GROUP,
+        r: 6 + Math.min(8, Math.sqrt(d.count) * 1.6),
+        count: d.count,
       });
-      for (const d of data.domains) {
-        nodes.push({
-          id: `domain:${d.domain}`,
-          kind: 'domain',
-          label: d.domain,
-          group: EXTERNAL_GROUP,
-          r: 6 + Math.min(8, Math.sqrt(d.count) * 1.6),
-          count: d.count,
-        });
-        links.push({
-          source: 'folder:__external__',
-          target: `domain:${d.domain}`,
-          kind: 'contain',
-        });
-      }
-      for (const e of data.external_edges) {
-        links.push({
-          source: `note:${e.from}`,
-          target: `domain:${e.domain}`,
-          kind: 'external',
-          weight: e.count,
-        });
-      }
+    }
+    for (const e of data.external_edges) {
+      links.push({
+        source: `note:${e.from}`,
+        target: `domain:${e.domain}`,
+        kind: 'external',
+        weight: e.count,
+      });
     }
 
     return { nodes, links };
@@ -247,33 +218,18 @@ export function GraphView({ onClose }: Props) {
         forceLink<SimNode, SimLink>(links)
           .id((d) => d.id)
           .distance((l) => {
-            if (l.kind === 'contain') {
-              // Hub→domain/tag edges should be looser so the cluster floats
-              // near its connected notes, not glued to an isolated hub.
-              const s = l.source as SimNode;
-              if (s.id === 'folder:__external__' || s.id === 'folder:__tags__') {
-                return 60;
-              }
-              return 38;
-            }
-            if (l.kind === 'wiki') return 75;
-            if (l.kind === 'tag') return 55;
-            return 50; // external
+            if (l.kind === 'contain') return 40;
+            if (l.kind === 'wiki') return 85;
+            if (l.kind === 'tag') return 75;
+            return 75; // external
           })
           .strength((l) => {
-            if (l.kind === 'contain') {
-              const s = l.source as SimNode;
-              if (s.id === 'folder:__external__' || s.id === 'folder:__tags__') {
-                // Tiny — just enough to keep orphan tags/domains on screen.
-                return 0.05;
-              }
-              return 0.9;
-            }
+            if (l.kind === 'contain') return 0.9;
             if (l.kind === 'wiki') return 0.35;
-            // Note→tag / note→domain: strong enough to drag the cluster
-            // toward the notes that reference it.
-            if (l.kind === 'tag') return 0.4;
-            return 0.4;
+            // Tag / external pull strong enough that shared-target notes
+            // form a visible cluster around the tag/domain.
+            if (l.kind === 'tag') return 0.45;
+            return 0.45;
           }),
       )
       .force('charge', forceManyBody().strength(-180))
@@ -465,20 +421,10 @@ export function GraphView({ onClose }: Props) {
       const syp = s.y! + (dy / dist) * s.r;
       const exp = t.x! - (dx / dist) * t.r;
       const eyp = t.y! - (dy / dist) * t.r;
-      const isDomainEdge = s.id === 'folder:__external__' || t.kind === 'domain';
-      const isTagHubEdge = s.id === 'folder:__tags__' || t.kind === 'tag';
-      const isFolderHierarchy =
-        s.kind === 'folder' &&
-        t.kind === 'folder' &&
-        s.id !== 'folder:__external__' &&
-        s.id !== 'folder:__tags__';
-      const cls = isDomainEdge
-        ? 'stroke-embedding/70'
-        : isTagHubEdge
-          ? 'stroke-tag/70'
-          : isFolderHierarchy
-            ? 'stroke-accent/75'
-            : 'stroke-accent/60';
+      const isFolderHierarchy = s.kind === 'folder' && t.kind === 'folder';
+      const cls = isFolderHierarchy
+        ? 'stroke-accent/75'
+        : 'stroke-accent/60';
       return (
         <path
           key={i}
@@ -529,9 +475,10 @@ export function GraphView({ onClose }: Props) {
           y1={s.y}
           x2={t.x}
           y2={t.y}
-          strokeWidth={0.9}
+          strokeWidth={1.1}
           strokeDasharray="2 3"
-          className="stroke-tag/70"
+          className="stroke-tag"
+          strokeOpacity={0.85}
           strokeLinecap="round"
         />
       );
@@ -545,9 +492,10 @@ export function GraphView({ onClose }: Props) {
         y1={s.y}
         x2={t.x}
         y2={t.y}
-        strokeWidth={1}
+        strokeWidth={1.1}
         strokeDasharray="3 4"
-        className="stroke-embedding/75"
+        className="stroke-embedding"
+        strokeOpacity={0.85}
         strokeLinecap="round"
       />
     );
