@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Trash2, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import type { Align, TableData } from '@/lib/table/serialize';
+import { renderInlineMarkdown } from '@/components/markdown/InlineMarkdown';
 
 interface Props {
   data: TableData;
@@ -195,18 +196,49 @@ interface CellInputProps {
 
 function CellInput({ value, onChange, placeholder, align, bold }: CellInputProps) {
   const [local, setLocal] = useState(value);
+  const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setLocal(value);
   }, [value]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!editing) return;
     const el = ref.current;
     if (!el) return;
     el.style.height = '0px';
     el.style.height = `${el.scrollHeight}px`;
-  }, [local]);
+  }, [local, editing]);
+
+  const cellStyle = {
+    textAlign: align ?? 'left',
+    fontWeight: bold ? 600 : 400,
+  } as const;
+
+  if (!editing) {
+    const isEmpty = local.length === 0;
+    return (
+      <div
+        className={`md-table-cell-preview${isEmpty ? ' md-table-cell-preview-empty' : ''}`}
+        style={cellStyle}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setEditing(true);
+          requestAnimationFrame(() => {
+            const el = ref.current;
+            if (el) {
+              el.focus();
+              const len = el.value.length;
+              el.setSelectionRange(len, len);
+            }
+          });
+        }}
+      >
+        {isEmpty ? placeholder ?? '' : renderInlineMarkdown(local)}
+      </div>
+    );
+  }
 
   return (
     <textarea
@@ -214,19 +246,22 @@ function CellInput({ value, onChange, placeholder, align, bold }: CellInputProps
       className="md-table-cell-input"
       value={local}
       placeholder={placeholder}
-      style={{
-        textAlign: align ?? 'left',
-        fontWeight: bold ? 600 : 400,
-      }}
+      style={cellStyle}
       rows={1}
+      autoFocus
       onChange={(e) => setLocal(e.target.value)}
       onBlur={() => {
         if (local !== value) onChange(local);
+        setEditing(false);
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           (e.target as HTMLTextAreaElement).blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setLocal(value);
+          setEditing(false);
         }
       }}
     />
