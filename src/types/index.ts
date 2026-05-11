@@ -5,6 +5,9 @@ export interface FileEntry {
   children?: FileEntry[];
   is_knowledge_base?: boolean;
   is_quick_notes?: boolean;
+  /** True for `*.md.age` notes — file tree shows a lock icon and reads go
+   *  through the decrypt path. */
+  is_encrypted?: boolean;
 }
 
 export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
@@ -44,6 +47,17 @@ export interface Note {
   path: string;
   content: string;
   parsed: ParsedNote;
+  /** Backend signals that the on-disk file was `.md.age` and we decrypted
+   *  it. The save round-trip re-encrypts transparently. */
+  encrypted?: boolean;
+}
+
+export interface CryptoStatus {
+  configured: boolean;
+  keyring_present: boolean;
+  unlocked: boolean;
+  recipients: number;
+  primary_recipient: string | null;
 }
 
 export interface Tab {

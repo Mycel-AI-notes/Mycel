@@ -14,6 +14,10 @@ pub async fn vault_open(
     let root = vault.root.clone();
     *state.vault.lock().await = Some(vault);
 
+    // Switching vaults must drop any X25519 key material we hold for the
+    // previous vault — keys are per-vault.
+    state.crypto.lock();
+
     let new_watcher = start_watcher(app, root);
     *state.watcher.lock().await = new_watcher;
 

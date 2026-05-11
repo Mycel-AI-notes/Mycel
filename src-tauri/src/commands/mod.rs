@@ -1,3 +1,4 @@
+pub mod crypto;
 pub mod database;
 pub mod graph;
 pub mod notes;

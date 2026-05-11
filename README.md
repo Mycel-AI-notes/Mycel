@@ -36,6 +36,15 @@ Mycel is a desktop note-taking app built on [Tauri 2](https://tauri.app) + Rust 
 - **Backlinks panel.** Right-side panel shows what links to the current note.
 - **Inline databases.** Notion-style fenced `mycel-db` blocks render tables with typed columns (text, number, date, select, multi-select, checkbox, page link…).
 - **Themes.** Light / dark, follows system by default.
+- **Encrypted notes.** Per-note encryption to `*.md.age` files using
+  [age](https://age-encryption.org) (X25519 + ChaCha20-Poly1305). The X25519
+  identity is wrapped with a random secret stored in the OS keyring
+  (hardware-backed: Keychain → Secure Enclave on macOS, Credential Manager →
+  TPM/DPAPI on Windows, Secret Service on Linux). The plaintext private key
+  never touches disk and is wiped on lock or vault switch. Encrypted notes
+  still sync through GitHub as opaque blobs. Multiple recipients are
+  supported, so other devices or a paper recovery key can decrypt the same
+  vault.
 
 ## Graph view
 
@@ -127,6 +136,34 @@ my-vault/
 ```
 
 The `.mycel/` folder is reserved for app metadata. Add it to `.gitignore` if you're syncing the vault with Git.
+
+### Encrypted notes (`*.md.age`)
+
+Mycel can store individual notes encrypted with [age](https://age-encryption.org).
+Click the shield icon in the toolbar to set up encryption: this generates an
+X25519 identity, wraps it with a random 256-bit secret in your OS keyring
+(hardware-backed via Secure Enclave / TPM where available), and writes the
+following files into `.mycel/crypto/`:
+
+```
+.mycel/crypto/
+├── identity.age      # age scrypt-wrapped X25519 secret (the wrap passphrase
+│                     # lives in the OS keyring, never on disk)
+├── pubkey.txt        # primary age recipient (so notes can be encrypted
+│                     # while the vault is locked)
+└── recipients.txt    # all recipients allowed to decrypt — add another
+│                     # device's pubkey or a paper recovery key here
+```
+
+The plaintext X25519 secret never touches disk and is wiped on lock or vault
+switch. To encrypt an existing note, hover its row in the sidebar and click
+the lock icon — the file becomes `<name>.md.age`. Encrypted notes still
+appear in the file tree (with a lock icon) and sync through GitHub as
+opaque ASCII-armored blobs.
+
+Post-quantum hybrid encryption is on the roadmap: once an `age-plugin-pq`
+recipient ships, it can be added to `recipients.txt` without code changes
+here. FIDO2/YubiKey support arrives the same way via the age plugin system.
 
 ### Note format
 

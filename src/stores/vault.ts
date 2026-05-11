@@ -2,8 +2,10 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, Tab } from '@/types';
 import { reparseBody } from '@/lib/markdown-parse';
+import { displayName } from '@/lib/note-name';
 import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
+import { useCryptoStore } from './crypto';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -59,6 +61,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     if (config?.auto_sync && status?.configured && status.has_token) {
       void useSyncStore.getState().syncNow();
     }
+
+    // The Rust side has cleared any previous vault's crypto session; pull the
+    // fresh per-vault status so the UI shows the correct lock state.
+    useCryptoStore.getState().reset_for_new_vault();
+    void useCryptoStore.getState().refresh();
   },
 
   closeVault: () => {
@@ -72,6 +79,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     });
     useRecentVaults.getState().clearLastOpened();
     useSyncStore.getState().reset();
+    useCryptoStore.getState().reset_for_new_vault();
   },
 
   refreshTree: async () => {
@@ -84,6 +92,16 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
+      // Encrypted notes need an unlocked session before `note_read` can
+      // decrypt them. If the session is locked, try unlocking first so the
+      // user only sees one prompt (keyring → biometrics) instead of an
+      // opaque "Vault is locked" error.
+      if (path.endsWith('.md.age')) {
+        const crypto = useCryptoStore.getState();
+        if (!crypto.status?.unlocked && crypto.status?.keyring_present) {
+          await crypto.unlock();
+        }
+      }
       const note = await invoke<Note>('note_read', { path });
       // Overlay TS-side reparse so headings carry line numbers from the get-go
       // (the Rust parser uses pulldown_cmark events without positions).
@@ -100,7 +118,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
     const alreadyOpen = openTabs.find((t) => t.path === path);
     const note = get().noteCache.get(path)!;
-    const title = note.parsed.meta.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+    const title = note.parsed.meta.title ?? displayName(path);
 
     if (alreadyOpen) {
       // If user explicitly re-opens (non-preview) an existing preview tab,
@@ -203,7 +221,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set((s) => {
       const next = new Map(s.noteCache);
       next.set(path, note);
-      const title = path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+      const title = displayName(path);
       return {
         noteCache: next,
         openTabs: [...s.openTabs, { path, title, isDirty: false }],
@@ -231,7 +249,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       const next = new Map(s.noteCache);
       next.delete(oldPath);
       if (note) next.set(newPath, { ...note, path: newPath });
-      const newTitle = newPath.split('/').pop()?.replace(/\.md$/, '') ?? newPath;
+      const newTitle = displayName(newPath);
       return {
         noteCache: next,
         openTabs: s.openTabs.map((t) =>

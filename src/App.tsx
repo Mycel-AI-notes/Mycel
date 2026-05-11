@@ -14,6 +14,7 @@ import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
 import { Logo } from '@/components/brand/Logo';
+import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   register,
@@ -164,6 +165,8 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-1">
+          <LockBadge />
+
           <button
             onClick={() => createQuickNote()}
             className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"

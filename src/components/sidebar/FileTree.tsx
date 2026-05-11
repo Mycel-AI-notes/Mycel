@@ -12,11 +12,15 @@ import {
   Pencil,
   Library,
   Zap,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
 import { useVaultStore } from '@/stores/vault';
+import { useCryptoStore } from '@/stores/crypto';
+import { stripNoteExt } from '@/lib/note-name';
 
 const DRAG_MIME = 'application/x-mycel-path';
 
@@ -66,12 +70,14 @@ function FileTreeNode({
   const [renameValue, setRenameValue] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
+  const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
   const isQuickRoot = !!entry.is_quick_notes;
   const isLocked = isKB || isQuickRoot;
   const isOpen = entry.is_dir && expanded.has(entry.path);
+  const isEnc = !!entry.is_encrypted;
 
   const toggleExpand = useCallback(() => {
     setExpanded((s) => {
@@ -108,7 +114,7 @@ function FileTreeNode({
   const startRename = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      setRenameValue(entry.is_dir ? entry.name : entry.name.replace(/\.md$/, ''));
+      setRenameValue(entry.is_dir ? entry.name : stripNoteExt(entry.name));
       setRenaming(true);
     },
     [entry],
@@ -116,15 +122,16 @@ function FileTreeNode({
 
   const commitRename = useCallback(() => {
     const trimmed = renameValue.trim();
-    const original = entry.is_dir ? entry.name : entry.name.replace(/\.md$/, '');
+    const original = entry.is_dir ? entry.name : stripNoteExt(entry.name);
     if (trimmed && trimmed !== original) {
       const dir = parentOf(entry.path);
-      const ext = entry.is_dir ? '' : '.md';
-      const newPath = joinPath(dir, `${trimmed.replace(/\.md$/, '')}${ext}`);
+      const ext = entry.is_dir ? '' : isEnc ? '.md.age' : '.md';
+      const base = stripNoteExt(trimmed);
+      const newPath = joinPath(dir, `${base}${ext}`);
       renameNote(entry.path, newPath);
     }
     setRenaming(false);
-  }, [renameValue, entry, renameNote]);
+  }, [renameValue, entry, renameNote, isEnc]);
 
   const handleDragStart = useCallback(
     (e: ReactDragEvent) => {
@@ -217,7 +224,11 @@ function FileTreeNode({
         ) : (
           <>
             <span className="w-3 h-3 shrink-0" />
-            <FileText size={14} className="shrink-0 text-text-muted" />
+            {isEnc ? (
+              <Lock size={14} className="shrink-0 text-accent" />
+            ) : (
+              <FileText size={14} className="shrink-0 text-text-muted" />
+            )}
           </>
         )}
 
@@ -236,7 +247,7 @@ function FileTreeNode({
           />
         ) : (
           <span className="flex-1 truncate">
-            {entry.is_dir ? entry.name : entry.name.replace(/\.md$/, '')}
+            {entry.is_dir ? entry.name : stripNoteExt(entry.name)}
           </span>
         )}
 
@@ -267,6 +278,30 @@ function FileTreeNode({
                   <FolderPlus size={11} />
                 </button>
               </>
+            )}
+            {!entry.is_dir && cryptoStatus?.configured && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    if (isEnc) {
+                      if (!cryptoStatus.unlocked) {
+                        await useCryptoStore.getState().unlock();
+                      }
+                      await decryptNote(entry.path);
+                    } else {
+                      await encryptNote(entry.path);
+                    }
+                    await useVaultStore.getState().refreshTree();
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+                title={isEnc ? 'Decrypt note' : 'Encrypt note'}
+              >
+                {isEnc ? <LockOpen size={11} /> : <Lock size={11} />}
+              </button>
             )}
             <button
               onClick={startRename}
