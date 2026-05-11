@@ -520,6 +520,212 @@ body {
   background-color: transparent !important;
 }
 
+/* Hide gutter for lines under a markdown-table widget (same trick as db). */
+.cm-editor .cm-gutterElement.cm-md-table-fence-gutter,
+.cm-editor .cm-gutterElement.cm-md-table-fence-gutter.cm-activeLineGutter {
+  visibility: hidden !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* ── Editable markdown table widget ───────────────────────────────────── */
+
+.md-table-root {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-surface-0);
+}
+
+.md-table-scroll {
+  overflow-x: auto;
+}
+
+.md-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  table-layout: auto;
+}
+
+.md-table th,
+.md-table td {
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  padding: 0;
+  vertical-align: top;
+  background: transparent;
+}
+
+.md-table th:first-child,
+.md-table td:first-child {
+  border-left: 1px solid var(--color-border);
+}
+
+.md-table thead th {
+  background: var(--color-surface-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.md-table-th {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 80px;
+}
+
+.md-table-col-tools {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px 4px 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.md-table th:hover .md-table-col-tools {
+  opacity: 1;
+}
+
+.md-table-cell-input {
+  flex: 1;
+  width: 100%;
+  min-width: 60px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 6px 10px;
+  resize: none;
+  outline: none;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.md-table-cell-input:focus {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  border-radius: 2px;
+}
+
+.md-table-cell-input::placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.md-table-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.md-table-icon-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.md-table-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.md-table-icon-danger:hover {
+  color: var(--color-error, #d96b6b);
+}
+
+.md-table-add-col-cell {
+  width: 32px;
+  background: var(--color-surface-1);
+}
+
+.md-table-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.md-table-add-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
+}
+
+.md-table-add-btn-wide {
+  justify-content: flex-start;
+}
+
+.md-table-add-row-cell {
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+}
+
+.md-table-row-tools-cell {
+  width: 28px;
+  border-right: none !important;
+  background: var(--color-surface-1);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.md-table-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+}
+
+.md-table-footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.md-table-footer-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.md-table-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Markdown preview styles */
 .prose-mycel {
   max-width: 720px;
