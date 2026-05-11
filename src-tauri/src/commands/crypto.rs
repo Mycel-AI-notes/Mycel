@@ -55,6 +55,18 @@ pub async fn crypto_unlock(
     state.crypto.unlock(&root, &args.passphrase).map_err(err)
 }
 
+/// Upgrade a passphrase-less vault (or change the passphrase on a
+/// double-wrap one) without rotating the X25519 secret. Requires the
+/// vault to be currently unlocked.
+#[tauri::command]
+pub async fn crypto_set_passphrase(
+    args: PassphraseArg,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = vault_root(&state).await?;
+    crypto::set_passphrase(&root, &state.crypto, &args.passphrase).map_err(err)
+}
+
 #[tauri::command]
 pub async fn crypto_lock(state: State<'_, AppState>) -> Result<(), String> {
     state.crypto.lock();

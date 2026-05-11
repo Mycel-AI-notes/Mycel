@@ -67,6 +67,10 @@ pub const CRYPTO_DIR: &str = ".mycel/crypto";
 const IDENTITY_FILE: &str = "identity.age";
 const PUBKEY_FILE: &str = "pubkey.txt";
 const RECIPIENTS_FILE: &str = "recipients.txt";
+/// Marker that survives KEK-unwrap and tells us the inner layer is
+/// passphrase-wrapped. Anything else (notably the raw `AGE-SECRET-KEY-1…`
+/// of legacy single-wrap vaults) is treated as "no passphrase set".
+const PASSPHRASE_INNER_PREFIX: &[u8] = b"age-encryption.org/v1";
 
 /// Suffix that marks an encrypted note. We keep `.md` so existing tooling
 /// (and humans) recognise the underlying type.
@@ -116,6 +120,12 @@ pub struct CryptoStatus {
     pub recipients: usize,
     /// The primary `age1...` recipient string, if configured.
     pub primary_recipient: Option<String>,
+    /// True if the identity file is double-wrapped (KEK + passphrase). When
+    /// false the vault was set up before the passphrase requirement (or with
+    /// it explicitly disabled), so `Lock` doesn't actually protect anything
+    /// — the keyring re-unlocks silently. The UI surfaces this and offers a
+    /// "Set passphrase" CTA.
+    pub has_passphrase: bool,
 }
 
 /// In-process holder of the unwrapped X25519 identity. Created via
@@ -145,17 +155,19 @@ impl Session {
         *self.inner.lock().expect("crypto session poisoned") = None;
     }
 
-    /// Read the wrapped identity from disk and unwrap it. Both factors are
-    /// required:
-    ///   1. the keyring KEK (binds the identity to *this device*), and
-    ///   2. the user passphrase (binds it to *this person* and is what
-    ///      makes `Lock` meaningful — without the passphrase, the keyring
-    ///      alone can't reconstruct the X25519 secret, even though the OS
-    ///      handed it back silently to the current login session).
+    /// Read the wrapped identity from disk and unwrap it.
+    ///
+    /// Two on-disk formats are supported:
+    ///   * **Double-wrap** (`scrypt(KEK, scrypt(passphrase, X25519))`) —
+    ///     created by `setup` when the user chose a passphrase. Unlock
+    ///     needs both factors.
+    ///   * **Single-wrap** (`scrypt(KEK, X25519)`) — legacy / opt-out.
+    ///     Pass an empty `passphrase`; only the KEK is required. The
+    ///     keyring still binds the identity to this device, but `Lock`
+    ///     doesn't actually deny access (the keyring re-unlocks
+    ///     silently). Status reports `has_passphrase: false` so the UI
+    ///     can warn and offer `set_passphrase` to upgrade in place.
     pub fn unlock(&self, vault_root: &Path, passphrase: &str) -> Result<()> {
-        if passphrase.is_empty() {
-            bail!("Passphrase is required to unlock this vault.");
-        }
         let kek = read_wrap_secret(vault_root)?
             .ok_or_else(|| anyhow!("No wrap secret found in keyring for this vault."))?;
         let raw = decrypt_identity_file(vault_root, &kek, passphrase)?;
@@ -226,22 +238,48 @@ pub fn status(vault_root: &Path, session: &Session) -> Result<CryptoStatus> {
     let configured = pubkey.is_some();
     let keyring_present = configured && read_wrap_secret(vault_root)?.is_some();
     let recipients = read_recipients(vault_root)?.len();
+    let has_passphrase = configured && identity_has_passphrase(vault_root).unwrap_or(false);
     Ok(CryptoStatus {
         configured,
         keyring_present,
         unlocked: session.is_unlocked(),
         recipients,
         primary_recipient: pubkey,
+        has_passphrase,
     })
 }
 
-/// Initialise crypto for a vault that doesn't have it yet. Requires a
-/// non-empty user passphrase — the identity file is wrapped twice
-/// (`scrypt(passphrase) → scrypt(keyring-KEK)`), so the KEK alone is not
-/// enough to recover the secret. Returns the public recipient string.
+/// Cheap format probe — reads the outer scrypt envelope's header and
+/// peeks at the inner bytes. Does NOT require an unlocked session and
+/// returns `false` if the file isn't readable for any reason.
+///
+/// Implemented by running the outer KEK-unwrap and sniffing the result:
+/// a double-wrap vault yields another age envelope (begins with
+/// `age-encryption.org/v1`), a legacy single-wrap vault yields the raw
+/// `AGE-SECRET-KEY-1…` text. We accept the scrypt cost (~100 ms) — this
+/// is called once per `status` call, which itself happens on demand.
+fn identity_has_passphrase(vault_root: &Path) -> Result<bool> {
+    let kek = match read_wrap_secret(vault_root)? {
+        Some(k) => k,
+        None => return Ok(false),
+    };
+    let bytes = std::fs::read(identity_path(vault_root))?;
+    let inner = scrypt_unwrap_bytes(&bytes, &kek, true)?;
+    Ok(inner.starts_with(PASSPHRASE_INNER_PREFIX))
+}
+
+/// Initialise crypto for a vault that doesn't have it yet.
+///
+/// Pass an empty `passphrase` to opt out — the identity file is wrapped
+/// only by the keyring KEK. This is faster and friction-free but Lock
+/// won't actually deny access (the OS keyring re-unlocks silently). The
+/// UI surfaces `has_passphrase: false` so the user knows what they
+/// signed up for, and `set_passphrase` upgrades to double-wrap later.
+///
+/// Returns the public recipient string.
 pub fn setup(vault_root: &Path, session: &Session, passphrase: &str) -> Result<String> {
-    if passphrase.len() < 8 {
-        bail!("Passphrase must be at least 8 characters.");
+    if !passphrase.is_empty() && passphrase.len() < 8 {
+        bail!("Passphrase must be at least 8 characters (or empty to skip).");
     }
     let dir = crypto_dir(vault_root);
     std::fs::create_dir_all(&dir).context("Failed to create .mycel/crypto/")?;
@@ -371,29 +409,31 @@ pub fn remove_recipient(vault_root: &Path, recipient: &str) -> Result<()> {
 // age wrap/unwrap (identity file)
 // ---------------------------------------------------------------------------
 
-/// Wrap raw X25519 secret in two scrypt envelopes.
+/// Wrap raw X25519 secret in one or two scrypt envelopes.
 ///
-/// Layered as `scrypt(passphrase, scrypt(kek, raw))`:
-///   * The **inner** envelope is keyed by the user passphrase. The
-///     passphrase is never persisted — without it, neither the file on
-///     disk nor the keyring can reconstruct the X25519 secret.
-///   * The **outer** envelope is keyed by the keyring KEK. It ties the
-///     identity to *this device's* OS keyring, so stealing only the
-///     vault folder (e.g. from a sync repo) is useless without keyring
-///     access on the target machine.
+/// With a non-empty passphrase: `scrypt(kek, scrypt(passphrase, raw))`.
+/// The **inner** envelope is keyed by the user passphrase (never
+/// persisted), the **outer** by the keyring KEK (binds to this device).
 ///
-/// Only the outer envelope is armored. Both layers are tiny so the cost
-/// is dominated by scrypt (≈100 ms × 2 on unlock — acceptable for a
-/// once-per-session prompt).
+/// With an empty passphrase: `scrypt(kek, raw)` — single-wrap. Faster
+/// and one less thing to remember, but Lock provides no protection
+/// from someone at this device since the OS keyring re-unlocks
+/// silently. Status surfaces this; the UI offers `set_passphrase` to
+/// upgrade later without rotating the X25519 secret.
+///
+/// Only the outer envelope is armored so the file round-trips through
+/// Git as text.
 fn encrypt_identity_file(
     vault_root: &Path,
     raw_identity: &str,
     kek: &str,
     passphrase: &str,
 ) -> Result<()> {
-    // Inner: passphrase-keyed scrypt envelope (unarmored binary).
-    let inner = scrypt_wrap_bytes(raw_identity.as_bytes(), passphrase, false)?;
-    // Outer: KEK-keyed scrypt envelope, armored for git-friendliness.
+    let inner: Vec<u8> = if passphrase.is_empty() {
+        raw_identity.as_bytes().to_vec()
+    } else {
+        scrypt_wrap_bytes(raw_identity.as_bytes(), passphrase, false)?
+    };
     let outer = scrypt_wrap_bytes(&inner, kek, true)?;
     std::fs::write(identity_path(vault_root), outer)
         .context("Failed to write identity.age")?;
@@ -408,19 +448,53 @@ fn decrypt_identity_file(
     let bytes = std::fs::read(identity_path(vault_root))
         .context("Failed to read identity.age — is crypto configured?")?;
     // Outer: KEK. A failure here means the keyring secret doesn't match
-    // — usually a vault copied between devices.
+    // — usually a vault copied between devices without keyring transfer.
     let inner = scrypt_unwrap_bytes(&bytes, kek, true)
         .map_err(|e| anyhow!("Keyring secret rejected the identity file: {e}"))?;
-    // Inner: passphrase. A failure here is the *expected* path for
-    // wrong-passphrase attempts — surface a clear message.
-    let raw_bytes = scrypt_unwrap_bytes(&inner, passphrase, false)
-        .map_err(|_| anyhow!("Wrong passphrase."))?;
+
+    // Sniff the inner bytes. A double-wrap vault yields another age
+    // envelope (begins with `age-encryption.org/v1`). A single-wrap
+    // vault yields the raw X25519 secret directly.
+    let needs_passphrase = inner.starts_with(PASSPHRASE_INNER_PREFIX);
+
+    let raw_bytes = if needs_passphrase {
+        if passphrase.is_empty() {
+            bail!("This vault is protected with a passphrase. Enter it to unlock.");
+        }
+        scrypt_unwrap_bytes(&inner, passphrase, false)
+            .map_err(|_| anyhow!("Wrong passphrase."))?
+    } else {
+        // Single-wrap: ignore any passphrase the caller passed and return
+        // the raw secret directly.
+        inner
+    };
+
     let mut out = Zeroizing::new(String::new());
     out.push_str(
         std::str::from_utf8(&raw_bytes)
             .map_err(|e| anyhow!("Decrypted identity is not valid UTF-8: {e}"))?,
     );
     Ok(out)
+}
+
+/// Upgrade a legacy single-wrap identity to double-wrap by adding a
+/// passphrase. The X25519 secret is preserved — existing `.md.age`
+/// notes keep working. Requires the session to be unlocked.
+pub fn set_passphrase(
+    vault_root: &Path,
+    session: &Session,
+    new_passphrase: &str,
+) -> Result<()> {
+    if new_passphrase.len() < 8 {
+        bail!("Passphrase must be at least 8 characters.");
+    }
+    let kek = read_wrap_secret(vault_root)?
+        .ok_or_else(|| anyhow!("No wrap secret in keyring — cannot re-wrap identity."))?;
+    session.with_identity(|id| {
+        let raw = id.to_string().expose_secret().to_string();
+        encrypt_identity_file(vault_root, &raw, &kek, new_passphrase)?;
+        Ok(())
+    })
 }
 
 fn scrypt_wrap_bytes(plaintext: &[u8], passphrase: &str, armored: bool) -> Result<Vec<u8>> {
@@ -566,6 +640,47 @@ mod tests {
         assert!(decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "wrong").is_err());
         // Wrong KEK fails even with right passphrase — proves outer wrap is real.
         assert!(decrypt_identity_file(dir.path(), "different-kek", "correct horse battery").is_err());
+        // Empty passphrase on a passphrase-protected file: rejected with a
+        // clear message instead of decoding garbage.
+        assert!(decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "").is_err());
+    }
+
+    #[test]
+    fn legacy_single_wrap_still_unlocks() {
+        // Vault set up before the passphrase requirement: identity wrapped
+        // with KEK only. Passphrase argument must be ignored.
+        let id = x25519::Identity::generate();
+        let raw = id.to_string().expose_secret().to_string();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-secret", "").unwrap();
+
+        // Unlock with empty passphrase succeeds.
+        let got = decrypt_identity_file(dir.path(), "kek-secret", "").unwrap();
+        assert_eq!(got.trim(), raw.trim());
+        // Garbage passphrase is ignored when the file is single-wrap.
+        let got2 = decrypt_identity_file(dir.path(), "kek-secret", "whatever").unwrap();
+        assert_eq!(got2.trim(), raw.trim());
+    }
+
+    #[test]
+    fn set_passphrase_upgrades_legacy_in_place() {
+        let id = x25519::Identity::generate();
+        let raw = id.to_string().expose_secret().to_string();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
+        // Start as legacy single-wrap.
+        encrypt_identity_file(dir.path(), &raw, "kek-x", "").unwrap();
+
+        // Re-wrap with passphrase using the helper directly (mirrors what
+        // `set_passphrase` does, minus the keyring/session plumbing the
+        // unit test environment lacks).
+        encrypt_identity_file(dir.path(), &raw, "kek-x", "new-passphrase").unwrap();
+        // Now empty passphrase no longer works.
+        assert!(decrypt_identity_file(dir.path(), "kek-x", "").is_err());
+        // The new passphrase does.
+        let got = decrypt_identity_file(dir.path(), "kek-x", "new-passphrase").unwrap();
+        assert_eq!(got.trim(), raw.trim());
     }
 
     #[test]

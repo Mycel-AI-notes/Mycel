@@ -75,6 +75,7 @@ pub fn run() {
             commands::crypto::crypto_status,
             commands::crypto::crypto_setup,
             commands::crypto::crypto_unlock,
+            commands::crypto::crypto_set_passphrase,
             commands::crypto::crypto_lock,
             commands::crypto::crypto_reset,
             commands::crypto::crypto_list_recipients,

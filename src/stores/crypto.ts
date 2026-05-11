@@ -20,6 +20,9 @@ interface CryptoState {
   refresh: () => Promise<void>;
   setup: (passphrase: string) => Promise<string>;
   unlock: (passphrase: string) => Promise<void>;
+  /** Upgrade a passphrase-less vault, or rotate the passphrase. The
+   *  X25519 secret is preserved — existing `.md.age` notes keep working. */
+  setPassphrase: (passphrase: string) => Promise<void>;
   lock: () => Promise<void>;
   reset: () => Promise<void>;
   listRecipients: () => Promise<string[]>;
@@ -74,6 +77,13 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
 
   unlock: async (passphrase) => {
     await run(set, () => invoke<void>('crypto_unlock', { args: { passphrase } }));
+    await get().refresh();
+  },
+
+  setPassphrase: async (passphrase) => {
+    await run(set, () =>
+      invoke<void>('crypto_set_passphrase', { args: { passphrase } }),
+    );
     await get().refresh();
   },
 

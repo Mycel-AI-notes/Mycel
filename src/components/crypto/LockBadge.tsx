@@ -34,8 +34,15 @@ export function LockBadge() {
   if (status?.configured) {
     if (status.unlocked) {
       icon = <LockOpen size={14} />;
-      label = 'Encryption: unlocked';
-      tone = 'text-accent hover:text-accent';
+      // Without a passphrase Lock is decorative — show a warning tone so
+      // the user notices that the green-padlock UX they expect isn't here.
+      if (status.has_passphrase) {
+        label = 'Encryption: unlocked';
+        tone = 'text-accent hover:text-accent';
+      } else {
+        label = 'Encryption: unlocked (no passphrase — Lock is decorative)';
+        tone = 'text-warning hover:text-warning';
+      }
     } else {
       icon = <Lock size={14} />;
       label = 'Encryption: locked — click to unlock';
@@ -128,25 +135,30 @@ function Header({ onClose }: { onClose: () => void }) {
 function SetupView({ onDone }: { onDone: () => void }) {
   const setup = useCryptoStore((s) => s.setup);
   const busy = useCryptoStore((s) => s.busy);
+  const [usePassphrase, setUsePassphrase] = useState(true);
   const [pass, setPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [show, setShow] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
 
-  const canSubmit = pass.length >= 8 && pass === confirmPass && !busy;
+  const canSubmit = usePassphrase
+    ? pass.length >= 8 && pass === confirmPass && !busy
+    : !busy;
 
   const submit = async () => {
     setWarn(null);
-    if (pass.length < 8) {
-      setWarn('Passphrase must be at least 8 characters.');
-      return;
-    }
-    if (pass !== confirmPass) {
-      setWarn('Passphrases don’t match.');
-      return;
+    if (usePassphrase) {
+      if (pass.length < 8) {
+        setWarn('Passphrase must be at least 8 characters.');
+        return;
+      }
+      if (pass !== confirmPass) {
+        setWarn('Passphrases don’t match.');
+        return;
+      }
     }
     try {
-      await setup(pass);
+      await setup(usePassphrase ? pass : '');
       onDone();
     } catch {
       // store sets error
@@ -157,34 +169,58 @@ function SetupView({ onDone }: { onDone: () => void }) {
     <div className="space-y-3">
       <p className="text-xs text-text-secondary leading-relaxed">
         Generate an X25519 identity for this vault. The identity is wrapped
-        twice: once with a random secret in your OS keyring (binds it to
-        this device), and once with a passphrase that <strong>you</strong>{' '}
-        choose — without that passphrase, nothing on this machine can
-        decrypt your notes.
-      </p>
-      <p className="text-[11px] text-warning bg-warning/10 p-2 rounded leading-relaxed">
-        <strong>Write the passphrase down.</strong> There is no recovery —
-        if you forget it, encrypted notes are gone.
+        with a random secret in your OS keyring (binds it to this device).
+        Optionally, add a passphrase as a second factor — without it,
+        anyone with this device can re-unlock the vault by clicking Unlock,
+        because the OS keyring hands the wrap secret back silently.
       </p>
 
-      <PasswordField
-        value={pass}
-        onChange={setPass}
-        show={show}
-        onToggle={() => setShow((s) => !s)}
-        placeholder="Passphrase (≥8 chars)"
-        autoFocus
-      />
-      <PasswordField
-        value={confirmPass}
-        onChange={setConfirmPass}
-        show={show}
-        onToggle={() => setShow((s) => !s)}
-        placeholder="Confirm passphrase"
-        onEnter={canSubmit ? submit : undefined}
-      />
+      <label className="flex items-start gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={usePassphrase}
+          onChange={(e) => setUsePassphrase(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="text-text-primary">Protect with a passphrase</span>{' '}
+          <span className="text-text-muted">
+            (recommended — makes Lock actually deny access)
+          </span>
+        </span>
+      </label>
 
-      {warn && <p className="text-[11px] text-error">{warn}</p>}
+      {usePassphrase ? (
+        <>
+          <p className="text-[11px] text-warning bg-warning/10 p-2 rounded leading-relaxed">
+            <strong>Write the passphrase down.</strong> There is no recovery
+            — if you forget it, encrypted notes are gone.
+          </p>
+          <PasswordField
+            value={pass}
+            onChange={setPass}
+            show={show}
+            onToggle={() => setShow((s) => !s)}
+            placeholder="Passphrase (≥8 chars)"
+            autoFocus
+          />
+          <PasswordField
+            value={confirmPass}
+            onChange={setConfirmPass}
+            show={show}
+            onToggle={() => setShow((s) => !s)}
+            placeholder="Confirm passphrase"
+            onEnter={canSubmit ? submit : undefined}
+          />
+          {warn && <p className="text-[11px] text-error">{warn}</p>}
+        </>
+      ) : (
+        <p className="text-[11px] text-warning bg-warning/10 p-2 rounded leading-relaxed">
+          Without a passphrase, encrypted notes still survive a leak of the
+          vault folder, but anyone with access to <em>this</em> machine can
+          re-unlock the vault in one click. You can add a passphrase later.
+        </p>
+      )}
 
       <button
         onClick={submit}
@@ -204,19 +240,46 @@ function SetupView({ onDone }: { onDone: () => void }) {
 function UnlockView({ onDone }: { onDone: () => void }) {
   const unlock = useCryptoStore((s) => s.unlock);
   const busy = useCryptoStore((s) => s.busy);
+  const hasPassphrase = useCryptoStore(
+    (s) => s.status?.has_passphrase ?? false,
+  );
   const [pass, setPass] = useState('');
   const [show, setShow] = useState(false);
 
   const submit = async () => {
-    if (!pass || busy) return;
+    if (busy) return;
+    if (hasPassphrase && !pass) return;
     try {
-      await unlock(pass);
+      await unlock(hasPassphrase ? pass : '');
       onDone();
     } catch {
       // store sets error — keep the dialog open so the user can retry
       setPass('');
     }
   };
+
+  if (!hasPassphrase) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-text-secondary leading-relaxed">
+          This vault is unlocked with the OS keyring only — no passphrase
+          was set. Click Unlock to load the X25519 secret into memory.
+        </p>
+        <p className="text-[11px] text-warning bg-warning/10 p-2 rounded leading-relaxed">
+          Heads up: anyone with access to this device can also click
+          Unlock. Open the panel after unlocking to <em>Set a passphrase</em>
+          {' '}if you want Lock to actually deny access.
+        </p>
+        <button
+          onClick={submit}
+          disabled={busy}
+          className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep disabled:opacity-50"
+        >
+          {busy ? 'Unlocking…' : 'Unlock'}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -259,7 +322,9 @@ function ManageView() {
   const busy = useCryptoStore((s) => s.busy);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [newRecipient, setNewRecipient] = useState('');
+  const [showSetPass, setShowSetPass] = useState(false);
   const primary = status?.primary_recipient ?? null;
+  const hasPassphrase = status?.has_passphrase ?? false;
   const minutes = Math.round(AUTO_LOCK_IDLE_MS / 60_000);
 
   useEffect(() => {
@@ -278,8 +343,35 @@ function ManageView() {
             <code className="text-[10px] break-all">{primary}</code>
           </Row>
         )}
+        <Row label="Passphrase">
+          {hasPassphrase ? (
+            <span className="text-accent">set</span>
+          ) : (
+            <span className="text-warning">not set</span>
+          )}
+        </Row>
         <Row label="Auto-lock">after {minutes} min idle</Row>
       </div>
+
+      {!hasPassphrase && (
+        <div className="p-2 rounded bg-warning/10 text-[11px] text-warning leading-relaxed space-y-2">
+          <p>
+            <strong>Lock provides no protection on this device.</strong>{' '}
+            Anyone here can re-unlock with one click, because the OS
+            keyring hands back the wrap secret silently. Add a passphrase
+            to require it on every Unlock.
+          </p>
+          {!showSetPass && (
+            <button
+              onClick={() => setShowSetPass(true)}
+              className="px-2 py-1 rounded border border-warning/40 hover:bg-warning/15"
+            >
+              Set passphrase
+            </button>
+          )}
+          {showSetPass && <SetPassphraseForm onDone={() => setShowSetPass(false)} />}
+        </div>
+      )}
 
       <button
         onClick={() => lock().catch(() => undefined)}
@@ -375,6 +467,70 @@ function ManageView() {
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
+
+function SetPassphraseForm({ onDone }: { onDone: () => void }) {
+  const setPassphrase = useCryptoStore((s) => s.setPassphrase);
+  const busy = useCryptoStore((s) => s.busy);
+  const [pass, setPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [show, setShow] = useState(false);
+  const [warn, setWarn] = useState<string | null>(null);
+
+  const submit = async () => {
+    setWarn(null);
+    if (pass.length < 8) {
+      setWarn('Passphrase must be at least 8 characters.');
+      return;
+    }
+    if (pass !== confirmPass) {
+      setWarn('Passphrases don’t match.');
+      return;
+    }
+    try {
+      await setPassphrase(pass);
+      onDone();
+    } catch {
+      // surfaced by store.error
+    }
+  };
+
+  return (
+    <div className="space-y-2 mt-1">
+      <PasswordField
+        value={pass}
+        onChange={setPass}
+        show={show}
+        onToggle={() => setShow((s) => !s)}
+        placeholder="New passphrase (≥8 chars)"
+        autoFocus
+      />
+      <PasswordField
+        value={confirmPass}
+        onChange={setConfirmPass}
+        show={show}
+        onToggle={() => setShow((s) => !s)}
+        placeholder="Confirm passphrase"
+        onEnter={submit}
+      />
+      {warn && <p className="text-error">{warn}</p>}
+      <div className="flex gap-1">
+        <button
+          onClick={submit}
+          disabled={busy}
+          className="flex-1 py-1 rounded bg-warning/20 text-warning text-xs font-medium hover:bg-warning/30 disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save passphrase'}
+        </button>
+        <button
+          onClick={onDone}
+          className="px-2 py-1 text-text-muted hover:text-text-primary text-xs"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

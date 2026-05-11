@@ -58,6 +58,10 @@ export interface CryptoStatus {
   unlocked: boolean;
   recipients: number;
   primary_recipient: string | null;
+  /** True when the identity is double-wrapped (KEK + passphrase). When
+   *  false the OS keyring alone can re-unlock, so Lock doesn't really
+   *  deny access — UI shows a warning + "Set passphrase" CTA. */
+  has_passphrase: boolean;
 }
 
 export interface Tab {
