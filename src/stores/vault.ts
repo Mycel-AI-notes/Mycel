@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, Tab } from '@/types';
+import { reparseBody } from '@/lib/markdown-parse';
 import { useRecentVaults } from './recentVaults';
 
 interface VaultState {
@@ -9,6 +10,8 @@ interface VaultState {
   openTabs: Tab[];
   activeTabPath: string | null;
   noteCache: Map<string, Note>;
+  /** Bumped on every persisted save — lets panels (backlinks, etc.) refetch. */
+  vaultVersion: number;
 
   openVault: (path: string) => Promise<void>;
   closeVault: () => void;
@@ -18,6 +21,9 @@ interface VaultState {
   setActiveTab: (path: string) => void;
   pinTab: (path: string) => void;
   saveNote: (path: string, content: string) => Promise<void>;
+  /** Update in-memory cached content + reparsed body so live panels (outline,
+   *  tags, wikilinks) reflect what the user is typing without hitting disk. */
+  updateNoteLive: (path: string, content: string) => void;
   createNote: (path: string) => Promise<void>;
   createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
@@ -31,10 +37,18 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   openTabs: [],
   activeTabPath: null,
   noteCache: new Map(),
+  vaultVersion: 0,
 
   openVault: async (path) => {
     const tree = await invoke<FileEntry[]>('vault_open', { path });
-    set({ vaultRoot: path, fileTree: tree, openTabs: [], activeTabPath: null, noteCache: new Map() });
+    set({
+      vaultRoot: path,
+      fileTree: tree,
+      openTabs: [],
+      activeTabPath: null,
+      noteCache: new Map(),
+      vaultVersion: 0,
+    });
     useRecentVaults.getState().push(path);
   },
 
@@ -45,6 +59,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       openTabs: [],
       activeTabPath: null,
       noteCache: new Map(),
+      vaultVersion: 0,
     });
     useRecentVaults.getState().clearLastOpened();
   },
@@ -60,9 +75,15 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
     if (!noteCache.has(path)) {
       const note = await invoke<Note>('note_read', { path });
+      // Overlay TS-side reparse so headings carry line numbers from the get-go
+      // (the Rust parser uses pulldown_cmark events without positions).
+      const reparsed = reparseBody(note.content);
       set((s) => {
         const next = new Map(s.noteCache);
-        next.set(path, note);
+        next.set(path, {
+          ...note,
+          parsed: { ...note.parsed, ...reparsed },
+        });
         return { noteCache: next };
       });
     }
@@ -125,17 +146,44 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   saveNote: async (path, content) => {
     await invoke('note_save', { path, content });
-    const parsed = get().noteCache.get(path)?.parsed;
+    const existing = get().noteCache.get(path)?.parsed;
+    const reparsed = reparseBody(content);
     set((s) => {
       const next = new Map(s.noteCache);
-      if (parsed) next.set(path, { path, content, parsed });
+      next.set(path, {
+        path,
+        content,
+        parsed: {
+          // Frontmatter meta is preserved from the previously parsed snapshot;
+          // a deeper re-parse happens server-side on next note_read.
+          meta: existing?.meta ?? { tags: [] },
+          ...reparsed,
+        },
+      });
       return {
         noteCache: next,
+        vaultVersion: s.vaultVersion + 1,
         // Saving promotes a preview tab to a regular pinned tab.
         openTabs: s.openTabs.map((t) =>
           t.path === path ? { ...t, isDirty: false, isPreview: false } : t,
         ),
       };
+    });
+  },
+
+  updateNoteLive: (path, content) => {
+    const cached = get().noteCache.get(path);
+    if (!cached) return;
+    if (cached.content === content) return;
+    const reparsed = reparseBody(content);
+    set((s) => {
+      const next = new Map(s.noteCache);
+      next.set(path, {
+        path,
+        content,
+        parsed: { meta: cached.parsed.meta, ...reparsed },
+      });
+      return { noteCache: next };
     });
   },
 

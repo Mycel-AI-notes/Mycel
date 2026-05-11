@@ -19,6 +19,7 @@ import { wikilinkAutocomplete } from './WikilinkCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
+import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 
@@ -120,7 +121,8 @@ interface Props {
 export function MarkdownEditor({ path }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { noteCache, saveNote, markDirty } = useVaultStore();
+  const { noteCache, saveNote, markDirty, updateNoteLive } = useVaultStore();
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDark = document.documentElement.classList.contains('dark');
   const [pickerOpen, setPickerOpen] = useState(false);
   const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
@@ -184,6 +186,10 @@ export function MarkdownEditor({ path }: Props) {
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
+            if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+            liveTimerRef.current = setTimeout(() => {
+              updateNoteLive(path, update.state.doc.toString());
+            }, 150);
           }
         }),
         EditorView.lineWrapping,
@@ -192,8 +198,14 @@ export function MarkdownEditor({ path }: Props) {
 
     const view = new EditorView({ state, parent: editorRef.current });
     viewRef.current = view;
+    registerEditorView(path, view);
 
     return () => {
+      if (liveTimerRef.current) {
+        clearTimeout(liveTimerRef.current);
+        liveTimerRef.current = null;
+      }
+      unregisterEditorView(path, view);
       view.destroy();
       viewRef.current = null;
     };
