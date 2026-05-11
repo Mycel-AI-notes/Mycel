@@ -83,6 +83,7 @@ pub fn run() {
             commands::crypto::crypto_remove_recipient,
             commands::crypto::note_encrypt,
             commands::crypto::note_decrypt,
+            commands::crypto::note_read_ciphertext,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

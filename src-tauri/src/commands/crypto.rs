@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use zeroize::Zeroizing;
 
 use crate::core::crypto::{
     self, decrypted_path_for, encrypted_path_for, is_encrypted_path, CryptoStatus,
@@ -43,7 +44,8 @@ pub async fn crypto_setup(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = vault_root(&state).await?;
-    crypto::setup(&root, &state.crypto, &args.passphrase).map_err(err)
+    let pass = Zeroizing::new(args.passphrase);
+    crypto::setup(&root, &state.crypto, &pass).map_err(err)
 }
 
 #[tauri::command]
@@ -52,7 +54,11 @@ pub async fn crypto_unlock(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
-    state.crypto.unlock(&root, &args.passphrase).map_err(err)
+    // Wrap the passphrase in `Zeroizing` so the heap buffer holding it is
+    // overwritten when this scope exits, rather than left lying around until
+    // the allocator decides to reuse the memory.
+    let pass = Zeroizing::new(args.passphrase);
+    state.crypto.unlock(&root, &pass).map_err(err)
 }
 
 /// Upgrade a passphrase-less vault (or change the passphrase on a
@@ -64,7 +70,8 @@ pub async fn crypto_set_passphrase(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
-    crypto::set_passphrase(&root, &state.crypto, &args.passphrase).map_err(err)
+    let pass = Zeroizing::new(args.passphrase);
+    crypto::set_passphrase(&root, &state.crypto, &pass).map_err(err)
 }
 
 #[tauri::command]
@@ -170,4 +177,23 @@ pub async fn note_decrypt(
         std::fs::remove_file(&src).map_err(|e| e.to_string())?;
     }
     Ok(EncryptResult { path: new_rel })
+}
+
+/// Return the on-disk ciphertext of an encrypted note as UTF-8 text.
+/// This is the armored age blob (`-----BEGIN AGE ENCRYPTED FILE-----…`)
+/// and does NOT require the vault to be unlocked — it's just a file
+/// read. The UI uses this to show "this is what GitHub / iCloud actually
+/// see for this note".
+#[tauri::command]
+pub async fn note_read_ciphertext(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if !is_encrypted_path(&path) {
+        return Err("Note is not encrypted".into());
+    }
+    let root = vault_root(&state).await?;
+    let bytes =
+        std::fs::read(root.join(&path)).map_err(|e| format!("Failed to read {path}: {e}"))?;
+    String::from_utf8(bytes).map_err(|e| format!("File is not valid UTF-8: {e}"))
 }

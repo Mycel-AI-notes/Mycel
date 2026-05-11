@@ -391,6 +391,49 @@ function ManageView() {
 
       <details>
         <summary className="text-xs text-text-muted cursor-pointer select-none">
+          How this works
+        </summary>
+        <div className="mt-2 space-y-2 text-[11px] text-text-secondary leading-relaxed">
+          <p>
+            <strong className="text-text-primary">Identity.</strong> Each
+            vault has one X25519 keypair. The public key encrypts; the
+            private key decrypts. The private key never touches disk in
+            the clear — it lives in{' '}
+            <code className="px-1 bg-surface-2 rounded">
+              .mycel/crypto/identity.age
+            </code>
+            , wrapped with your passphrase (inner) and a random secret
+            from the OS keyring (outer). Both factors are needed to
+            unlock.
+          </p>
+          <p>
+            <strong className="text-text-primary">Notes.</strong> Each{' '}
+            <code className="px-1 bg-surface-2 rounded">*.md.age</code>{' '}
+            file is an ASCII-armored age envelope encrypted to every
+            recipient in{' '}
+            <code className="px-1 bg-surface-2 rounded">recipients.txt</code>
+            . Git / iCloud / Syncthing see only the armored bytes — no
+            different from any other text blob.
+          </p>
+          <p>
+            <strong className="text-text-primary">Lock.</strong> Wipes
+            the unlocked X25519 from memory, closes every open{' '}
+            <code className="px-1 bg-surface-2 rounded">.md.age</code>{' '}
+            tab, and drops cached plaintext bodies. Triggers manually
+            (button above), automatically after {minutes}m idle, and on
+            vault switch.
+          </p>
+          <p>
+            <strong className="text-text-primary">Passphrase storage.</strong>{' '}
+            None. Typed at unlock, fed through scrypt, then dropped. Not
+            in the keyring, not in any config file, not in logs. Lose
+            it and the vault is unrecoverable.
+          </p>
+        </div>
+      </details>
+
+      <details>
+        <summary className="text-xs text-text-muted cursor-pointer select-none">
           <KeyRound size={11} className="inline mr-1 -mt-0.5" />
           Manage recipients ({recipients.length})
         </summary>

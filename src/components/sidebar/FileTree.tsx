@@ -288,6 +288,15 @@ function FileTreeNode({
                       if (!cryptoStatus.unlocked) {
                         throw new Error('Vault is locked. Click the shield icon to unlock first.');
                       }
+                      // Decrypt = file goes back to plaintext on disk.
+                      // Subsequent saves and the next sync will push it
+                      // unencrypted. Make the user confirm.
+                      const stem = entry.name.replace(/\.md\.age$/, '');
+                      const ok = await confirm(
+                        'This note will be written to disk as plaintext from now on, and the next sync will push it unencrypted to GitHub. The current encrypted blob is being replaced. Continue?',
+                        { title: `Decrypt "${stem}"?`, kind: 'warning' },
+                      );
+                      if (!ok) return;
                       await decryptNote(entry.path);
                     } else {
                       // Warn before encrypting an existing plaintext note —

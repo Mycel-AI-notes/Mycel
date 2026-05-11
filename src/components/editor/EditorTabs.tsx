@@ -1,7 +1,8 @@
-import { X } from 'lucide-react';
+import { X, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
 import { PulseSpore } from '@/components/brand/Spore';
+import { isEncryptedPath } from '@/lib/note-name';
 
 export function EditorTabs() {
   const { openTabs, activeTabPath, setActiveTab, closeTab, pinTab } = useVaultStore();
@@ -24,6 +25,13 @@ export function EditorTabs() {
             tab.isPreview && 'italic',
           )}
         >
+          {isEncryptedPath(tab.path) && (
+            <Lock
+              size={10}
+              className="shrink-0 text-accent"
+              aria-label="Encrypted note"
+            />
+          )}
           <span className="truncate">{tab.title}</span>
           {tab.isDirty && (
             <PulseSpore size={9} className="text-accent" />
