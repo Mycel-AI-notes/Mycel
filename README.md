@@ -261,4 +261,4 @@ If any of these are blocking you, open an issue and say so — that's the best s
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE).
+GNU Affero General Public License v3.0 — see [`LICENSE`](./LICENSE).
