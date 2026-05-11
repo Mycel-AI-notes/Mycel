@@ -89,7 +89,17 @@ fn default_kb_database() -> Database {
         "default".into(),
         ViewDef {
             label: "All files".into(),
-            visible_columns: vec!["title".into(), "tags".into(), "status".into(), "notes".into()],
+            // `__page__` is the built-in file-link pseudo-column (see
+            // PAGE_COL in src/types/database.ts) — putting it first means
+            // every freshly activated KB shows the .md filename right
+            // next to the user-editable Title/Tags/Status/Notes columns.
+            visible_columns: vec![
+                "__page__".into(),
+                "title".into(),
+                "tags".into(),
+                "status".into(),
+                "notes".into(),
+            ],
             sort: None,
             filters: Vec::new(),
             row_limit: None,
