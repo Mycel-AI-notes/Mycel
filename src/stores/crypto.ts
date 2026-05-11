@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import type { CryptoStatus } from '@/types';
+import type { CryptoStatus, ReencryptReport } from '@/types';
 import { useVaultStore } from './vault';
 
 /** Auto-lock kicks in after this many ms of user inactivity while the
@@ -46,6 +46,9 @@ interface CryptoState {
   removeRecipient: (recipient: string) => Promise<void>;
   encryptNote: (path: string) => Promise<string>;
   decryptNote: (path: string) => Promise<string>;
+  /** Walk the vault and rewrap every `.md.age` to the current
+   *  recipients.txt set. Used after a new device joins. */
+  reencryptAll: () => Promise<ReencryptReport>;
   clearError: () => void;
   reset_for_new_vault: () => void;
   /** Called by `useAutoLock` on user input. */
@@ -154,6 +157,10 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   decryptNote: async (path) => {
     const r = await run(set, () => invoke<{ path: string }>('note_decrypt', { path }));
     return r.path;
+  },
+
+  reencryptAll: async () => {
+    return run(set, () => invoke<ReencryptReport>('crypto_reencrypt_all'));
   },
 
   clearError: () => set({ error: null }),

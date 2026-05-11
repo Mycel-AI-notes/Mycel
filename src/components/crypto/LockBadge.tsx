@@ -34,10 +34,13 @@ export function LockBadge() {
   let label = 'Encryption: off';
   let tone = 'text-text-muted hover:text-text-primary';
   if (status?.configured) {
-    if (status.unlocked) {
+    if (!status.local_identity_present) {
+      // Vault was set up on another device; this one hasn't joined yet.
+      icon = <Shield size={14} />;
+      label = 'This device has not joined the vault — click to set up';
+      tone = 'text-accent hover:text-accent';
+    } else if (status.unlocked) {
       icon = <LockOpen size={14} />;
-      // Without a passphrase Lock is decorative — show a warning tone so
-      // the user notices that the green-padlock UX they expect isn't here.
       if (status.has_passphrase) {
         label = 'Encryption: unlocked';
         tone = 'text-accent hover:text-accent';
@@ -96,7 +99,9 @@ function CryptoPanel({ onClose }: { onClose: () => void }) {
       >
         <Header onClose={onClose} />
         {!status?.configured ? (
-          <SetupView onDone={onClose} />
+          <SetupView onDone={onClose} mode="fresh" />
+        ) : !status.local_identity_present ? (
+          <SetupView onDone={onClose} mode="join" />
         ) : !status.unlocked ? (
           <UnlockView onDone={onClose} />
         ) : (
@@ -134,7 +139,13 @@ function Header({ onClose }: { onClose: () => void }) {
 // Setup
 // ---------------------------------------------------------------------------
 
-function SetupView({ onDone }: { onDone: () => void }) {
+function SetupView({
+  onDone,
+  mode,
+}: {
+  onDone: () => void;
+  mode: 'fresh' | 'join';
+}) {
   const setup = useCryptoStore((s) => s.setup);
   const busy = useCryptoStore((s) => s.busy);
   const [usePassphrase, setUsePassphrase] = useState(true);
@@ -169,13 +180,33 @@ function SetupView({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-text-secondary leading-relaxed">
-        Generate an X25519 identity for this vault. The identity is wrapped
-        with a random secret in your OS keyring (binds it to this device).
-        Optionally, add a passphrase as a second factor — without it,
-        anyone with this device can re-unlock the vault by clicking Unlock,
-        because the OS keyring hands the wrap secret back silently.
-      </p>
+      {mode === 'join' ? (
+        <>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            This vault was set up on another device. Generate a new
+            identity for <strong>this</strong> device — its public key
+            will be added to{' '}
+            <code className="px-1 bg-surface-2 rounded">recipients.txt</code>{' '}
+            so notes you encrypt here are readable on both machines.
+          </p>
+          <p className="text-[11px] text-text-muted bg-surface-2 p-2 rounded leading-relaxed">
+            Existing <code className="px-1 bg-surface-2 rounded">.md.age</code>{' '}
+            notes (created before this device joined) will NOT be readable
+            here until the original device runs{' '}
+            <strong>Re-encrypt all to current recipients</strong> and
+            pushes. Your own passphrase is independent of theirs — it
+            only protects unlock on this device.
+          </p>
+        </>
+      ) : (
+        <p className="text-xs text-text-secondary leading-relaxed">
+          Generate an X25519 identity for this vault. The identity is wrapped
+          with a random secret in your OS keyring (binds it to this device).
+          Optionally, add a passphrase as a second factor — without it,
+          anyone with this device can re-unlock the vault by clicking Unlock,
+          because the OS keyring hands the wrap secret back silently.
+        </p>
+      )}
 
       <label className="flex items-start gap-2 text-xs cursor-pointer">
         <input
@@ -229,7 +260,11 @@ function SetupView({ onDone }: { onDone: () => void }) {
         disabled={!canSubmit}
         className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep disabled:opacity-50"
       >
-        {busy ? 'Generating identity…' : 'Set up encryption'}
+        {busy
+          ? 'Generating identity…'
+          : mode === 'join'
+            ? 'Join this device'
+            : 'Set up encryption'}
       </button>
     </div>
   );
@@ -321,10 +356,15 @@ function ManageView() {
   const addRecipient = useCryptoStore((s) => s.addRecipient);
   const removeRecipient = useCryptoStore((s) => s.removeRecipient);
   const listRecipients = useCryptoStore((s) => s.listRecipients);
+  const reencryptAll = useCryptoStore((s) => s.reencryptAll);
   const busy = useCryptoStore((s) => s.busy);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [newRecipient, setNewRecipient] = useState('');
   const [showSetPass, setShowSetPass] = useState(false);
+  const [reencryptReport, setReencryptReport] = useState<{
+    rewrapped: number;
+    skipped: number;
+  } | null>(null);
   const primary = status?.primary_recipient ?? null;
   const hasPassphrase = status?.has_passphrase ?? false;
   const minutes = Math.round(AUTO_LOCK_IDLE_MS / 60_000);
@@ -486,6 +526,45 @@ function ManageView() {
               Add
             </button>
           </div>
+        </div>
+      </details>
+
+      <details>
+        <summary className="text-xs text-text-muted cursor-pointer select-none">
+          Re-encrypt all notes
+        </summary>
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] text-text-muted leading-relaxed">
+            Rewrap every <code className="px-1 bg-surface-2 rounded">.md.age</code>{' '}
+            in this vault so it includes the current recipient set. Useful
+            after a new device joined — until you run this, notes
+            created before the join stay readable only on the device that
+            wrote them.
+          </p>
+          {reencryptReport && (
+            <p className="text-[11px] text-accent bg-accent/10 p-2 rounded">
+              Done. Rewrapped {reencryptReport.rewrapped} note
+              {reencryptReport.rewrapped === 1 ? '' : 's'}
+              {reencryptReport.skipped > 0
+                ? `, skipped ${reencryptReport.skipped} (not decryptable by this device).`
+                : '.'}
+            </p>
+          )}
+          <button
+            onClick={async () => {
+              setReencryptReport(null);
+              try {
+                const r = await reencryptAll();
+                setReencryptReport({ rewrapped: r.rewrapped, skipped: r.skipped });
+              } catch {
+                // store sets error
+              }
+            }}
+            disabled={busy}
+            className="w-full py-1 rounded border border-border text-text-primary text-xs hover:bg-surface-hover disabled:opacity-50"
+          >
+            {busy ? 'Re-encrypting…' : 'Re-encrypt all to current recipients'}
+          </button>
         </div>
       </details>
 

@@ -179,6 +179,17 @@ pub async fn note_decrypt(
     Ok(EncryptResult { path: new_rel })
 }
 
+/// Rewrap every `*.md.age` in the vault so it includes the current
+/// recipient set. Used after a new device joins so notes that predate
+/// the join become readable on it. Requires the vault to be unlocked.
+#[tauri::command]
+pub async fn crypto_reencrypt_all(
+    state: State<'_, AppState>,
+) -> Result<crate::core::crypto::ReencryptReport, String> {
+    let root = vault_root(&state).await?;
+    crypto::reencrypt_all(&root, &state.crypto).map_err(err)
+}
+
 /// Return the on-disk ciphertext of an encrypted note as UTF-8 text.
 /// This is the armored age blob (`-----BEGIN AGE ENCRYPTED FILE-----…`)
 /// and does NOT require the vault to be unlocked — it's just a file

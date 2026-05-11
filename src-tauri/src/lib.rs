@@ -84,6 +84,7 @@ pub fn run() {
             commands::crypto::note_encrypt,
             commands::crypto::note_decrypt,
             commands::crypto::note_read_ciphertext,
+            commands::crypto::crypto_reencrypt_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

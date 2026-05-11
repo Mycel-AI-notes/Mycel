@@ -139,30 +139,63 @@ The `.mycel/` folder is reserved for app metadata. Add it to `.gitignore` if you
 
 ### Encrypted notes (`*.md.age`)
 
-Mycel can store individual notes encrypted with [age](https://age-encryption.org).
+Mycel can store individual notes encrypted with [age](https://age-encryption.org)
+— the file-format spec by [Filippo Valsorda](https://filippo.io) and
+[Ben Cartwright-Cox](https://github.com/Benjojo12), implemented for Rust as
+[`rage`/`age`](https://github.com/str4d/rage) by [@str4d](https://github.com/str4d).
+We use the Rust crate; the on-disk format is plain age, so files round-trip
+through the upstream `age` CLI and any other age-compatible tool.
+
 Click the shield icon in the toolbar to set up encryption. You'll be asked
-for a passphrase (≥ 8 chars). Mycel generates an X25519 identity and wraps
-it **twice**: with your passphrase (inner layer) *and* with a random 256-bit
-secret in your OS keyring (outer layer, hardware-backed via Secure Enclave
-/ TPM where available). Both factors are required to unlock — the keyring
-alone is not enough, so a per-Lock passphrase prompt is meaningful. The
-vault auto-locks after 5 minutes of idle. Layout under `.mycel/crypto/`:
+for a passphrase (≥ 8 chars, optional but strongly recommended). Mycel
+generates a fresh X25519 keypair for **this device** and wraps the secret
+half **twice**: with your passphrase (inner, scrypt) *and* with a random
+256-bit key-encryption-key (KEK) in your OS keyring (outer, scrypt). Both
+factors are required to unlock — the keyring alone is not enough, so a
+per-Lock passphrase prompt actually means something.
+
+The vault auto-locks after 5 minutes of idle. Layout under `.mycel/crypto/`:
 
 ```
 .mycel/crypto/
-├── identity.age      # age scrypt-wrapped X25519 secret (the wrap passphrase
-│                     # lives in the OS keyring, never on disk)
-├── pubkey.txt        # primary age recipient (so notes can be encrypted
-│                     # while the vault is locked)
-└── recipients.txt    # all recipients allowed to decrypt — add another
-│                     # device's pubkey or a paper recovery key here
+├── recipients.txt        # COMMITTED. All public keys allowed to decrypt
+│                         # notes in this vault. One device = one pubkey.
+├── .gitignore            # COMMITTED. Excludes the per-device files below.
+├── local-identity.age    # GITIGNORED. This device's X25519 secret,
+│                         # double-wrapped (scrypt(KEK, scrypt(passphrase, …))).
+└── local-pubkey.txt      # GITIGNORED. This device's public key.
 ```
 
-The plaintext X25519 secret never touches disk and is wiped on lock or vault
-switch. To encrypt an existing note, hover its row in the sidebar and click
-the lock icon — the file becomes `<name>.md.age`. Encrypted notes still
-appear in the file tree (with a lock icon) and sync through GitHub as
+The plaintext X25519 secret never touches disk and is wiped on lock, vault
+switch, or after 5 minutes idle. To encrypt an existing note, hover its row
+in the sidebar and click the lock icon — the file becomes `<name>.md.age`.
+Encrypted notes still appear in the file tree (with a lock badge), open
+through the encrypted-note banner inspector, and sync through GitHub as
 opaque ASCII-armored blobs.
+
+#### Adding a second device
+
+1. **Device 1** runs Set up. `recipients.txt` is created with pubkey-1; the
+   wrapped identity stays on device 1 only.
+2. Sync to GitHub. Device 2 clones.
+3. **Device 2** opens the vault — the shield icon shows
+   "This device has not joined the vault". Click → choose a passphrase
+   (your own, independent of device 1's) → generates pubkey-2, appends to
+   `recipients.txt`.
+4. Sync. Now both devices' pubkeys are in `recipients.txt`; any note
+   encrypted **going forward** is readable on both.
+5. For notes encrypted **before** device 2 joined: on device 1, open the
+   shield panel → *Re-encrypt all notes* → re-wraps every `.md.age` to
+   the current recipient set. Push. Device 2 pulls and can now read them.
+
+#### What we don't do (yet)
+
+- True Secure Enclave / TPM keys (the KEK lives in the OS keyring, which
+  is hardware-backed on Mac/Win but the API still returns the secret to
+  the process — biometric ACLs on the keyring entry would close that gap).
+- Post-quantum hybrid wrapping. `recipients.txt` accepts any age recipient
+  string, so a future `age-plugin-pq` recipient drops in without code
+  changes. FIDO2 / YubiKey arrive the same way via the age plugin system.
 
 **Encryption is not retroactive.** Clicking the lock icon on an existing
 `.md` note only protects writes *from that moment on*. Anything you saved
@@ -171,10 +204,6 @@ Machine / Windows backups, in the GitHub remote. Mycel will warn you on
 the encrypt action, but the only way to guarantee a note never hits the
 disk plaintext is to create it inside a vault you intend to keep encrypted
 and click the lock icon **before** typing anything sensitive.
-
-Post-quantum hybrid encryption is on the roadmap: once an `age-plugin-pq`
-recipient ships, it can be added to `recipients.txt` without code changes
-here. FIDO2/YubiKey support arrives the same way via the age plugin system.
 
 ### Note format
 

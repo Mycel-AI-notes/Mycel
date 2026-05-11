@@ -53,15 +53,24 @@ export interface Note {
 }
 
 export interface CryptoStatus {
+  /** `recipients.txt` is non-empty — some device has set up crypto in
+   *  this vault. May or may not be this device. */
   configured: boolean;
+  /** This device has its own identity (wrapped file + matching KEK in
+   *  the OS keyring). If false but `configured` is true, the vault was
+   *  set up on another device and the user needs to Join. */
+  local_identity_present: boolean;
   keyring_present: boolean;
   unlocked: boolean;
   recipients: number;
   primary_recipient: string | null;
-  /** True when the identity is double-wrapped (KEK + passphrase). When
-   *  false the OS keyring alone can re-unlock, so Lock doesn't really
-   *  deny access — UI shows a warning + "Set passphrase" CTA. */
   has_passphrase: boolean;
+}
+
+export interface ReencryptReport {
+  rewrapped: number;
+  skipped: number;
+  failed_paths: string[];
 }
 
 export interface Tab {
