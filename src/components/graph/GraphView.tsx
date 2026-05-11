@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { clsx } from 'clsx';
 import {
   forceCenter,
   forceCollide,
@@ -10,7 +11,17 @@ import {
   forceY,
   type Simulation,
 } from 'd3-force';
-import { X, ZoomIn, ZoomOut, Maximize2, RotateCcw } from 'lucide-react';
+import {
+  Folder,
+  Globe,
+  Hash,
+  Link2,
+  Maximize2,
+  RotateCcw,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { TagSearch } from '@/components/search/TagSearch';
@@ -81,6 +92,12 @@ export function GraphView({ onClose }: Props) {
   const [hover, setHover] = useState<SimNode | null>(null);
   const [tagQuery, setTagQuery] = useState<string | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
+  const [show, setShow] = useState({
+    wiki: true,
+    tags: true,
+    domains: true,
+    folders: true,
+  });
   const [, force] = useState(0); // tick re-render trigger
   const { openNote } = useVaultStore();
 
@@ -107,41 +124,33 @@ export function GraphView({ onClose }: Props) {
     const nodes: SimNode[] = [];
     const links: SimLink[] = [];
 
-    // Folder nodes. The synthetic root ('') is intentionally not rendered —
-    // it carries no semantic meaning and only leaves top-level folders with
-    // a phantom edge into the void. Top-level folders therefore float free.
     const folderNoteCount = new Map<string, number>();
     for (const n of data.notes) {
       folderNoteCount.set(n.folder, (folderNoteCount.get(n.folder) ?? 0) + 1);
     }
-    for (const f of data.folders) {
-      if (f.path === '') continue;
-      const noteCount = folderNoteCount.get(f.path) ?? 0;
-      nodes.push({
-        id: `folder:${f.path}`,
-        kind: 'folder',
-        label: f.name,
-        group: f.parent ?? '',
-        r: 9 + Math.min(8, Math.sqrt(noteCount) * 2.4),
-      });
+    // Folder nodes (synthetic root '' is intentionally not rendered).
+    if (show.folders) {
+      for (const f of data.folders) {
+        if (f.path === '') continue;
+        const noteCount = folderNoteCount.get(f.path) ?? 0;
+        nodes.push({
+          id: `folder:${f.path}`,
+          kind: 'folder',
+          label: f.name,
+          group: f.parent ?? '',
+          r: 9 + Math.min(8, Math.sqrt(noteCount) * 2.4),
+        });
+      }
+      for (const f of data.folders) {
+        if (f.parent === null || f.parent === '') continue;
+        links.push({
+          source: `folder:${f.parent}`,
+          target: `folder:${f.path}`,
+          kind: 'contain',
+        });
+      }
     }
 
-    // Folder→subfolder containment edges. Skip edges pointing at the
-    // synthetic root ('') since we no longer render it as a node — d3-force
-    // throws on unresolved IDs and the whole simulation dies silently.
-    for (const f of data.folders) {
-      if (f.parent === null || f.parent === '') continue;
-      links.push({
-        source: `folder:${f.parent}`,
-        target: `folder:${f.path}`,
-        kind: 'contain',
-      });
-    }
-
-    // Note nodes + folder→note edges. Notes that live in the vault root
-    // (n.folder === '') get no containment edge — there's no folder node
-    // to attach them to. They float free, pulled by their tags / wiki
-    // links / domains.
     for (const n of data.notes) {
       nodes.push({
         id: `note:${n.path}`,
@@ -150,7 +159,7 @@ export function GraphView({ onClose }: Props) {
         group: n.folder,
         r: 6,
       });
-      if (n.folder !== '') {
+      if (show.folders && n.folder !== '') {
         links.push({
           source: `folder:${n.folder}`,
           target: `note:${n.path}`,
@@ -159,58 +168,59 @@ export function GraphView({ onClose }: Props) {
       }
     }
 
-    // Wiki edges (note↔note).
-    for (const e of data.wiki_edges) {
-      links.push({
-        source: `note:${e.from}`,
-        target: `note:${e.to}`,
-        kind: 'wiki',
-      });
+    if (show.wiki) {
+      for (const e of data.wiki_edges) {
+        links.push({
+          source: `note:${e.from}`,
+          target: `note:${e.to}`,
+          kind: 'wiki',
+        });
+      }
     }
 
-    // Tag nodes float freely — no hub. Each tag is pulled toward the notes
-    // that reference it, so shared-tag notes form a visible cluster
-    // around the tag with short, readable edges.
-    for (const tg of data.tags) {
-      nodes.push({
-        id: `tag:${tg.tag}`,
-        kind: 'tag',
-        label: `#${tg.tag}`,
-        group: TAG_GROUP,
-        r: 4 + Math.min(7, Math.sqrt(tg.count) * 1.4),
-        count: tg.count,
-      });
-    }
-    for (const e of data.tag_edges) {
-      links.push({
-        source: `note:${e.from}`,
-        target: `tag:${e.tag}`,
-        kind: 'tag',
-      });
+    if (show.tags) {
+      for (const tg of data.tags) {
+        nodes.push({
+          id: `tag:${tg.tag}`,
+          kind: 'tag',
+          label: `#${tg.tag}`,
+          group: TAG_GROUP,
+          r: 4 + Math.min(7, Math.sqrt(tg.count) * 1.4),
+          count: tg.count,
+        });
+      }
+      for (const e of data.tag_edges) {
+        links.push({
+          source: `note:${e.from}`,
+          target: `tag:${e.tag}`,
+          kind: 'tag',
+        });
+      }
     }
 
-    // Domains: same treatment — drift to whoever cites them.
-    for (const d of data.domains) {
-      nodes.push({
-        id: `domain:${d.domain}`,
-        kind: 'domain',
-        label: d.domain,
-        group: EXTERNAL_GROUP,
-        r: 6 + Math.min(8, Math.sqrt(d.count) * 1.6),
-        count: d.count,
-      });
-    }
-    for (const e of data.external_edges) {
-      links.push({
-        source: `note:${e.from}`,
-        target: `domain:${e.domain}`,
-        kind: 'external',
-        weight: e.count,
-      });
+    if (show.domains) {
+      for (const d of data.domains) {
+        nodes.push({
+          id: `domain:${d.domain}`,
+          kind: 'domain',
+          label: d.domain,
+          group: EXTERNAL_GROUP,
+          r: 6 + Math.min(8, Math.sqrt(d.count) * 1.6),
+          count: d.count,
+        });
+      }
+      for (const e of data.external_edges) {
+        links.push({
+          source: `note:${e.from}`,
+          target: `domain:${e.domain}`,
+          kind: 'external',
+          weight: e.count,
+        });
+      }
     }
 
     return { nodes, links };
-  }, [data]);
+  }, [data, show]);
 
   // ── Force simulation ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -668,6 +678,29 @@ export function GraphView({ onClose }: Props) {
           )}
         </div>
         <div className="flex items-center gap-1">
+          {(
+            [
+              { key: 'wiki', label: 'Backlinks', icon: Link2 },
+              { key: 'tags', label: 'Tags', icon: Hash },
+              { key: 'domains', label: 'Domains', icon: Globe },
+              { key: 'folders', label: 'Folders', icon: Folder },
+            ] as const
+          ).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setShow((s) => ({ ...s, [key]: !s[key] }))}
+              className={clsx(
+                'p-1 rounded transition-colors',
+                show[key]
+                  ? 'text-text-primary bg-surface-2 hover:bg-surface-hover'
+                  : 'text-text-muted/60 hover:text-text-secondary hover:bg-surface-hover line-through',
+              )}
+              title={`${show[key] ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+          <span className="w-px h-4 bg-border mx-1" />
           <button
             onClick={() =>
               setTransform((t) => ({ ...t, k: Math.min(5, t.k * 1.2) }))
