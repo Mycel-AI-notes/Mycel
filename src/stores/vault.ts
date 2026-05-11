@@ -19,6 +19,11 @@ interface VaultState {
   openVault: (path: string) => Promise<void>;
   closeVault: () => void;
   refreshTree: () => Promise<void>;
+  /** Re-read the file tree and re-fetch content for every non-dirty open
+   *  tab. Called after a sync pull so the UI reflects what other devices
+   *  wrote, and so the editor isn't holding a stale base that the next
+   *  save would write back over the freshly pulled content. */
+  reloadFromDisk: () => Promise<void>;
   openNote: (path: string, options?: { preview?: boolean }) => Promise<void>;
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
@@ -89,6 +94,59 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   refreshTree: async () => {
     const tree = await invoke<FileEntry[]>('vault_get_tree');
     set({ fileTree: tree });
+  },
+
+  reloadFromDisk: async () => {
+    const tree = await invoke<FileEntry[]>('vault_get_tree');
+    const { openTabs, noteCache } = get();
+
+    const existingFiles = new Set<string>();
+    const walk = (entries: FileEntry[]) => {
+      for (const e of entries) {
+        if (!e.is_dir) existingFiles.add(e.path);
+        if (e.children) walk(e.children);
+      }
+    };
+    walk(tree);
+
+    const nextCache = new Map<string, Note>();
+    for (const tab of openTabs) {
+      if (tab.isDirty) {
+        const cached = noteCache.get(tab.path);
+        if (cached) nextCache.set(tab.path, cached);
+        continue;
+      }
+      if (!existingFiles.has(tab.path)) continue;
+      try {
+        const note = await invoke<Note>('note_read', { path: tab.path });
+        const reparsed = reparseBody(note.content);
+        nextCache.set(tab.path, {
+          ...note,
+          parsed: { ...note.parsed, ...reparsed },
+        });
+      } catch {
+        // Encrypted note while vault is locked, or transient read error.
+        // Leave it out of the cache — openNote will re-read on demand.
+      }
+    }
+
+    set((s) => {
+      const filteredTabs = s.openTabs.filter(
+        (t) => t.isDirty || existingFiles.has(t.path),
+      );
+      const activeStillOpen = filteredTabs.some(
+        (t) => t.path === s.activeTabPath,
+      );
+      return {
+        fileTree: tree,
+        noteCache: nextCache,
+        openTabs: filteredTabs,
+        activeTabPath: activeStillOpen
+          ? s.activeTabPath
+          : filteredTabs[0]?.path ?? null,
+        vaultVersion: s.vaultVersion + 1,
+      };
+    });
   },
 
   openNote: async (path, options) => {

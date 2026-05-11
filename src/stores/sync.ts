@@ -103,6 +103,18 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({ lastOutcome: outcome });
       const status = await invoke<SyncStatus>('sync_status');
       set({ status });
+      // If the pull touched the working tree (or surfaced conflicts the user
+      // needs to see), drop the in-memory note cache and re-read open tabs
+      // from disk. Without this the editor keeps showing the stale base and
+      // the next save silently overwrites the freshly pulled content.
+      if (
+        outcome.kind === 'pulled' ||
+        outcome.kind === 'pulled_and_pushed' ||
+        outcome.kind === 'conflict'
+      ) {
+        const { useVaultStore } = await import('./vault');
+        await useVaultStore.getState().reloadFromDisk();
+      }
       return outcome;
     } catch (e) {
       set({ lastError: String(e) });
