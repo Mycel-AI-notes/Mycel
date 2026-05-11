@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, AlertTriangle, ExternalLink, FilePlus } from 'lucide-react';
+import {
+  ClipboardList,
+  Plus,
+  AlertTriangle,
+  ExternalLink,
+  FilePlus,
+  Zap,
+  Hourglass,
+  Check,
+  FileText,
+} from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
 import type { ProjectItem } from '@/types/garden';
@@ -28,8 +38,8 @@ function ProjectRow({ project }: { project: ProjectItem }) {
           <span className="text-text-primary text-sm font-medium truncate">
             {project.title}
           </span>
-          <span className="text-[11px] text-text-muted">
-            ⚡ {liveActions} action{liveActions === 1 ? '' : 's'}
+          <span className="text-[11px] text-text-muted inline-flex items-center gap-1">
+            <Zap size={10} /> {liveActions} action{liveActions === 1 ? '' : 's'}
           </span>
           {isStale && (
             <span title="No next action — review this project" className="text-error">
@@ -43,9 +53,10 @@ function ProjectRow({ project }: { project: ProjectItem }) {
                 e.stopPropagation();
                 openNote(project.page!);
               }}
-              className="text-[11px] text-text-muted hover:text-accent inline-flex items-center gap-0.5"
+              className="text-[11px] text-text-muted hover:text-accent inline-flex items-center"
+              title="Open page"
             >
-              📄
+              <FileText size={11} />
             </span>
           )}
         </div>
@@ -53,8 +64,8 @@ function ProjectRow({ project }: { project: ProjectItem }) {
           <div className="text-xs text-text-muted mt-0.5">{project.outcome}</div>
         )}
         {project.deadline && (
-          <div className="text-[11px] text-amber-500 mt-0.5">
-            ⚠ deadline: {project.deadline}
+          <div className="text-[11px] text-amber-500 mt-0.5 inline-flex items-center gap-1">
+            <AlertTriangle size={10} /> deadline: {project.deadline}
           </div>
         )}
       </div>
@@ -315,7 +326,11 @@ export function ProjectDetailView({ id }: { id: string }) {
                 ]}
                 width={110}
               />
-              {project.deadline && <span className="text-amber-500">⚠ {project.deadline}</span>}
+              {project.deadline && (
+                <span className="text-amber-500 inline-flex items-center gap-1">
+                  <AlertTriangle size={11} /> {project.deadline}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -351,8 +366,8 @@ export function ProjectDetailView({ id }: { id: string }) {
         </div>
 
         <section className="mt-6">
-          <header className="text-xs uppercase tracking-wider text-text-muted mb-1">
-            ⚡ Next Actions ({live.length})
+          <header className="text-xs uppercase tracking-wider text-text-muted mb-1 inline-flex items-center gap-1.5">
+            <Zap size={11} className="text-accent" /> Next Actions ({live.length})
           </header>
           <ul className="flex flex-col">
             {live.map((a) => (
@@ -391,8 +406,8 @@ export function ProjectDetailView({ id }: { id: string }) {
 
         {projWaiting.length > 0 && (
           <section className="mt-6">
-            <header className="text-xs uppercase tracking-wider text-text-muted mb-1">
-              ⏳ Waiting For ({projWaiting.length})
+            <header className="text-xs uppercase tracking-wider text-text-muted mb-1 inline-flex items-center gap-1.5">
+              <Hourglass size={11} /> Waiting For ({projWaiting.length})
             </header>
             <ul className="flex flex-col">
               {projWaiting.map((w) => (
@@ -414,8 +429,8 @@ export function ProjectDetailView({ id }: { id: string }) {
 
         {completed.length > 0 && (
           <section className="mt-6">
-            <header className="text-xs uppercase tracking-wider text-text-muted mb-1">
-              ✓ Completed ({completed.length})
+            <header className="text-xs uppercase tracking-wider text-text-muted mb-1 inline-flex items-center gap-1.5">
+              <Check size={11} className="text-accent" /> Completed ({completed.length})
             </header>
             <ul className="flex flex-col">
               {completed.map((a) => (

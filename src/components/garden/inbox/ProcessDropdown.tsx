@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import {
+  ChevronDown,
+  Zap,
+  ClipboardList,
+  Hourglass,
+  Lightbulb,
+  FileText,
+  Trash2,
+} from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
 import type { InboxItem, ProcessTarget } from '@/types/garden';
 import { Select } from '@/components/ui/Select';
@@ -66,7 +74,7 @@ export function ProcessDropdown({ item }: Props) {
             <ul className="py-1 text-sm">
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover"
+                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
                   onClick={() =>
                     setStage({
                       kind: 'next',
@@ -77,12 +85,12 @@ export function ProcessDropdown({ item }: Props) {
                     })
                   }
                 >
-                  → Next Action
+                  <Zap size={13} className="text-accent" /> Next Action
                 </button>
               </li>
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover"
+                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
                   onClick={() =>
                     setStage({
                       kind: 'project',
@@ -92,28 +100,28 @@ export function ProcessDropdown({ item }: Props) {
                     })
                   }
                 >
-                  → Project
+                  <ClipboardList size={13} className="text-accent-deep" /> Project
                 </button>
               </li>
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover"
+                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
                   onClick={() => setStage({ kind: 'waiting', from: '', project: '' })}
                 >
-                  → Waiting For
+                  <Hourglass size={13} className="text-text-muted" /> Waiting For
                 </button>
               </li>
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover"
+                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
                   onClick={() => setStage({ kind: 'someday', area: areas[0] ?? '' })}
                 >
-                  → Someday
+                  <Lightbulb size={13} className="text-text-muted" /> Someday
                 </button>
               </li>
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover"
+                  className="w-full px-3 py-1.5 text-left hover:bg-surface-hover inline-flex items-center gap-2"
                   onClick={() => {
                     const stem = item.text
                       .replace(/[\\/<>:|"?*\n\r]+/g, ' ')
@@ -122,15 +130,15 @@ export function ProcessDropdown({ item }: Props) {
                     setStage({ kind: 'reference', notePath: `${stem}.md` });
                   }}
                 >
-                  → Reference
+                  <FileText size={13} className="text-text-muted" /> Reference
                 </button>
               </li>
               <li>
                 <button
-                  className="w-full px-3 py-1.5 text-left hover:bg-error/15 text-error"
+                  className="w-full px-3 py-1.5 text-left hover:bg-error/15 text-error inline-flex items-center gap-2"
                   onClick={() => submit({ kind: 'trash' })}
                 >
-                  → Trash
+                  <Trash2 size={13} /> Trash
                 </button>
               </li>
             </ul>
@@ -173,9 +181,9 @@ export function ProcessDropdown({ item }: Props) {
                     onChange={(v) => setStage({ ...stage, energy: v })}
                     options={[
                       { value: '', label: '—' },
-                      { value: 'высокая', label: '🔴 высокая' },
-                      { value: 'средняя', label: '🟡 средняя' },
-                      { value: 'низкая', label: '🟢 низкая' },
+                      { value: 'высокая', label: 'высокая' },
+                      { value: 'средняя', label: 'средняя' },
+                      { value: 'низкая', label: 'низкая' },
                     ]}
                     width="100%"
                   />

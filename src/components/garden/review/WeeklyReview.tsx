@@ -9,6 +9,8 @@ import {
   ClipboardList,
   Lightbulb,
   Plus,
+  ArrowRight,
+  Check,
 } from 'lucide-react';
 import { useGardenStore } from '@/stores/garden';
 import { useVaultStore } from '@/stores/vault';
@@ -98,16 +100,30 @@ export function WeeklyReview() {
     return (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-xl mx-auto text-center">
-          <div className="text-4xl mb-4">✅</div>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-accent/15 text-accent mx-auto mb-4">
+            <Check size={28} />
+          </div>
           <h1 className="text-xl text-text-primary mb-1">Weekly Review Complete</h1>
           <p className="text-text-muted text-sm mb-6">
             {new Date().toLocaleDateString()}
           </p>
-          <div className="text-sm text-text-secondary text-left bg-surface-1 border border-border rounded-md p-4 flex flex-col gap-1">
-            <div>📥 Inbox: {snapshot.inbox} → {finalCounts.inbox}</div>
-            <div>⚡ Open actions: {snapshot.actions_open} → {finalCounts.actions_open}</div>
-            <div>📋 Active projects: {snapshot.projects_active} → {finalCounts.projects_active}</div>
-            <div>💭 Someday: {snapshot.someday} → {finalCounts.someday}</div>
+          <div className="text-sm text-text-secondary text-left bg-surface-1 border border-border rounded-md p-4 flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Inbox size={13} className="text-accent" />
+              Inbox: {snapshot.inbox} → {finalCounts.inbox}
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap size={13} className="text-accent" />
+              Open actions: {snapshot.actions_open} → {finalCounts.actions_open}
+            </div>
+            <div className="flex items-center gap-2">
+              <ClipboardList size={13} className="text-accent-deep" />
+              Active projects: {snapshot.projects_active} → {finalCounts.projects_active}
+            </div>
+            <div className="flex items-center gap-2">
+              <Lightbulb size={13} className="text-text-muted" />
+              Someday: {snapshot.someday} → {finalCounts.someday}
+            </div>
           </div>
           <button
             onClick={() => openGardenTab({ kind: 'actions' }, { preview: false })}
@@ -266,15 +282,18 @@ export function WeeklyReview() {
                   key={s.id}
                   className="flex items-center gap-2 py-1 text-sm border-b border-border"
                 >
-                  <span className="flex-1">💭 {s.text}</span>
+                  <span className="flex-1 inline-flex items-center gap-2">
+                    <Lightbulb size={12} className="text-text-muted" />
+                    {s.text}
+                  </span>
                   <button
                     onClick={async () => {
                       await addProject({ title: s.text });
                       await deleteSomeday(s.id);
                     }}
-                    className="text-[11px] px-1 py-0.5 rounded border border-border text-accent hover:bg-accent/10"
+                    className="text-[11px] px-1 py-0.5 rounded border border-border text-accent hover:bg-accent/10 inline-flex items-center gap-1"
                   >
-                    → Project
+                    <ArrowRight size={10} /> Project
                   </button>
                 </li>
               ))}

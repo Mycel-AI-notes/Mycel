@@ -38,12 +38,12 @@ export function isGardenTabPath(path: string | null | undefined): boolean {
 
 export function gardenTabTitle(view: GardenView): string {
   switch (view.kind) {
-    case 'inbox': return '📥 Inbox';
-    case 'actions': return '⚡ Next Actions';
-    case 'projects': return '📋 Projects';
-    case 'waiting': return '⏳ Waiting For';
-    case 'someday': return '💭 Someday';
-    case 'review': return '🔄 Weekly Review';
-    case 'project-detail': return '📋 Project';
+    case 'inbox': return 'Inbox';
+    case 'actions': return 'Next Actions';
+    case 'projects': return 'Projects';
+    case 'waiting': return 'Waiting For';
+    case 'someday': return 'Someday';
+    case 'review': return 'Weekly Review';
+    case 'project-detail': return 'Project';
   }
 }

@@ -49,7 +49,7 @@ export default function App() {
   useTheme();
   useAutoLock();
 
-  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const gardenEnabled = useUIStore((s) => s.features.garden);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -109,6 +109,14 @@ export default function App() {
         // Cmd+Shift+P — Open Projects.
         e.preventDefault();
         if (vaultRoot) openGardenTab({ kind: 'projects' }, { preview: true });
+      } else if (e.key === 's' || e.key === 'S') {
+        // Cmd+S on a Garden tab pins it — there's no document to save, but
+        // the user expects the same "promote preview to pinned" gesture.
+        // For note tabs CodeMirror's keymap handles save+pin already.
+        if (activeTabPath && activeTabPath.startsWith('garden:')) {
+          e.preventDefault();
+          pinTab(activeTabPath);
+        }
       } else if (gardenEnabled && e.key === '`') {
         // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
         e.preventDefault();
@@ -117,7 +125,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled]);
+  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled, activeTabPath, pinTab]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.

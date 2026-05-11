@@ -76,7 +76,7 @@ export function SomedayView() {
                 key={item.id}
                 className="group flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-hover"
               >
-                <span className="text-text-muted">💭</span>
+                <Lightbulb size={13} className="text-text-muted shrink-0" />
                 <span className="flex-1 text-sm text-text-primary">{item.text}</span>
                 {item.area && (
                   <span className="text-[11px] text-text-muted">{item.area}</span>

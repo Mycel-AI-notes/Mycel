@@ -248,9 +248,9 @@ export function ActionsView() {
             onChange={(v) => setFilters({ energy: v || undefined })}
             options={[
               { value: '', label: 'All energy' },
-              { value: 'высокая', label: '🔴 высокая' },
-              { value: 'средняя', label: '🟡 средняя' },
-              { value: 'низкая', label: '🟢 низкая' },
+              { value: 'высокая', label: 'высокая' },
+              { value: 'средняя', label: 'средняя' },
+              { value: 'низкая', label: 'низкая' },
             ]}
             width={140}
           />
@@ -306,7 +306,9 @@ export function ActionsView() {
         {!hideCompleted && completedToday.length > 0 && (
           <section className="mt-8">
             <header className="flex items-center justify-between text-xs uppercase tracking-wider text-text-muted px-3 py-1 border-b border-border">
-              <span>✓ Completed today</span>
+              <span className="inline-flex items-center gap-1.5">
+                <Check size={11} className="text-accent" /> Completed today
+              </span>
               <span>{completedToday.length}</span>
             </header>
             <ul className="flex flex-col">

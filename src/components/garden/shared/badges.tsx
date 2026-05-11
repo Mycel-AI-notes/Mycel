@@ -1,19 +1,22 @@
 import { clsx } from 'clsx';
+import { FileText, ClipboardList } from 'lucide-react';
+
+const ENERGY_DOT: Record<string, string> = {
+  'высокая': 'bg-rose-500',
+  'средняя': 'bg-amber-500',
+  'низкая': 'bg-emerald-500',
+  high: 'bg-rose-500',
+  medium: 'bg-amber-500',
+  low: 'bg-emerald-500',
+};
 
 export function EnergyBadge({ energy }: { energy?: string | null }) {
   if (!energy) return null;
-  const map: Record<string, string> = {
-    'высокая': '🔴',
-    'средняя': '🟡',
-    'низкая': '🟢',
-    high: '🔴',
-    medium: '🟡',
-    low: '🟢',
-  };
-  const dot = map[energy] ?? '⚪';
+  const dot = ENERGY_DOT[energy] ?? 'bg-text-muted';
   return (
-    <span className="text-[11px] text-text-muted whitespace-nowrap">
-      {dot} {energy}
+    <span className="inline-flex items-center gap-1 text-[11px] text-text-muted whitespace-nowrap">
+      <span className={clsx('w-1.5 h-1.5 rounded-full', dot)} />
+      {energy}
     </span>
   );
 }
@@ -53,8 +56,9 @@ export function ContextChip({
 export function ProjectChip({ name }: { name?: string | null }) {
   if (!name) return null;
   return (
-    <span className="text-[11px] text-accent-deep whitespace-nowrap truncate max-w-[160px]">
-      📋 {name}
+    <span className="inline-flex items-center gap-1 text-[11px] text-accent-deep whitespace-nowrap truncate max-w-[160px]">
+      <ClipboardList size={10} className="shrink-0" />
+      {name}
     </span>
   );
 }
@@ -75,9 +79,10 @@ export function PageLink({
         onOpen?.(page);
       }}
       title={page}
-      className="text-[11px] text-text-muted hover:text-accent inline-flex items-center gap-0.5"
+      className="text-[11px] text-text-muted hover:text-accent inline-flex items-center gap-1"
     >
-      📄 <span className="truncate max-w-[140px]">{page.split('/').pop()}</span>
+      <FileText size={10} className="shrink-0" />
+      <span className="truncate max-w-[140px]">{page.split('/').pop()}</span>
     </button>
   );
 }

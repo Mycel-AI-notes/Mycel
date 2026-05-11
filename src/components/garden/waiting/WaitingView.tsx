@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Hourglass, Plus, AlertTriangle, Trash2, Check } from 'lucide-react';
+import { Hourglass, Plus, AlertTriangle, Trash2, Check, ClipboardList } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useGardenStore } from '@/stores/garden';
 import type { WaitingItem } from '@/types/garden';
@@ -34,7 +34,11 @@ function Row({ item, staleDays }: { item: WaitingItem; staleDays: number }) {
         </div>
         <div className="text-[11px] text-text-muted flex items-center gap-3 mt-0.5">
           {item.from && <span>from {item.from}</span>}
-          {item.project && <span>📋 {item.project}</span>}
+          {item.project && (
+            <span className="inline-flex items-center gap-1">
+              <ClipboardList size={10} /> {item.project}
+            </span>
+          )}
           <span>since {item.since}</span>
           <span>{days} day{days === 1 ? '' : 's'} ago</span>
           {stale && (
@@ -167,7 +171,7 @@ export function WaitingView() {
 
         {live.length === 0 && !adding ? (
           <p className="text-text-muted text-sm py-12 text-center">
-            Not waiting on anyone. 🎉
+            Not waiting on anyone.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -180,7 +184,9 @@ export function WaitingView() {
         {done.length > 0 && (
           <section className="mt-8">
             <header className="text-xs uppercase tracking-wider text-text-muted mb-1">
-              ✓ Done ({done.length})
+              <span className="inline-flex items-center gap-1.5">
+                <Check size={11} className="text-accent" /> Done ({done.length})
+              </span>
             </header>
             <ul className="flex flex-col gap-2">
               {done.map((item) => (

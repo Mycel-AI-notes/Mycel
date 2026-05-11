@@ -1,4 +1,4 @@
-import { X, Inbox, Zap, ClipboardList, Hourglass, Lightbulb, RefreshCw } from 'lucide-react';
+import { X, Inbox, Zap, ClipboardList, Hourglass, Lightbulb, RefreshCw, Sprout } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -15,8 +15,9 @@ export function GardenHelp({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-0">
-          <h2 className="text-text-primary text-sm font-semibold">
-            🌿 How Garden works
+          <h2 className="text-text-primary text-sm font-semibold inline-flex items-center gap-2">
+            <Sprout size={14} className="text-accent" />
+            How Garden works
           </h2>
           <button
             onClick={onClose}
