@@ -2,8 +2,10 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileEntry, Note, Tab } from '@/types';
 import { reparseBody } from '@/lib/markdown-parse';
+import { displayName } from '@/lib/note-name';
 import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
+import { useCryptoStore } from './crypto';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -30,6 +32,10 @@ interface VaultState {
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
   markDirty: (path: string, dirty: boolean) => void;
+  /** Drop every cached body and every open tab for `.md.age` notes.
+   *  Called by the crypto store when the vault is locked so plaintext
+   *  doesn't outlive the in-memory X25519 secret. */
+  purgeEncryptedFromMemory: () => void;
 }
 
 export const useVaultStore = create<VaultState>((set, get) => ({
@@ -59,6 +65,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     if (config?.auto_sync && status?.configured && status.has_token) {
       void useSyncStore.getState().syncNow();
     }
+
+    // The Rust side has cleared any previous vault's crypto session; pull the
+    // fresh per-vault status so the UI shows the correct lock state.
+    useCryptoStore.getState().reset_for_new_vault();
+    void useCryptoStore.getState().refresh();
   },
 
   closeVault: () => {
@@ -72,6 +83,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     });
     useRecentVaults.getState().clearLastOpened();
     useSyncStore.getState().reset();
+    useCryptoStore.getState().reset_for_new_vault();
   },
 
   refreshTree: async () => {
@@ -84,6 +96,21 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const { openTabs, noteCache } = get();
 
     if (!noteCache.has(path)) {
+      // Encrypted note + locked vault: pop the unlock prompt instead of
+      // failing silently. After the user types the passphrase, the
+      // promise resolves and we proceed straight to note_read.
+      if (path.endsWith('.md.age')) {
+        const crypto = useCryptoStore.getState();
+        if (!crypto.status?.unlocked) {
+          try {
+            await crypto.requireUnlock();
+          } catch {
+            // User closed the panel without unlocking. Drop the open
+            // attempt quietly — they explicitly cancelled.
+            return;
+          }
+        }
+      }
       const note = await invoke<Note>('note_read', { path });
       // Overlay TS-side reparse so headings carry line numbers from the get-go
       // (the Rust parser uses pulldown_cmark events without positions).
@@ -100,7 +127,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
     const alreadyOpen = openTabs.find((t) => t.path === path);
     const note = get().noteCache.get(path)!;
-    const title = note.parsed.meta.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+    const title = note.parsed.meta.title ?? displayName(path);
 
     if (alreadyOpen) {
       // If user explicitly re-opens (non-preview) an existing preview tab,
@@ -203,7 +230,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set((s) => {
       const next = new Map(s.noteCache);
       next.set(path, note);
-      const title = path.split('/').pop()?.replace(/\.md$/, '') ?? path;
+      const title = displayName(path);
       return {
         noteCache: next,
         openTabs: [...s.openTabs, { path, title, isDirty: false }],
@@ -231,7 +258,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       const next = new Map(s.noteCache);
       next.delete(oldPath);
       if (note) next.set(newPath, { ...note, path: newPath });
-      const newTitle = newPath.split('/').pop()?.replace(/\.md$/, '') ?? newPath;
+      const newTitle = displayName(newPath);
       return {
         noteCache: next,
         openTabs: s.openTabs.map((t) =>
@@ -247,5 +274,21 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set((s) => ({
       openTabs: s.openTabs.map((t) => (t.path === path ? { ...t, isDirty: dirty } : t)),
     }));
+  },
+
+  purgeEncryptedFromMemory: () => {
+    set((s) => {
+      const nextCache = new Map(s.noteCache);
+      for (const key of Array.from(nextCache.keys())) {
+        if (key.endsWith('.md.age')) nextCache.delete(key);
+      }
+      const nextTabs = s.openTabs.filter((t) => !t.path.endsWith('.md.age'));
+      const activeStillOpen = nextTabs.some((t) => t.path === s.activeTabPath);
+      return {
+        noteCache: nextCache,
+        openTabs: nextTabs,
+        activeTabPath: activeStillOpen ? s.activeTabPath : nextTabs[0]?.path ?? null,
+      };
+    });
   },
 }));

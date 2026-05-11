@@ -33,34 +33,41 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
     let mut notes = Vec::new();
     for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        if path.extension().map(|e| e == "md").unwrap_or(false) {
-            let rel = path
-                .strip_prefix(&vault_root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-
-            // Skip hidden dirs
-            if rel.contains("/.") || rel.starts_with('.') {
-                continue;
-            }
-
-            let stem = path
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            // Try to read title from frontmatter, fallback to stem
-            let title = std::fs::read_to_string(path)
-                .ok()
-                .and_then(|content| {
-                    let parsed = parse_note(&content);
-                    parsed.meta.title
-                })
-                .unwrap_or(stem);
-
-            notes.push(NoteSummary { path: rel, title });
+        let rel = path
+            .strip_prefix(&vault_root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        let is_md = path.extension().map(|e| e == "md").unwrap_or(false);
+        let is_enc = rel.ends_with(".md.age");
+        if !(is_md || is_enc) {
+            continue;
         }
+        // Skip hidden dirs
+        if rel.contains("/.") || rel.starts_with('.') {
+            continue;
+        }
+
+        let stem = if is_enc {
+            // Strip `.md.age` cleanly so the switcher shows the bare name.
+            rel.rsplit('/').next().unwrap_or(&rel).trim_end_matches(".md.age").to_string()
+        } else {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default()
+        };
+
+        let title = if is_enc {
+            // We can't peek inside without unlocking — use the file stem.
+            stem
+        } else {
+            std::fs::read_to_string(path)
+                .ok()
+                .and_then(|content| parse_note(&content).meta.title)
+                .unwrap_or(stem)
+        };
+
+        notes.push(NoteSummary { path: rel, title });
     }
 
     notes.sort_by(|a, b| a.title.cmp(&b.title));

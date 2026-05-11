@@ -7,6 +7,9 @@ use tokio::sync::Mutex;
 pub struct AppState {
     pub vault: Arc<Mutex<Option<core::vault::Vault>>>,
     pub watcher: Arc<Mutex<Option<core::watcher::VaultWatcher>>>,
+    /// In-memory holder of the unwrapped X25519 identity for the open vault.
+    /// Cleared on `crypto_lock` and when the vault closes.
+    pub crypto: Arc<core::crypto::Session>,
 }
 
 impl Default for AppState {
@@ -14,6 +17,7 @@ impl Default for AppState {
         Self {
             vault: Arc::new(Mutex::new(None)),
             watcher: Arc::new(Mutex::new(None)),
+            crypto: Arc::new(core::crypto::Session::default()),
         }
     }
 }
@@ -68,6 +72,19 @@ pub fn run() {
             commands::sync::sync_set_token,
             commands::sync::sync_has_token,
             commands::sync::sync_clear_token,
+            commands::crypto::crypto_status,
+            commands::crypto::crypto_setup,
+            commands::crypto::crypto_unlock,
+            commands::crypto::crypto_set_passphrase,
+            commands::crypto::crypto_lock,
+            commands::crypto::crypto_reset,
+            commands::crypto::crypto_list_recipients,
+            commands::crypto::crypto_add_recipient,
+            commands::crypto::crypto_remove_recipient,
+            commands::crypto::note_encrypt,
+            commands::crypto::note_decrypt,
+            commands::crypto::note_read_ciphertext,
+            commands::crypto::crypto_reencrypt_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

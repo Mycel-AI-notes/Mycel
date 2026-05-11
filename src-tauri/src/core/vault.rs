@@ -35,6 +35,10 @@ pub struct FileEntry {
     /// True for the protected `quick/` capture folder.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_quick_notes: bool,
+    /// True if the file is an encrypted note (`*.md.age`). The UI uses this
+    /// to render a lock icon and route reads through the decrypt path.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_encrypted: bool,
 }
 
 pub struct Vault {
@@ -118,16 +122,22 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
                 children: Some(children),
                 is_knowledge_base: is_kb,
                 is_quick_notes: is_quick,
+                is_encrypted: false,
             });
-        } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-            entries.push(FileEntry {
-                name,
-                path: rel_path,
-                is_dir: false,
-                children: None,
-                is_knowledge_base: false,
-                is_quick_notes: false,
-            });
+        } else {
+            let is_md = path.extension().map(|e| e == "md").unwrap_or(false);
+            let is_age = rel_path.ends_with(".md.age");
+            if is_md || is_age {
+                entries.push(FileEntry {
+                    name,
+                    path: rel_path,
+                    is_dir: false,
+                    children: None,
+                    is_knowledge_base: false,
+                    is_quick_notes: false,
+                    is_encrypted: is_age,
+                });
+            }
         }
     }
 

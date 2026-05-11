@@ -5,6 +5,9 @@ export interface FileEntry {
   children?: FileEntry[];
   is_knowledge_base?: boolean;
   is_quick_notes?: boolean;
+  /** True for `*.md.age` notes — file tree shows a lock icon and reads go
+   *  through the decrypt path. */
+  is_encrypted?: boolean;
 }
 
 export const KNOWLEDGE_BASE_DIR = 'Knowledge Base';
@@ -44,6 +47,30 @@ export interface Note {
   path: string;
   content: string;
   parsed: ParsedNote;
+  /** Backend signals that the on-disk file was `.md.age` and we decrypted
+   *  it. The save round-trip re-encrypts transparently. */
+  encrypted?: boolean;
+}
+
+export interface CryptoStatus {
+  /** `recipients.txt` is non-empty — some device has set up crypto in
+   *  this vault. May or may not be this device. */
+  configured: boolean;
+  /** This device has its own identity (wrapped file + matching KEK in
+   *  the OS keyring). If false but `configured` is true, the vault was
+   *  set up on another device and the user needs to Join. */
+  local_identity_present: boolean;
+  keyring_present: boolean;
+  unlocked: boolean;
+  recipients: number;
+  primary_recipient: string | null;
+  has_passphrase: boolean;
+}
+
+export interface ReencryptReport {
+  rewrapped: number;
+  skipped: number;
+  failed_paths: string[];
 }
 
 export interface Tab {

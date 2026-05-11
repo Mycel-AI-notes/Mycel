@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
+import { useAutoLock } from '@/hooks/useAutoLock';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useRecentVaults } from '@/stores/recentVaults';
@@ -14,6 +15,7 @@ import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
 import { Logo } from '@/components/brand/Logo';
+import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   register,
@@ -38,6 +40,7 @@ const isMac =
 
 export default function App() {
   useTheme();
+  useAutoLock();
 
   const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
@@ -164,6 +167,8 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-1">
+          <LockBadge />
+
           <button
             onClick={() => createQuickNote()}
             className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"

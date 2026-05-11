@@ -107,6 +107,12 @@ npm run tauri build
 - ☁️ **GitHub vault sync** — push and pull your vault to a private GitHub repo. Fine-grained PAT, stored in the **OS keyring** (macOS Keychain / Windows Credential Manager / Secret Service), with auto-sync, manual sync, and clean conflict reporting.
 - 📥 **Clone a remote vault** straight from the vault picker — point Mycel at a repo and it bootstraps the local folder.
 
+### Security
+
+- 🔐 **Per-note encryption** — convert any note to `*.md.age` with one click. Uses [age](https://age-encryption.org) (X25519 + ChaCha20-Poly1305), the modern crypto format by [Filippo Valsorda](https://filippo.io) and [Ben Cartwright-Cox](https://github.com/Benjojo12); we depend on the Rust implementation [`str4d/rage`](https://github.com/str4d/rage). Encrypted notes still sync through GitHub as opaque ASCII-armored blobs.
+- 🗝️ **Hardware-backed identity** — your X25519 secret is wrapped twice: with a passphrase **you** choose (inner) and a random 256-bit KEK in your OS keyring (outer, Secure Enclave on macOS / TPM-backed DPAPI on Windows). Both factors required to unlock. Plaintext key never touches disk, wiped on lock or after **5 min idle**.
+- 👥 **Multi-device** — each device has its own identity. Add another machine's pubkey to `recipients.txt` and notes are readable on both. Existing notes can be re-encrypted to the new recipient set with one button.
+
 ### Look & feel
 
 - 🎨 **Color palettes** — Moss, Amber, Azure, Plum, Coral, Classic. Light/dark/system. Picker in the status bar.
@@ -198,6 +204,62 @@ rows:
   - { name: Wire backend, done: false }
 ```
 ````
+
+### Encrypted notes (`*.md.age`)
+
+Click the shield icon in the toolbar to set up encryption. You'll be asked
+for a passphrase (≥ 8 chars, optional but strongly recommended). Mycel
+generates a fresh X25519 keypair for **this device** and wraps the secret
+half **twice**: with your passphrase (inner, scrypt) *and* with a random
+256-bit key-encryption-key (KEK) in your OS keyring (outer, scrypt). Both
+factors are required to unlock — the keyring alone is not enough, so a
+per-Lock passphrase prompt actually means something.
+
+The vault auto-locks after 5 minutes of idle. Layout under `.mycel/crypto/`:
+
+```
+.mycel/crypto/
+├── recipients.txt        # COMMITTED. All public keys allowed to decrypt
+│                         # notes in this vault. One device = one pubkey.
+├── .gitignore            # COMMITTED. Excludes the per-device files below.
+├── local-identity.age    # GITIGNORED. This device's X25519 secret,
+│                         # double-wrapped (scrypt(KEK, scrypt(passphrase, …))).
+└── local-pubkey.txt      # GITIGNORED. This device's public key.
+```
+
+To encrypt an existing note, hover its row in the sidebar and click the
+lock icon — the file becomes `<name>.md.age`. Encrypted notes still
+appear in the file tree (with a lock badge), get a banner above the
+editor showing what's on disk, and sync through GitHub as opaque
+ASCII-armored blobs.
+
+**Encryption is not retroactive.** Clicking the lock icon on an existing
+`.md` only protects writes *from that moment on*. Anything you saved or
+pushed beforehand is still plaintext in git history, in iCloud / Time
+Machine / Windows backups, in the GitHub remote. Mycel warns you on the
+encrypt action; the only guarantee is to click the lock **before** typing
+anything sensitive.
+
+#### Adding a second device
+
+1. **Device 1** runs Set up. `recipients.txt` is created with pubkey-1.
+2. Sync to GitHub. Device 2 clones.
+3. **Device 2** opens the vault — the shield icon shows "This device has
+   not joined the vault". Click → choose a passphrase (your own,
+   independent of device 1's) → generates pubkey-2, appends to
+   `recipients.txt`.
+4. Sync. Now both pubkeys are in `recipients.txt`; any note encrypted
+   **going forward** is readable on both.
+5. For notes encrypted **before** device 2 joined: on device 1, open the
+   shield panel → *Re-encrypt all notes* → re-wraps every `.md.age` to
+   the current recipient set. Push. Device 2 pulls and reads them.
+
+Credits: the on-disk format is plain age, so encrypted notes round-trip
+through the upstream `age` CLI and any other age-compatible tool. Thanks
+to [Filippo Valsorda](https://filippo.io) and
+[Ben Cartwright-Cox](https://github.com/Benjojo12) for the spec, and to
+[@str4d](https://github.com/str4d) for the Rust implementation we depend
+on.
 
 ---
 
