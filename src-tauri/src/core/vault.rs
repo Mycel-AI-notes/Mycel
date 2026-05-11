@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,10 @@ pub const KNOWLEDGE_BASE_DIR: &str = "Knowledge Base";
 /// target.
 pub const QUICK_NOTES_DIR: &str = "quick";
 
+/// Registry file under `.mycel/` that lists directories the user has
+/// promoted to Knowledge Bases. See `docs/specs/kb-directory.md`.
+pub const KB_DIRS_FILE: &str = "kb-dirs.json";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
     pub version: u32,
@@ -20,6 +25,30 @@ pub struct VaultConfig {
 impl Default for VaultConfig {
     fn default() -> Self {
         Self { version: 1 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KbEntry {
+    /// Vault-relative path of the directory (forward slashes).
+    pub path: String,
+    /// Vault-relative path of the `.db.json` that backs the KB. Lives next to
+    /// the directory, not inside it.
+    pub db: String,
+    /// ISO 8601 timestamp of activation.
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KbDirsConfig {
+    pub version: u32,
+    #[serde(default)]
+    pub dirs: Vec<KbEntry>,
+}
+
+impl Default for KbDirsConfig {
+    fn default() -> Self {
+        Self { version: 1, dirs: Vec::new() }
     }
 }
 
@@ -35,6 +64,11 @@ pub struct FileEntry {
     /// True for the protected `quick/` capture folder.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_quick_notes: bool,
+    /// True if this directory has been promoted to a Knowledge Base via
+    /// `kb_init`. Distinct from `is_knowledge_base` (that one marks the
+    /// single protected root folder named "Knowledge Base").
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_kb_dir: bool,
     /// True if the file is an encrypted note (`*.md.age`). The UI uses this
     /// to render a lock icon and route reads through the decrypt path.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -74,7 +108,10 @@ impl Vault {
     }
 
     pub fn file_tree(&self) -> Result<Vec<FileEntry>> {
-        read_dir_recursive(&self.root, &self.root)
+        let kb_paths = read_kb_dirs(&self.root)
+            .map(|c| c.dirs.into_iter().map(|e| e.path).collect::<HashSet<_>>())
+            .unwrap_or_default();
+        read_dir_recursive(&self.root, &self.root, &kb_paths)
     }
 }
 
@@ -84,7 +121,31 @@ impl Vault {
 /// any extra interaction since they aren't editable as text.
 pub const ATTACHMENTS_DIR: &str = "attachments";
 
-fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
+/// Read the KB registry from `<root>/.mycel/kb-dirs.json`. Missing file or
+/// parse error → return `None`; callers should treat that as an empty
+/// registry rather than failing the whole tree scan.
+pub fn read_kb_dirs(root: &Path) -> Option<KbDirsConfig> {
+    let path = root.join(".mycel").join(KB_DIRS_FILE);
+    let raw = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// Write the KB registry to `<root>/.mycel/kb-dirs.json`. Creates `.mycel/`
+/// if it does not exist.
+pub fn write_kb_dirs(root: &Path, config: &KbDirsConfig) -> Result<()> {
+    let mycel_dir = root.join(".mycel");
+    std::fs::create_dir_all(&mycel_dir).context("Failed to create .mycel directory")?;
+    let path = mycel_dir.join(KB_DIRS_FILE);
+    let json = serde_json::to_string_pretty(config)?;
+    std::fs::write(&path, json).context("Failed to write kb-dirs.json")?;
+    Ok(())
+}
+
+fn read_dir_recursive(
+    dir: &Path,
+    vault_root: &Path,
+    kb_paths: &HashSet<String>,
+) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
 
     let mut read = std::fs::read_dir(dir)?
@@ -125,9 +186,17 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
         }
 
         if path.is_dir() {
-            let children = read_dir_recursive(&path, vault_root)?;
+            let mut children = read_dir_recursive(&path, vault_root, kb_paths)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
             let is_quick = rel_path == QUICK_NOTES_DIR;
+            let is_kb_dir = kb_paths.contains(&rel_path);
+            // For KB-promoted directories, the `index.md` is the KB page
+            // itself — surfaced by clicking the folder. Hide it from the
+            // file tree so it doesn't clutter the sidebar.
+            if is_kb_dir {
+                let index_rel = format!("{rel_path}/index.md");
+                children.retain(|c| c.path != index_rel);
+            }
             entries.push(FileEntry {
                 name,
                 path: rel_path,
@@ -135,6 +204,7 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
                 children: Some(children),
                 is_knowledge_base: is_kb,
                 is_quick_notes: is_quick,
+                is_kb_dir,
                 is_encrypted: false,
             });
         } else {
@@ -148,6 +218,7 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
                     children: None,
                     is_knowledge_base: false,
                     is_quick_notes: false,
+                    is_kb_dir: false,
                     is_encrypted: is_age,
                 });
             }

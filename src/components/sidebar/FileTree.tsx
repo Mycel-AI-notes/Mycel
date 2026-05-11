@@ -14,13 +14,16 @@ import {
   Zap,
   Lock,
   LockOpen,
+  Database as DatabaseIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
+import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
+import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
 const DRAG_MIME = 'application/x-mycel-path';
 
@@ -51,6 +54,7 @@ interface NodeProps {
   commitCreate: () => void;
   cancelCreate: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  openKbMenu: (x: number, y: number, entry: FileEntry) => void;
 }
 
 function FileTreeNode({
@@ -65,6 +69,7 @@ function FileTreeNode({
   commitCreate,
   cancelCreate,
   inputRef,
+  openKbMenu,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -74,6 +79,7 @@ function FileTreeNode({
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
+  const isKbDir = !!entry.is_kb_dir;
   const isQuickRoot = !!entry.is_quick_notes;
   const isLocked = isKB || isQuickRoot;
   const isOpen = entry.is_dir && expanded.has(entry.path);
@@ -92,7 +98,13 @@ function FileTreeNode({
 
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
-      toggleExpand();
+      // KB-promoted folders open their index.md on plain click; the chevron
+      // still toggles the tree independently (see chevron handler below).
+      if (isKbDir) {
+        openNote(`${entry.path}/index.md`, { preview: true });
+      } else {
+        toggleExpand();
+      }
       return;
     }
     if (isAttachmentPath(entry.path)) {
@@ -103,7 +115,27 @@ function FileTreeNode({
       return;
     }
     openNote(entry.path, { preview: true });
-  }, [entry, openNote, openImageTab, toggleExpand]);
+  }, [entry, isKbDir, openNote, openImageTab, toggleExpand]);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      // KB context menu is folder-only and only suppresses the WebView's
+      // default menu for those folders. Files keep the native menu so users
+      // still get "Inspect Element" while debugging.
+      if (!entry.is_dir || isLocked) return;
+      // Folders nested inside the protected `Knowledge Base/` (or `quick/`)
+      // roots can't be promoted to KBs — that territory already belongs to
+      // the database-page mechanism. Fall through to the native menu.
+      const insideProtected =
+        entry.path.startsWith(`${KNOWLEDGE_BASE_DIR}/`) ||
+        entry.path.startsWith(`${QUICK_NOTES_DIR}/`);
+      if (insideProtected) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openKbMenu(e.clientX, e.clientY, entry);
+    },
+    [entry, isLocked, openKbMenu],
+  );
 
   const handleDoubleClick = useCallback(() => {
     if (!entry.is_dir) {
@@ -209,10 +241,21 @@ function FileTreeNode({
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
       >
         {entry.is_dir ? (
           <>
-            <span className="w-3 h-3 shrink-0 text-text-muted">
+            <span
+              className="w-3 h-3 shrink-0 text-text-muted cursor-pointer"
+              onClick={(e) => {
+                // KB folders use the main row click for "open index"; the
+                // chevron remains the only way to expand/collapse the tree.
+                if (isKbDir) {
+                  e.stopPropagation();
+                  toggleExpand();
+                }
+              }}
+            >
               {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </span>
             {isKB ? (
@@ -224,6 +267,8 @@ function FileTreeNode({
                 fill="currentColor"
                 strokeWidth={1.5}
               />
+            ) : isKbDir ? (
+              <DatabaseIcon size={14} className="shrink-0 text-accent" />
             ) : isOpen ? (
               <FolderOpen size={14} className="shrink-0 text-accent-muted/90" />
             ) : (
@@ -402,12 +447,19 @@ function FileTreeNode({
               commitCreate={commitCreate}
               cancelCreate={cancelCreate}
               inputRef={inputRef}
+              openKbMenu={openKbMenu}
             />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+interface KbMenuState {
+  x: number;
+  y: number;
+  entry: FileEntry;
 }
 
 export function FileTree() {
@@ -417,8 +469,13 @@ export function FileTree() {
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
+
+  const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
+    setKbMenu({ x, y, entry });
+  }, []);
 
   useEffect(() => {
     if (creating) inputRef.current?.focus();
@@ -583,12 +640,22 @@ export function FileTree() {
             commitCreate={commitCreate}
             cancelCreate={cancelCreate}
             inputRef={inputRef}
+            openKbMenu={openKbMenu}
           />
         ))}
         {fileTree.length === 0 && !creating && (
           <p className="text-text-muted text-xs px-3 py-4">No notes yet. Click + to create one.</p>
         )}
       </div>
+
+      {kbMenu && (
+        <KbContextMenu
+          x={kbMenu.x}
+          y={kbMenu.y}
+          entry={kbMenu.entry}
+          onClose={() => setKbMenu(null)}
+        />
+      )}
     </div>
   );
 }
