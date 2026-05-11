@@ -61,7 +61,7 @@ export function KbContextMenu({ x, y, entry, onClose }: Props) {
   async function handleRemove() {
     onClose();
     const ok = await confirm(
-      `${entry.path}/ перестанет быть базой знаний. index.md и ${entry.path}.db.json останутся на диске — повторная активация подхватит данные.`,
+      `Будут удалены ${entry.path}/index.md и ${entry.path}.db.json. Сами .md файлы внутри папки останутся.`,
       { title: 'Удалить базу знаний с папки?', kind: 'warning' },
     );
     if (!ok) return;

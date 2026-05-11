@@ -231,17 +231,44 @@ pub async fn kb_init(
     })
 }
 
+/// Remove the KB from the directory entirely: drop the registry entry,
+/// delete `<dir>/index.md` and the sibling `<dir>.db.json`. The user's
+/// `.md` notes inside the directory are left alone — they were the user's
+/// content before the KB existed and remain so after.
+///
+/// Deleting the `.db.json` also takes the database out of the global
+/// databases list, so it no longer appears in the "insert database"
+/// picker.
 #[tauri::command]
-pub async fn kb_deinit(dir_path: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn kb_deinit(
+    dir_path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let dir_rel = dir_path.trim_matches('/').replace('\\', "/");
-    let mut config = read_kb_dirs(&root).unwrap_or_default();
-    let before = config.dirs.len();
-    config.dirs.retain(|e| e.path != dir_rel);
-    if config.dirs.len() == before {
-        // No-op deinit — return ok rather than erroring; UI may race with FS.
-        return Ok(());
+    if dir_rel.is_empty() {
+        return Err("KB path cannot be empty".into());
     }
+
+    let db_rel = db_path_for_dir(&dir_rel);
+    let index_rel = index_path_for_dir(&dir_rel);
+    let abs_db = root.join(&db_rel);
+    let abs_index = root.join(&index_rel);
+
+    if abs_db.exists() {
+        std::fs::remove_file(&abs_db)
+            .map_err(|e| format!("Failed to delete {db_rel}: {e}"))?;
+        emit_changed(&app, &db_rel);
+    }
+    if abs_index.exists() {
+        std::fs::remove_file(&abs_index)
+            .map_err(|e| format!("Failed to delete {index_rel}: {e}"))?;
+        emit_changed(&app, &index_rel);
+    }
+
+    let mut config = read_kb_dirs(&root).unwrap_or_default();
+    config.dirs.retain(|e| e.path != dir_rel);
     write_kb_dirs(&root, &config).map_err(|e| e.to_string())?;
     Ok(())
 }
