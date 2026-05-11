@@ -247,16 +247,33 @@ export function GraphView({ onClose }: Props) {
         forceLink<SimNode, SimLink>(links)
           .id((d) => d.id)
           .distance((l) => {
-            if (l.kind === 'contain') return 38;
-            if (l.kind === 'wiki') return 95;
-            if (l.kind === 'tag') return 110;
-            return 70; // external
+            if (l.kind === 'contain') {
+              // Hub→domain/tag edges should be looser so the cluster floats
+              // near its connected notes, not glued to an isolated hub.
+              const s = l.source as SimNode;
+              if (s.id === 'folder:__external__' || s.id === 'folder:__tags__') {
+                return 60;
+              }
+              return 38;
+            }
+            if (l.kind === 'wiki') return 75;
+            if (l.kind === 'tag') return 55;
+            return 50; // external
           })
           .strength((l) => {
-            if (l.kind === 'contain') return 0.9;
+            if (l.kind === 'contain') {
+              const s = l.source as SimNode;
+              if (s.id === 'folder:__external__' || s.id === 'folder:__tags__') {
+                // Tiny — just enough to keep orphan tags/domains on screen.
+                return 0.05;
+              }
+              return 0.9;
+            }
             if (l.kind === 'wiki') return 0.35;
-            if (l.kind === 'tag') return 0.12;
-            return 0.15;
+            // Note→tag / note→domain: strong enough to drag the cluster
+            // toward the notes that reference it.
+            if (l.kind === 'tag') return 0.4;
+            return 0.4;
           }),
       )
       .force('charge', forceManyBody().strength(-180))
@@ -456,18 +473,18 @@ export function GraphView({ onClose }: Props) {
         s.id !== 'folder:__external__' &&
         s.id !== 'folder:__tags__';
       const cls = isDomainEdge
-        ? 'stroke-embedding/55'
+        ? 'stroke-embedding/70'
         : isTagHubEdge
-          ? 'stroke-tag/55'
+          ? 'stroke-tag/70'
           : isFolderHierarchy
-            ? 'stroke-accent/65'
-            : 'stroke-accent/45';
+            ? 'stroke-accent/75'
+            : 'stroke-accent/60';
       return (
         <path
           key={i}
           d={`M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`}
           className={cls}
-          strokeWidth={isFolderHierarchy ? 1.1 : 0.9}
+          strokeWidth={isFolderHierarchy ? 1.2 : 1}
           strokeDasharray={isFolderHierarchy ? '1 4' : undefined}
           strokeLinecap="round"
           fill="none"
@@ -505,8 +522,6 @@ export function GraphView({ onClose }: Props) {
     }
 
     if (l.kind === 'tag') {
-      // Note → tag: very thin, tag-coloured, dashed so they read as a
-      // "soft" semantic connection compared to wiki edges.
       return (
         <line
           key={i}
@@ -514,9 +529,9 @@ export function GraphView({ onClose }: Props) {
           y1={s.y}
           x2={t.x}
           y2={t.y}
-          strokeWidth={0.7}
+          strokeWidth={0.9}
           strokeDasharray="2 3"
-          className="stroke-tag/45"
+          className="stroke-tag/70"
           strokeLinecap="round"
         />
       );
@@ -530,9 +545,9 @@ export function GraphView({ onClose }: Props) {
         y1={s.y}
         x2={t.x}
         y2={t.y}
-        strokeWidth={0.8}
+        strokeWidth={1}
         strokeDasharray="3 4"
-        className="stroke-embedding/55"
+        className="stroke-embedding/75"
         strokeLinecap="round"
       />
     );
