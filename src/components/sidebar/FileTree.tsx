@@ -20,7 +20,8 @@ import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
-import { stripNoteExt } from '@/lib/note-name';
+import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
+import { openPath } from '@tauri-apps/plugin-opener';
 
 const DRAG_MIME = 'application/x-mycel-path';
 
@@ -91,9 +92,17 @@ function FileTreeNode({
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
       toggleExpand();
-    } else {
-      openNote(entry.path, { preview: true });
+      return;
     }
+    if (isAttachmentPath(entry.path)) {
+      // Attachments aren't notes — opening them in the editor would
+      // produce a binary blob. Forward the click to the OS so the user
+      // can still preview the image in their system viewer.
+      const root = useVaultStore.getState().vaultRoot;
+      if (root) void openPath(`${root}/${entry.path}`);
+      return;
+    }
+    openNote(entry.path, { preview: true });
   }, [entry, openNote, toggleExpand]);
 
   const handleDoubleClick = useCallback(() => {

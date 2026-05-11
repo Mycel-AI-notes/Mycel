@@ -1,8 +1,10 @@
 /**
  * Inline image previews in the editor. Markdown image links
  * `![alt](src)` get a Decoration.widget placed AFTER the markdown line so
- * the source stays editable and the rendered image appears underneath —
- * the Typora-style flow the spec calls for.
+ * the preview is always visible — the markdown source stays editable
+ * on the line above, like the table widget pattern. The widget carries
+ * its own toolbar (delete, open, save-locally) so the user can act on
+ * the image without ever needing to "exit" a hidden-decoration mode.
  *
  * Local paths route through Tauri's asset:// protocol so the webview
  * can load files outside the dev server's root. Remote URLs are rendered
@@ -59,6 +61,10 @@ class ImageWidget extends WidgetType {
     public readonly src: string,
     public readonly resolvedSrc: string,
     public readonly external: boolean,
+    /** Markdown source range — used by the delete button to remove the
+     * `![…](…)` text exactly, without depending on cursor position. */
+    public readonly srcFrom: number,
+    public readonly srcTo: number,
   ) {
     super();
   }
@@ -68,7 +74,9 @@ class ImageWidget extends WidgetType {
       this.alt === other.alt &&
       this.src === other.src &&
       this.resolvedSrc === other.resolvedSrc &&
-      this.external === other.external
+      this.external === other.external &&
+      this.srcFrom === other.srcFrom &&
+      this.srcTo === other.srcTo
     );
   }
 
@@ -76,6 +84,14 @@ class ImageWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'cm-image-preview';
     wrap.contentEditable = 'false';
+
+    // Stop bubbling so clicks inside the widget never steal focus from
+    // the surrounding editor — that was causing the preview to flicker
+    // and the action buttons to become unclickable.
+    const stop = (e: Event) => e.stopPropagation();
+    wrap.addEventListener('mousedown', stop);
+    wrap.addEventListener('mouseup', stop);
+    wrap.addEventListener('click', stop);
 
     const img = document.createElement('img');
     img.alt = this.alt;
@@ -86,43 +102,29 @@ class ImageWidget extends WidgetType {
     const placeholder = document.createElement('div');
     placeholder.className = 'cm-image-placeholder';
     placeholder.textContent = `⚠ Image not found: ${this.src}`;
+    placeholder.style.display = 'none';
 
     img.addEventListener('error', () => {
       img.style.display = 'none';
       placeholder.style.display = 'block';
     });
 
-    // Single click — let CodeMirror place the caret in the markdown source
-    // so the user can edit the alt/src.
-    img.addEventListener('click', (e) => {
-      e.preventDefault();
-      const pos = view.posAtDOM(wrap);
-      view.dispatch({ selection: { anchor: pos } });
-      view.focus();
-    });
+    // ── Toolbar ──────────────────────────────────────────────────────
+    const toolbar = document.createElement('div');
+    toolbar.className = 'cm-image-toolbar';
 
-    if (!this.external) {
-      img.addEventListener('dblclick', async (e) => {
-        e.preventDefault();
-        try {
-          const { openPath } = await import('@tauri-apps/plugin-opener');
-          const root = useVaultStore.getState().vaultRoot;
-          if (root) await openPath(`${root}/${this.src}`);
-        } catch {
-          // Best-effort: failures here aren't actionable for the user.
-        }
-      });
-    }
+    const meta = document.createElement('span');
+    meta.className = 'cm-image-meta';
+    meta.textContent = this.src;
+    toolbar.appendChild(meta);
+
+    const spacer = document.createElement('span');
+    spacer.className = 'cm-image-spacer';
+    toolbar.appendChild(spacer);
 
     if (this.external) {
-      const badge = document.createElement('button');
-      badge.className = 'cm-image-external-action';
-      badge.type = 'button';
-      badge.textContent = '⬇ Save locally';
-      badge.title = 'Download to attachments/ and rewrite the link';
-      badge.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      const save = makeButton('⬇ Save locally', 'Download to attachments/ and rewrite the link');
+      save.addEventListener('click', () => {
         wrap.dispatchEvent(
           new CustomEvent('mycel:download-external-image', {
             bubbles: true,
@@ -130,18 +132,56 @@ class ImageWidget extends WidgetType {
           }),
         );
       });
-      wrap.appendChild(badge);
+      toolbar.appendChild(save);
+    } else {
+      const open = makeButton('↗ Open', 'Open in the system viewer');
+      open.addEventListener('click', async () => {
+        try {
+          const { openPath } = await import('@tauri-apps/plugin-opener');
+          const root = useVaultStore.getState().vaultRoot;
+          if (root) await openPath(`${root}/${this.src}`);
+        } catch {
+          // Best-effort — failure here isn't actionable for the user.
+        }
+      });
+      toolbar.appendChild(open);
     }
 
-    placeholder.style.display = 'none';
+    const del = makeButton('✕ Remove', 'Remove this image link from the note');
+    del.classList.add('cm-image-btn-danger');
+    del.addEventListener('click', () => {
+      const doc = view.state.doc;
+      // Also swallow the trailing newline so the document doesn't end up
+      // with an empty line where the image used to be.
+      let to = this.srcTo;
+      if (to < doc.length && doc.sliceString(to, to + 1) === '\n') to += 1;
+      view.dispatch({
+        changes: { from: this.srcFrom, to, insert: '' },
+      });
+    });
+    toolbar.appendChild(del);
+
+    wrap.appendChild(toolbar);
     wrap.appendChild(img);
     wrap.appendChild(placeholder);
     return wrap;
   }
 
   ignoreEvent(): boolean {
-    return false;
+    // Block CodeMirror from interpreting widget clicks as caret moves
+    // — that was what made the preview vanish the moment the user
+    // tried to press "Save locally".
+    return true;
   }
+}
+
+function makeButton(label: string, title: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'cm-image-btn';
+  b.textContent = label;
+  b.title = title;
+  return b;
 }
 
 function absoluteAttachmentPath(relative: string): string {
@@ -152,7 +192,7 @@ function absoluteAttachmentPath(relative: string): string {
 }
 
 function buildImageDecorations(state: EditorState): DecorationSet {
-  const { doc, selection: sel } = state;
+  const { doc } = state;
 
   type Item = { pos: number; deco: Decoration };
   const items: Item[] = [];
@@ -161,10 +201,6 @@ function buildImageDecorations(state: EditorState): DecorationSet {
     const line = doc.line(n);
     const matches = findImageMatches(line.text, line.from);
     if (matches.length === 0) continue;
-    const cursorOnLine = sel.ranges.some(
-      (r) => r.from <= line.to && r.to >= line.from,
-    );
-    if (cursorOnLine) continue;
     for (const m of matches) {
       const resolved = m.isExternal
         ? m.src
@@ -172,7 +208,7 @@ function buildImageDecorations(state: EditorState): DecorationSet {
       items.push({
         pos: line.to,
         deco: Decoration.widget({
-          widget: new ImageWidget(m.alt, m.src, resolved, m.isExternal),
+          widget: new ImageWidget(m.alt, m.src, resolved, m.isExternal, m.from, m.to),
           side: 1,
           block: true,
         }),
@@ -192,7 +228,7 @@ export const imageDecorationField = StateField.define<DecorationSet>({
     return buildImageDecorations(state);
   },
   update(value, tr) {
-    if (tr.docChanged || tr.selection) {
+    if (tr.docChanged) {
       return buildImageDecorations(tr.state);
     }
     return value;
@@ -204,9 +240,10 @@ export const imageDecorationTheme = EditorView.baseTheme({
   '.cm-image-preview': {
     display: 'block',
     margin: '8px 24px',
-    padding: '4px',
+    padding: '6px',
     borderRadius: '6px',
     backgroundColor: 'var(--color-surface-1)',
+    border: '1px solid var(--color-border)',
     position: 'relative',
   },
   '.cm-image-preview-img': {
@@ -214,7 +251,7 @@ export const imageDecorationTheme = EditorView.baseTheme({
     height: 'auto',
     display: 'block',
     borderRadius: '4px',
-    cursor: 'pointer',
+    margin: '0 auto',
   },
   '.cm-image-placeholder': {
     padding: '24px',
@@ -225,22 +262,39 @@ export const imageDecorationTheme = EditorView.baseTheme({
     border: '1px dashed var(--color-border)',
     borderRadius: '4px',
   },
-  '.cm-image-external-action': {
-    position: 'absolute',
-    top: '8px',
-    right: '8px',
-    padding: '4px 8px',
+  '.cm-image-toolbar': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '2px 4px 6px 4px',
+    fontSize: '11px',
+  },
+  '.cm-image-meta': {
+    color: 'var(--color-text-muted)',
+    fontFamily: "'JetBrains Mono', monospace",
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '40%',
+  },
+  '.cm-image-spacer': { flex: '1' },
+  '.cm-image-btn': {
+    padding: '3px 8px',
     fontSize: '11px',
     color: 'var(--color-text-primary)',
     backgroundColor: 'var(--color-surface-2)',
     border: '1px solid var(--color-border)',
     borderRadius: '4px',
     cursor: 'pointer',
-    opacity: '0',
-    transition: 'opacity 150ms ease',
+    fontFamily: 'inherit',
   },
-  '.cm-image-preview:hover .cm-image-external-action': {
-    opacity: '1',
+  '.cm-image-btn:hover': {
+    backgroundColor: 'var(--color-surface-hover)',
+  },
+  '.cm-image-btn-danger:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--color-error) 18%, transparent)',
+    borderColor: 'var(--color-error)',
+    color: 'var(--color-error)',
   },
   '.cm-drop-target': {
     outline: '2px dashed var(--color-accent)',

@@ -78,6 +78,26 @@ impl Vault {
     }
 }
 
+/// Image extensions we render inline in the editor. Listing them here
+/// (rather than allowing every non-markdown file) keeps the tree free
+/// of `.DS_Store` and other junk that may live alongside attachments.
+const ATTACHMENT_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg"];
+
+fn is_attachment_path(rel_path: &str, full_path: &Path) -> bool {
+    // `attachments/foo.png` is the canonical place, but the user may
+    // already have images scattered elsewhere — surface those too so
+    // tree completeness doesn't depend on where the file landed.
+    let _ = rel_path;
+    let ext = full_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase());
+    match ext {
+        Some(e) => ATTACHMENT_EXTS.iter().any(|x| *x == e),
+        None => false,
+    }
+}
+
 fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
 
@@ -127,7 +147,12 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
         } else {
             let is_md = path.extension().map(|e| e == "md").unwrap_or(false);
             let is_age = rel_path.ends_with(".md.age");
-            if is_md || is_age {
+            // Show binary attachments in the tree too so the user can
+            // see what landed in `attachments/` after a drag-and-drop
+            // and so the file actions (rename / delete / reveal in
+            // OS) work on them like on notes.
+            let is_attachment = is_attachment_path(&rel_path, &path);
+            if is_md || is_age || is_attachment {
                 entries.push(FileEntry {
                     name,
                     path: rel_path,
