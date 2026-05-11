@@ -92,7 +92,12 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
         content: String,
     }
     let mut loaded: Vec<Loaded> = Vec::new();
+    // Multiple lookup tables so wikilinks resolve regardless of whether the
+    // author wrote `[[Note]]`, `[[folder/Note]]`, `[[Note.md]]` or
+    // `[[Long Title From Frontmatter]]`. First-writer wins on collisions.
     let mut stem_to_path: HashMap<String, String> = HashMap::new();
+    let mut title_to_path: HashMap<String, String> = HashMap::new();
+    let mut rel_to_path: HashMap<String, String> = HashMap::new();
 
     for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -118,7 +123,18 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             .unwrap_or_default();
         let title = parsed_meta.meta.title.unwrap_or_else(|| stem.clone());
         let folder = parent_folder(&rel);
-        stem_to_path.insert(stem.to_lowercase(), rel.clone());
+        stem_to_path.entry(stem.to_lowercase()).or_insert_with(|| rel.clone());
+        title_to_path
+            .entry(title.to_lowercase())
+            .or_insert_with(|| rel.clone());
+        rel_to_path.insert(rel.to_lowercase(), rel.clone());
+        // Also index the relative path without `.md`, so `[[folder/Note]]`
+        // resolves even when the file is `folder/Note.md`.
+        let rel_no_ext = rel
+            .strip_suffix(".md")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| rel.clone());
+        rel_to_path.entry(rel_no_ext.to_lowercase()).or_insert_with(|| rel.clone());
         loaded.push(Loaded { path: rel, title, folder, content });
     }
 
@@ -138,19 +154,34 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             if wl.is_embed {
                 continue;
             }
-            let key = normalize_target(&wl.target);
-            if !seen_targets.insert(key.clone()) {
+            // Try several resolution strategies, in order of specificity:
+            //   1. Full relative path (with or without `.md`).
+            //   2. Bare filename stem.
+            //   3. Title (from frontmatter or filename stem).
+            let raw = wl.target.split('#').next().unwrap_or(&wl.target).trim();
+            let raw_lower = raw.to_lowercase();
+            let stem_key = normalize_target(&wl.target);
+
+            let resolved = rel_to_path
+                .get(&raw_lower)
+                .or_else(|| stem_to_path.get(&stem_key))
+                .or_else(|| title_to_path.get(&raw_lower));
+
+            let Some(target_path) = resolved else {
+                continue;
+            };
+            if *target_path == note.path {
                 continue;
             }
-            if let Some(target_path) = stem_to_path.get(&key) {
-                if *target_path == note.path {
-                    continue;
-                }
-                wiki_edges.push(WikiEdge {
-                    from: note.path.clone(),
-                    to: target_path.clone(),
-                });
+            // Dedupe by `target_path` so multiple `[[X]]` mentions collapse
+            // into a single edge per source.
+            if !seen_targets.insert(target_path.clone()) {
+                continue;
             }
+            wiki_edges.push(WikiEdge {
+                from: note.path.clone(),
+                to: target_path.clone(),
+            });
         }
 
         // External URLs — count per-(note, domain).

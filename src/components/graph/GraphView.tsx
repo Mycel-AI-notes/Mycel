@@ -217,7 +217,11 @@ export function GraphView({ onClose }: Props) {
       .force('charge', forceManyBody().strength(-180))
       .force(
         'collide',
-        forceCollide<SimNode>().radius((d) => d.r + 6),
+        // Folders are drawn with decorative branches that extend ~1.85x the
+        // globe radius; reserve that space so neighbours don't crash into them.
+        forceCollide<SimNode>().radius((d) =>
+          d.kind === 'folder' ? d.r * 1.85 + 8 : d.r + 6,
+        ),
       )
       .force('center', forceCenter(cx, cy))
       // Mild radial pull toward folder centroid keeps groups compact.
@@ -358,18 +362,67 @@ export function GraphView({ onClose }: Props) {
   };
 
   // ── Rendering helpers ───────────────────────────────────────────────────
+  // Lightweight deterministic string hash so per-edge / per-node randomness
+  // doesn't flicker between renders.
+  const hash = (s: string) => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) | 0;
+    }
+    return h;
+  };
+
   const renderLink = (l: SimLink, i: number) => {
     const s = l.source as SimNode;
     const t = l.target as SimNode;
     if (!s || !t || s.x === undefined || t.x === undefined) return null;
+
+    const dx = (t.x as number) - (s.x as number);
+    const dy = (t.y as number) - (s.y as number);
+    const dist = Math.hypot(dx, dy) || 1;
+
+    if (l.kind === 'contain') {
+      // Curved spore-style hypha: Bezier with perpendicular curve offset, sign
+      // and magnitude derived from a hash of the endpoints for organic feel.
+      const seed = hash(`${typeof l.source === 'string' ? l.source : (l.source as SimNode).id}->${typeof l.target === 'string' ? l.target : (l.target as SimNode).id}`);
+      const sign = (seed & 1) === 0 ? 1 : -1;
+      const curve = sign * (0.18 + ((seed >>> 1) % 12) / 60) * dist; // ~18–38% of dist
+      const mx = (s.x! + t.x!) / 2;
+      const my = (s.y! + t.y!) / 2;
+      const nx = -dy / dist;
+      const ny = dx / dist;
+      const cxp = mx + nx * curve;
+      const cyp = my + ny * curve;
+      // Trim the path so it visually anchors on the node circumference rather
+      // than the centre — keeps the hypha attached to the spore core.
+      const startTrim = s.r;
+      const endTrim = t.r;
+      const sxp = s.x! + (dx / dist) * startTrim;
+      const syp = s.y! + (dy / dist) * startTrim;
+      const exp = t.x! - (dx / dist) * endTrim;
+      const eyp = t.y! - (dy / dist) * endTrim;
+      return (
+        <path
+          key={i}
+          d={`M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`}
+          className={
+            s.id === 'folder:__external__' || t.kind === 'domain'
+              ? 'stroke-embedding/45'
+              : 'stroke-accent/45'
+          }
+          strokeWidth={1.1}
+          strokeLinecap="round"
+          fill="none"
+        />
+      );
+    }
+
     const className =
       l.kind === 'wiki'
-        ? 'stroke-accent/55'
-        : l.kind === 'external'
-          ? 'stroke-embedding/40'
-          : 'stroke-border-strong/55';
+        ? 'stroke-accent/65'
+        : 'stroke-embedding/40';
     const dash = l.kind === 'external' ? '3 4' : undefined;
-    const width = l.kind === 'wiki' ? 1.4 : l.kind === 'external' ? 1 : 0.8;
+    const width = l.kind === 'wiki' ? 1.5 : 1;
     return (
       <line
         key={i}
@@ -380,25 +433,99 @@ export function GraphView({ onClose }: Props) {
         strokeWidth={width}
         strokeDasharray={dash}
         className={className}
+        strokeLinecap="round"
       />
+    );
+  };
+
+  const renderFolderSpore = (n: SimNode) => {
+    // Spore-organism rendering: a 3-layer central globe (faint halo, mid
+    // shell, dense core) + a few decorative asymmetric branches that end in
+    // mid-buds. Branch angles & lengths are seeded from the folder path so
+    // every folder gets a unique-looking organism without flickering.
+    const seed = hash(n.id);
+    const branchCount = 4 + (seed & 3); // 4–7
+    const baseRot = (seed >>> 2) % 360;
+    const branches: {
+      d: string;
+      tipX: number;
+      tipY: number;
+      budX: number;
+      budY: number;
+      budR: number;
+    }[] = [];
+    for (let i = 0; i < branchCount; i++) {
+      const subSeed = (seed * 131 + i * 977) >>> 0;
+      // Cluster angles a bit, leave gaps — feels organic, not radial-uniform.
+      const jitter = ((subSeed % 36) - 18); // ±18°
+      const angle =
+        baseRot + (360 / branchCount) * i + jitter;
+      const rad = (angle * Math.PI) / 180;
+      const len = n.r * (1.35 + ((subSeed >>> 5) % 50) / 100); // 1.35–1.85×r
+      const sx = Math.cos(rad) * n.r * 0.95;
+      const sy = Math.sin(rad) * n.r * 0.95;
+      const ex = Math.cos(rad) * len;
+      const ey = Math.sin(rad) * len;
+      // Perpendicular curve.
+      const mx = (sx + ex) / 2;
+      const my = (sy + ey) / 2;
+      const dx = ex - sx;
+      const dy = ey - sy;
+      const dist = Math.hypot(dx, dy) || 1;
+      const sign = (subSeed >>> 11) & 1 ? 1 : -1;
+      const curve = sign * (0.18 + ((subSeed >>> 12) % 14) / 80) * dist;
+      const nx = -dy / dist;
+      const ny = dx / dist;
+      const cxp = mx + nx * curve;
+      const cyp = my + ny * curve;
+      const budT = 0.55 + ((subSeed >>> 16) % 30) / 100;
+      const budX = sx + (ex - sx) * budT + nx * curve * (1 - Math.abs(budT - 0.5) * 2);
+      const budY = sy + (ey - sy) * budT + ny * curve * (1 - Math.abs(budT - 0.5) * 2);
+      branches.push({
+        d: `M ${sx.toFixed(2)} ${sy.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${ex.toFixed(2)} ${ey.toFixed(2)}`,
+        tipX: ex,
+        tipY: ey,
+        budX,
+        budY,
+        budR: 1 + ((subSeed >>> 20) % 6) / 10,
+      });
+    }
+
+    return (
+      <g className="text-accent">
+        {/* Decorative branches — drawn under the core. */}
+        <g
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.55"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        >
+          {branches.map((b, i) => (
+            <path key={i} d={b.d} />
+          ))}
+        </g>
+        <g fill="currentColor" opacity="0.85">
+          {branches.map((b, i) => (
+            <circle key={`bud${i}`} cx={b.budX} cy={b.budY} r={b.budR} />
+          ))}
+        </g>
+        <g fill="currentColor">
+          {branches.map((b, i) => (
+            <circle key={`tip${i}`} cx={b.tipX} cy={b.tipY} r={1.6} />
+          ))}
+        </g>
+        {/* Layered spore globe. */}
+        <circle r={n.r * 1.55} fill="currentColor" opacity="0.16" />
+        <circle r={n.r * 1.05} fill="currentColor" opacity="0.5" />
+        <circle r={n.r * 0.72} fill="currentColor" />
+      </g>
     );
   };
 
   const renderNode = (n: SimNode) => {
     if (n.x === undefined || n.y === undefined) return null;
     const isHover = hover?.id === n.id;
-    const fill =
-      n.kind === 'folder'
-        ? 'fill-accent'
-        : n.kind === 'domain'
-          ? 'fill-embedding'
-          : 'fill-surface-2';
-    const stroke =
-      n.kind === 'folder'
-        ? 'stroke-accent'
-        : n.kind === 'domain'
-          ? 'stroke-embedding'
-          : 'stroke-text-muted';
 
     return (
       <g
@@ -412,30 +539,55 @@ export function GraphView({ onClose }: Props) {
       >
         {isHover && (
           <circle
-            r={n.r + 6}
-            className={`${fill} opacity-20`}
-            style={{ filter: 'blur(4px)' }}
+            r={n.r + 8}
+            className={
+              n.kind === 'folder'
+                ? 'fill-accent opacity-25'
+                : n.kind === 'domain'
+                  ? 'fill-embedding opacity-25'
+                  : 'fill-text-primary opacity-15'
+            }
+            style={{ filter: 'blur(5px)' }}
           />
         )}
-        <circle
-          r={n.r}
-          className={`${fill} ${stroke}`}
-          fillOpacity={n.kind === 'note' ? 0.85 : 0.7}
-          strokeWidth={n.kind === 'folder' ? 1.5 : 1}
-        />
-        {n.kind === 'domain' && n.count !== undefined && n.count > 1 && (
-          <text
-            y={3}
-            textAnchor="middle"
-            className="fill-text-primary pointer-events-none select-none"
-            style={{ fontSize: 9, fontWeight: 600 }}
-          >
-            {n.count}
-          </text>
+
+        {n.kind === 'folder' ? (
+          renderFolderSpore(n)
+        ) : n.kind === 'domain' ? (
+          <>
+            <circle
+              r={n.r}
+              className="fill-embedding stroke-embedding"
+              fillOpacity={0.75}
+              strokeWidth={1}
+            />
+            {n.count !== undefined && n.count > 1 && (
+              <text
+                y={3}
+                textAnchor="middle"
+                className="fill-text-primary pointer-events-none select-none"
+                style={{ fontSize: 9, fontWeight: 600 }}
+              >
+                {n.count}
+              </text>
+            )}
+          </>
+        ) : (
+          // Note: simple "mid-bud" — a small filled spore.
+          <>
+            <circle
+              r={n.r}
+              className="fill-surface-2 stroke-text-muted"
+              fillOpacity={0.9}
+              strokeWidth={1}
+            />
+            <circle r={Math.max(1.4, n.r * 0.35)} className="fill-text-secondary" />
+          </>
         )}
+
         {(isHover || n.kind === 'folder') && (
           <text
-            x={n.r + 6}
+            x={n.kind === 'folder' ? n.r * 1.85 + 4 : n.r + 6}
             y={3}
             className={
               n.kind === 'folder'
