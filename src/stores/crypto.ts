@@ -3,16 +3,23 @@ import { invoke } from '@tauri-apps/api/core';
 import type { CryptoStatus } from '@/types';
 import { useVaultStore } from './vault';
 
+/** Auto-lock kicks in after this many ms of user inactivity while the
+ *  vault is unlocked. 5 minutes is a familiar default (matches macOS
+ *  Keychain's idle-lock window). */
+export const AUTO_LOCK_IDLE_MS = 5 * 60 * 1000;
+
 interface CryptoState {
   status: CryptoStatus | null;
   /** Last error from setup/unlock/encrypt/decrypt. UI surfaces this. */
   error: string | null;
   /** True while a backend crypto call is in flight. */
   busy: boolean;
+  /** Epoch-ms of the last user input. Set by `useAutoLock`. */
+  lastActivityAt: number;
 
   refresh: () => Promise<void>;
-  setup: () => Promise<string>;
-  unlock: () => Promise<void>;
+  setup: (passphrase: string) => Promise<string>;
+  unlock: (passphrase: string) => Promise<void>;
   lock: () => Promise<void>;
   reset: () => Promise<void>;
   listRecipients: () => Promise<string[]>;
@@ -22,6 +29,8 @@ interface CryptoState {
   decryptNote: (path: string) => Promise<string>;
   clearError: () => void;
   reset_for_new_vault: () => void;
+  /** Called by `useAutoLock` on user input. */
+  markActivity: () => void;
 }
 
 async function run<T>(set: (p: Partial<CryptoState>) => void, fn: () => Promise<T>): Promise<T> {
@@ -41,6 +50,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   status: null,
   error: null,
   busy: false,
+  lastActivityAt: Date.now(),
 
   refresh: async () => {
     try {
@@ -54,14 +64,16 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     }
   },
 
-  setup: async () => {
-    const recipient = await run(set, () => invoke<string>('crypto_setup'));
+  setup: async (passphrase) => {
+    const recipient = await run(set, () =>
+      invoke<string>('crypto_setup', { args: { passphrase } }),
+    );
     await get().refresh();
     return recipient;
   },
 
-  unlock: async () => {
-    await run(set, () => invoke<void>('crypto_unlock'));
+  unlock: async (passphrase) => {
+    await run(set, () => invoke<void>('crypto_unlock', { args: { passphrase } }));
     await get().refresh();
   },
 
@@ -104,5 +116,8 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  reset_for_new_vault: () => set({ status: null, error: null, busy: false }),
+  reset_for_new_vault: () =>
+    set({ status: null, error: null, busy: false, lastActivityAt: Date.now() }),
+
+  markActivity: () => set({ lastActivityAt: Date.now() }),
 }));

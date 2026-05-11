@@ -145,12 +145,20 @@ impl Session {
         *self.inner.lock().expect("crypto session poisoned") = None;
     }
 
-    /// Read the wrapped identity from disk, unwrap it with the keyring
-    /// secret, and store the resulting X25519 identity in memory.
-    pub fn unlock(&self, vault_root: &Path) -> Result<()> {
-        let secret = read_wrap_secret(vault_root)?
+    /// Read the wrapped identity from disk and unwrap it. Both factors are
+    /// required:
+    ///   1. the keyring KEK (binds the identity to *this device*), and
+    ///   2. the user passphrase (binds it to *this person* and is what
+    ///      makes `Lock` meaningful — without the passphrase, the keyring
+    ///      alone can't reconstruct the X25519 secret, even though the OS
+    ///      handed it back silently to the current login session).
+    pub fn unlock(&self, vault_root: &Path, passphrase: &str) -> Result<()> {
+        if passphrase.is_empty() {
+            bail!("Passphrase is required to unlock this vault.");
+        }
+        let kek = read_wrap_secret(vault_root)?
             .ok_or_else(|| anyhow!("No wrap secret found in keyring for this vault."))?;
-        let raw = decrypt_identity_file(vault_root, &secret)?;
+        let raw = decrypt_identity_file(vault_root, &kek, passphrase)?;
         let identity = x25519::Identity::from_str(raw.trim())
             .map_err(|e| anyhow!("Failed to parse stored X25519 identity: {e}"))?;
         *self.inner.lock().expect("crypto session poisoned") =
@@ -227,9 +235,14 @@ pub fn status(vault_root: &Path, session: &Session) -> Result<CryptoStatus> {
     })
 }
 
-/// Initialise crypto for a vault that doesn't have it yet. Returns the
-/// public recipient string.
-pub fn setup(vault_root: &Path, session: &Session) -> Result<String> {
+/// Initialise crypto for a vault that doesn't have it yet. Requires a
+/// non-empty user passphrase — the identity file is wrapped twice
+/// (`scrypt(passphrase) → scrypt(keyring-KEK)`), so the KEK alone is not
+/// enough to recover the secret. Returns the public recipient string.
+pub fn setup(vault_root: &Path, session: &Session, passphrase: &str) -> Result<String> {
+    if passphrase.len() < 8 {
+        bail!("Passphrase must be at least 8 characters.");
+    }
     let dir = crypto_dir(vault_root);
     std::fs::create_dir_all(&dir).context("Failed to create .mycel/crypto/")?;
     if identity_path(vault_root).exists() {
@@ -242,9 +255,9 @@ pub fn setup(vault_root: &Path, session: &Session) -> Result<String> {
     let pubkey = identity.to_public().to_string();
     let raw = identity.to_string().expose_secret().to_string();
 
-    let secret = fresh_wrap_secret();
-    encrypt_identity_file(vault_root, &raw, &secret)?;
-    write_wrap_secret(vault_root, &secret)?;
+    let kek = fresh_wrap_secret();
+    encrypt_identity_file(vault_root, &raw, &kek, passphrase)?;
+    write_wrap_secret(vault_root, &kek)?;
 
     std::fs::write(pubkey_path(vault_root), format!("{pubkey}\n"))
         .context("Failed to write pubkey.txt")?;
@@ -253,8 +266,8 @@ pub fn setup(vault_root: &Path, session: &Session) -> Result<String> {
     std::fs::write(recipients_path(vault_root), format!("{pubkey}\n"))
         .context("Failed to write recipients.txt")?;
 
-    // Auto-unlock: the user just generated the identity, so we have the
-    // secret in hand; no need to re-prompt.
+    // Auto-unlock: the user just typed the passphrase and we have the raw
+    // secret in hand, so move it straight into the session.
     let raw_z: Zeroizing<String> = Zeroizing::new(raw);
     let parsed = x25519::Identity::from_str(raw_z.trim())
         .map_err(|e| anyhow!("Failed to re-parse freshly generated identity: {e}"))?;
@@ -358,7 +371,59 @@ pub fn remove_recipient(vault_root: &Path, recipient: &str) -> Result<()> {
 // age wrap/unwrap (identity file)
 // ---------------------------------------------------------------------------
 
-fn encrypt_identity_file(vault_root: &Path, raw_identity: &str, passphrase: &str) -> Result<()> {
+/// Wrap raw X25519 secret in two scrypt envelopes.
+///
+/// Layered as `scrypt(passphrase, scrypt(kek, raw))`:
+///   * The **inner** envelope is keyed by the user passphrase. The
+///     passphrase is never persisted — without it, neither the file on
+///     disk nor the keyring can reconstruct the X25519 secret.
+///   * The **outer** envelope is keyed by the keyring KEK. It ties the
+///     identity to *this device's* OS keyring, so stealing only the
+///     vault folder (e.g. from a sync repo) is useless without keyring
+///     access on the target machine.
+///
+/// Only the outer envelope is armored. Both layers are tiny so the cost
+/// is dominated by scrypt (≈100 ms × 2 on unlock — acceptable for a
+/// once-per-session prompt).
+fn encrypt_identity_file(
+    vault_root: &Path,
+    raw_identity: &str,
+    kek: &str,
+    passphrase: &str,
+) -> Result<()> {
+    // Inner: passphrase-keyed scrypt envelope (unarmored binary).
+    let inner = scrypt_wrap_bytes(raw_identity.as_bytes(), passphrase, false)?;
+    // Outer: KEK-keyed scrypt envelope, armored for git-friendliness.
+    let outer = scrypt_wrap_bytes(&inner, kek, true)?;
+    std::fs::write(identity_path(vault_root), outer)
+        .context("Failed to write identity.age")?;
+    Ok(())
+}
+
+fn decrypt_identity_file(
+    vault_root: &Path,
+    kek: &str,
+    passphrase: &str,
+) -> Result<Zeroizing<String>> {
+    let bytes = std::fs::read(identity_path(vault_root))
+        .context("Failed to read identity.age — is crypto configured?")?;
+    // Outer: KEK. A failure here means the keyring secret doesn't match
+    // — usually a vault copied between devices.
+    let inner = scrypt_unwrap_bytes(&bytes, kek, true)
+        .map_err(|e| anyhow!("Keyring secret rejected the identity file: {e}"))?;
+    // Inner: passphrase. A failure here is the *expected* path for
+    // wrong-passphrase attempts — surface a clear message.
+    let raw_bytes = scrypt_unwrap_bytes(&inner, passphrase, false)
+        .map_err(|_| anyhow!("Wrong passphrase."))?;
+    let mut out = Zeroizing::new(String::new());
+    out.push_str(
+        std::str::from_utf8(&raw_bytes)
+            .map_err(|e| anyhow!("Decrypted identity is not valid UTF-8: {e}"))?,
+    );
+    Ok(out)
+}
+
+fn scrypt_wrap_bytes(plaintext: &[u8], passphrase: &str, armored: bool) -> Result<Vec<u8>> {
     let recipient = age::scrypt::Recipient::new(SecretString::from(passphrase.to_string()));
     let encryptor = age::Encryptor::with_recipients(
         std::iter::once(&recipient as &dyn age::Recipient),
@@ -366,44 +431,48 @@ fn encrypt_identity_file(vault_root: &Path, raw_identity: &str, passphrase: &str
     .map_err(|e| anyhow!("Failed to build scrypt encryptor: {e}"))?;
 
     let mut out = Vec::new();
-    let armor =
-        age::armor::ArmoredWriter::wrap_output(&mut out, age::armor::Format::AsciiArmor)
+    if armored {
+        let armor = age::armor::ArmoredWriter::wrap_output(&mut out, age::armor::Format::AsciiArmor)
             .map_err(|e| anyhow!("armor wrap: {e}"))?;
-    let mut writer = encryptor
-        .wrap_output(armor)
-        .map_err(|e| anyhow!("wrap_output: {e}"))?;
-    writer
-        .write_all(raw_identity.as_bytes())
-        .map_err(|e| anyhow!("write identity: {e}"))?;
-    let armor = writer
-        .finish()
-        .map_err(|e| anyhow!("finish writer: {e}"))?;
-    armor
-        .finish()
-        .map_err(|e| anyhow!("finish armor: {e}"))?;
-
-    std::fs::write(identity_path(vault_root), out)
-        .context("Failed to write identity.age")?;
-    Ok(())
+        let mut writer = encryptor
+            .wrap_output(armor)
+            .map_err(|e| anyhow!("wrap_output: {e}"))?;
+        writer
+            .write_all(plaintext)
+            .map_err(|e| anyhow!("write: {e}"))?;
+        let armor = writer.finish().map_err(|e| anyhow!("finish writer: {e}"))?;
+        armor.finish().map_err(|e| anyhow!("finish armor: {e}"))?;
+    } else {
+        let mut writer = encryptor
+            .wrap_output(&mut out)
+            .map_err(|e| anyhow!("wrap_output: {e}"))?;
+        writer
+            .write_all(plaintext)
+            .map_err(|e| anyhow!("write: {e}"))?;
+        writer.finish().map_err(|e| anyhow!("finish writer: {e}"))?;
+    }
+    Ok(out)
 }
 
-fn decrypt_identity_file(vault_root: &Path, passphrase: &str) -> Result<Zeroizing<String>> {
-    let bytes = std::fs::read(identity_path(vault_root))
-        .context("Failed to read identity.age — is crypto configured?")?;
-
-    let armor = age::armor::ArmoredReader::new(&bytes[..]);
-    let decryptor = age::Decryptor::new(armor)
-        .map_err(|e| anyhow!("Failed to read identity.age header: {e}"))?;
-
+fn scrypt_unwrap_bytes(ciphertext: &[u8], passphrase: &str, armored: bool) -> Result<Vec<u8>> {
     let identity = age::scrypt::Identity::new(SecretString::from(passphrase.to_string()));
-    let mut reader = decryptor
-        .decrypt(std::iter::once(&identity as &dyn age::Identity))
-        .map_err(|e| anyhow!("Failed to unwrap identity (wrong keyring secret?): {e}"))?;
-
-    let mut out = Zeroizing::new(String::new());
-    reader
-        .read_to_string(&mut out)
-        .map_err(|e| anyhow!("Failed to read decrypted identity: {e}"))?;
+    let mut out = Vec::new();
+    if armored {
+        let armor = age::armor::ArmoredReader::new(ciphertext);
+        let decryptor = age::Decryptor::new(armor)
+            .map_err(|e| anyhow!("Failed to read header: {e}"))?;
+        let mut reader = decryptor
+            .decrypt(std::iter::once(&identity as &dyn age::Identity))
+            .map_err(|e| anyhow!("scrypt decrypt: {e}"))?;
+        reader.read_to_end(&mut out).map_err(|e| anyhow!("read: {e}"))?;
+    } else {
+        let decryptor = age::Decryptor::new(ciphertext)
+            .map_err(|e| anyhow!("Failed to read header: {e}"))?;
+        let mut reader = decryptor
+            .decrypt(std::iter::once(&identity as &dyn age::Identity))
+            .map_err(|e| anyhow!("scrypt decrypt: {e}"))?;
+        reader.read_to_end(&mut out).map_err(|e| anyhow!("read: {e}"))?;
+    }
     Ok(out)
 }
 
@@ -488,10 +557,15 @@ mod tests {
         let raw = id.to_string().expose_secret().to_string();
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
-        encrypt_identity_file(dir.path(), &raw, "correct horse battery staple").unwrap();
-        let got = decrypt_identity_file(dir.path(), "correct horse battery staple").unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-secret-32-bytes", "correct horse battery").unwrap();
+        // Both factors required: right kek + right passphrase succeeds.
+        let got =
+            decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "correct horse battery").unwrap();
         assert_eq!(got.trim(), raw.trim());
-        assert!(decrypt_identity_file(dir.path(), "wrong passphrase").is_err());
+        // Wrong passphrase fails.
+        assert!(decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "wrong").is_err());
+        // Wrong KEK fails even with right passphrase — proves outer wrap is real.
+        assert!(decrypt_identity_file(dir.path(), "different-kek", "correct horse battery").is_err());
     }
 
     #[test]

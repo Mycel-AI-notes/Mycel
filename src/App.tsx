@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
+import { useAutoLock } from '@/hooks/useAutoLock';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useRecentVaults } from '@/stores/recentVaults';
@@ -39,6 +40,7 @@ const isMac =
 
 export default function App() {
   useTheme();
+  useAutoLock();
 
   const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();

@@ -140,10 +140,13 @@ The `.mycel/` folder is reserved for app metadata. Add it to `.gitignore` if you
 ### Encrypted notes (`*.md.age`)
 
 Mycel can store individual notes encrypted with [age](https://age-encryption.org).
-Click the shield icon in the toolbar to set up encryption: this generates an
-X25519 identity, wraps it with a random 256-bit secret in your OS keyring
-(hardware-backed via Secure Enclave / TPM where available), and writes the
-following files into `.mycel/crypto/`:
+Click the shield icon in the toolbar to set up encryption. You'll be asked
+for a passphrase (≥ 8 chars). Mycel generates an X25519 identity and wraps
+it **twice**: with your passphrase (inner layer) *and* with a random 256-bit
+secret in your OS keyring (outer layer, hardware-backed via Secure Enclave
+/ TPM where available). Both factors are required to unlock — the keyring
+alone is not enough, so a per-Lock passphrase prompt is meaningful. The
+vault auto-locks after 5 minutes of idle. Layout under `.mycel/crypto/`:
 
 ```
 .mycel/crypto/

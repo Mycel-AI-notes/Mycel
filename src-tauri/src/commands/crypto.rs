@@ -32,16 +32,27 @@ pub async fn crypto_status(state: State<'_, AppState>) -> Result<CryptoStatus, S
     crypto::status(&root, &state.crypto).map_err(err)
 }
 
-#[tauri::command]
-pub async fn crypto_setup(state: State<'_, AppState>) -> Result<String, String> {
-    let root = vault_root(&state).await?;
-    crypto::setup(&root, &state.crypto).map_err(err)
+#[derive(Debug, Deserialize)]
+pub struct PassphraseArg {
+    pub passphrase: String,
 }
 
 #[tauri::command]
-pub async fn crypto_unlock(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn crypto_setup(
+    args: PassphraseArg,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     let root = vault_root(&state).await?;
-    state.crypto.unlock(&root).map_err(err)
+    crypto::setup(&root, &state.crypto, &args.passphrase).map_err(err)
+}
+
+#[tauri::command]
+pub async fn crypto_unlock(
+    args: PassphraseArg,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = vault_root(&state).await?;
+    state.crypto.unlock(&root, &args.passphrase).map_err(err)
 }
 
 #[tauri::command]
