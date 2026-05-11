@@ -109,6 +109,13 @@ class ImageWidget extends WidgetType {
       placeholder.style.display = 'block';
     });
 
+    if (!this.external) {
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', () => {
+        useVaultStore.getState().openImageTab(this.src, { preview: true });
+      });
+    }
+
     // ── Toolbar ──────────────────────────────────────────────────────
     const toolbar = document.createElement('div');
     toolbar.className = 'cm-image-toolbar';
@@ -134,15 +141,9 @@ class ImageWidget extends WidgetType {
       });
       toolbar.appendChild(save);
     } else {
-      const open = makeButton('↗ Open', 'Open in the system viewer');
-      open.addEventListener('click', async () => {
-        try {
-          const { openPath } = await import('@tauri-apps/plugin-opener');
-          const root = useVaultStore.getState().vaultRoot;
-          if (root) await openPath(`${root}/${this.src}`);
-        } catch {
-          // Best-effort — failure here isn't actionable for the user.
-        }
+      const open = makeButton('↗ Open in tab', 'Open this image in a new tab');
+      open.addEventListener('click', () => {
+        useVaultStore.getState().openImageTab(this.src, { preview: true });
       });
       toolbar.appendChild(open);
     }

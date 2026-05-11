@@ -1,13 +1,9 @@
+use crate::core::vault::ATTACHMENTS_DIR;
 use crate::AppState;
 use chrono::Local;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::State;
-
-/// Vault-relative folder where all binary attachments live. Centralizing
-/// images here keeps notes portable (just `![](attachments/foo.png)`) and
-/// makes the GitHub-sync include/exclude choice a single decision.
-pub const ATTACHMENTS_DIR: &str = "attachments";
 
 /// Image formats the editor renders inline. We mirror the spec's list and
 /// fall back to a generic write for anything else the user explicitly

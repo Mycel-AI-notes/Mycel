@@ -78,25 +78,11 @@ impl Vault {
     }
 }
 
-/// Image extensions we render inline in the editor. Listing them here
-/// (rather than allowing every non-markdown file) keeps the tree free
-/// of `.DS_Store` and other junk that may live alongside attachments.
-const ATTACHMENT_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg"];
-
-fn is_attachment_path(rel_path: &str, full_path: &Path) -> bool {
-    // `attachments/foo.png` is the canonical place, but the user may
-    // already have images scattered elsewhere — surface those too so
-    // tree completeness doesn't depend on where the file landed.
-    let _ = rel_path;
-    let ext = full_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_lowercase());
-    match ext {
-        Some(e) => ATTACHMENT_EXTS.iter().any(|x| *x == e),
-        None => false,
-    }
-}
+/// Hidden from the file tree but kept on disk. The user accesses
+/// these through the inline image widget and the image tab view —
+/// listing them in the sidebar would clutter the tree without giving
+/// any extra interaction since they aren't editable as text.
+pub const ATTACHMENTS_DIR: &str = "attachments";
 
 fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
@@ -131,6 +117,13 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
             .to_string_lossy()
             .to_string();
 
+        // The attachments folder is intentionally hidden from the tree
+        // — images are surfaced inline in notes and through the image
+        // tab view, never as standalone tree entries.
+        if rel_path == ATTACHMENTS_DIR {
+            continue;
+        }
+
         if path.is_dir() {
             let children = read_dir_recursive(&path, vault_root)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
@@ -147,12 +140,7 @@ fn read_dir_recursive(dir: &Path, vault_root: &Path) -> Result<Vec<FileEntry>> {
         } else {
             let is_md = path.extension().map(|e| e == "md").unwrap_or(false);
             let is_age = rel_path.ends_with(".md.age");
-            // Show binary attachments in the tree too so the user can
-            // see what landed in `attachments/` after a drag-and-drop
-            // and so the file actions (rename / delete / reveal in
-            // OS) work on them like on notes.
-            let is_attachment = is_attachment_path(&rel_path, &path);
-            if is_md || is_age || is_attachment {
+            if is_md || is_age {
                 entries.push(FileEntry {
                     name,
                     path: rel_path,
