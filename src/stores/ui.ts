@@ -6,12 +6,12 @@ type Theme = 'light' | 'dark' | 'system';
 export type Palette = 'moss' | 'amber' | 'azure' | 'plum' | 'coral' | 'classic';
 
 export const PALETTES: { id: Palette; label: string; swatch: string }[] = [
-  { id: 'moss',    label: 'Moss',    swatch: '#C8F52A' },
-  { id: 'amber',   label: 'Amber',   swatch: '#FFB84D' },
-  { id: 'azure',   label: 'Azure',   swatch: '#58A6FF' },
-  { id: 'plum',    label: 'Plum',    swatch: '#B292FF' },
-  { id: 'coral',   label: 'Coral',   swatch: '#FF7E6B' },
-  { id: 'classic', label: 'Classic', swatch: '#ffffff' },
+  { id: 'moss',    label: 'Moss',          swatch: '#C8F52A' },
+  { id: 'plum',    label: 'Plum',          swatch: '#B292FF' },
+  { id: 'coral',   label: 'Coral',         swatch: '#FF7E6B' },
+  { id: 'amber',   label: 'Amber (Light)', swatch: '#E48A1A' },
+  { id: 'azure',   label: 'Azure (Light)', swatch: '#3A82E2' },
+  { id: 'classic', label: 'Classic',       swatch: '#ffffff' },
 ];
 
 export const SIDEBAR_MIN_WIDTH = 160;

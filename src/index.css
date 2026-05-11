@@ -66,36 +66,78 @@
  * same so every theme reads as the "same room, different lamp". */
 
 :root[data-palette='amber'] {
+  --color-surface-0:        #fffaf2;
+  --color-surface-1:        #fdf5e8;
+  --color-surface-2:        #f7ecd6;
+  --color-surface-hover:    #efdfbe;
+
+  --color-text-primary:     #2a1f0d;
+  --color-text-secondary:   #4a3a1f;
+  --color-text-muted:       #7a6840;
+  --color-text-disabled:    #b3a37a;
+
   --color-accent:           #B66E0D;
   --color-accent-bright:    #E48A1A;
   --color-accent-muted:     #C77E13;
   --color-accent-deep:      #6E4006;
 
+  --color-border:           #e6d6b3;
+  --color-border-strong:    #c9b486;
+
   --color-graph-active:     #E48A1A;
   --color-graph-connected:  #F0B254;
+  --color-graph-inactive:   #d6c7a0;
+  --color-graph-edge:       #e0d0a8;
   --color-graph-edge-glow:  #E48A1A;
 
   --color-wikilink:         #B66E0D;
   --color-tag:              #8A6510;
   --color-inline-code:      #B66E0D;
+
+  --color-search-bg:        #f7ecd6;
+  --color-search-selected:  #efdfbe;
   --color-semantic-glow:    rgba(228, 138, 26, 0.18);
+
+  --color-code-bg:          #f7ecd6;
+
   --color-selection:        rgba(228, 138, 26, 0.22);
   --shadow-glow:            0 0 24px rgba(228, 138, 26, 0.18);
 }
 :root[data-palette='azure'] {
+  --color-surface-0:        #ffffff;
+  --color-surface-1:        #f5f8fc;
+  --color-surface-2:        #e9f0f9;
+  --color-surface-hover:    #dbe6f4;
+
+  --color-text-primary:     #0d1a2a;
+  --color-text-secondary:   #2b3a52;
+  --color-text-muted:       #607089;
+  --color-text-disabled:    #a3b1c4;
+
   --color-accent:           #1F66C7;
   --color-accent-bright:    #3A82E2;
   --color-accent-muted:     #2870D0;
   --color-accent-deep:      #143F7E;
 
+  --color-border:           #d3dfee;
+  --color-border-strong:    #aabfd8;
+
   --color-graph-active:     #3A82E2;
   --color-graph-connected:  #76A8EA;
+  --color-graph-inactive:   #c5d0de;
+  --color-graph-edge:       #d3dfee;
   --color-graph-edge-glow:  #3A82E2;
 
   --color-wikilink:         #1F66C7;
   --color-tag:              #146A8C;
   --color-inline-code:      #1F66C7;
+
+  --color-search-bg:        #eef3fa;
+  --color-search-selected:  #dbe6f4;
   --color-semantic-glow:    rgba(58, 130, 226, 0.18);
+
+  --color-code-bg:          #eef3fa;
+
   --color-selection:        rgba(58, 130, 226, 0.22);
   --shadow-glow:            0 0 24px rgba(58, 130, 226, 0.18);
 }
@@ -233,43 +275,100 @@
   color-scheme: dark;
 }
 
-/* Dark-mode palette overrides — shift only the accent-driven tokens. */
+/* Amber & Azure — light-forcing palettes (like Classic). Picking either gives
+   a warm/cool ink-on-paper look regardless of dark/light mode toggle. The
+   light-mode :root[data-palette='amber'|'azure'] above already sets accents;
+   here we override .dark back to light surfaces. */
 .dark[data-palette='amber'] {
-  --color-accent:           #FFB84D;
-  --color-accent-bright:    #FFD27A;
-  --color-accent-muted:     #E08F1A;
-  --color-accent-deep:      #8C5410;
+  --color-surface-0:        #fffaf2;
+  --color-surface-1:        #fdf5e8;
+  --color-surface-2:        #f7ecd6;
+  --color-surface-hover:    #efdfbe;
 
-  --color-graph-active:     #FFD27A;
+  --color-text-primary:     #2a1f0d;
+  --color-text-secondary:   #4a3a1f;
+  --color-text-muted:       #7a6840;
+  --color-text-disabled:    #b3a37a;
+
+  --color-accent:           #B66E0D;
+  --color-accent-bright:    #E48A1A;
+  --color-accent-muted:     #C77E13;
+  --color-accent-deep:      #6E4006;
+
+  --color-border:           #e6d6b3;
+  --color-border-strong:    #c9b486;
+
+  --color-graph-active:     #E48A1A;
   --color-graph-connected:  #F0B254;
-  --color-graph-edge-glow:  #FFB84D;
+  --color-graph-inactive:   #d6c7a0;
+  --color-graph-edge:       #e0d0a8;
+  --color-graph-edge-glow:  #E48A1A;
 
-  --color-wikilink:         #FFC773;
-  --color-tag:              #F0B254;
-  --color-inline-code:      #FFD27A;
-  --color-semantic-glow:    rgba(255, 184, 77, 0.18);
-  --color-selection:        rgba(255, 184, 77, 0.18);
-  --color-active-line:      rgba(255, 184, 77, 0.04);
-  --shadow-glow:            0 0 24px rgba(255, 184, 77, 0.18);
+  --color-wikilink:         #B66E0D;
+  --color-wikilink-broken:  #c0382b;
+  --color-tag:              #8A6510;
+  --color-embedding:        #2faf6c;
+
+  --color-search-bg:        #f7ecd6;
+  --color-search-selected:  #efdfbe;
+  --color-semantic-glow:    rgba(228, 138, 26, 0.18);
+
+  --color-code-bg:          #f7ecd6;
+  --color-inline-code:      #B66E0D;
+
+  --color-selection:        rgba(228, 138, 26, 0.22);
+  --color-active-line:      rgba(0, 0, 0, 0.03);
+
+  --shadow-glow:            0 0 24px rgba(228, 138, 26, 0.18);
+
+  color-scheme: light;
 }
 .dark[data-palette='azure'] {
-  --color-accent:           #6FB8FF;
-  --color-accent-bright:    #9CD2FF;
-  --color-accent-muted:     #58A6FF;
-  --color-accent-deep:      #2E5C99;
+  --color-surface-0:        #ffffff;
+  --color-surface-1:        #f5f8fc;
+  --color-surface-2:        #e9f0f9;
+  --color-surface-hover:    #dbe6f4;
 
-  --color-graph-active:     #9CD2FF;
+  --color-text-primary:     #0d1a2a;
+  --color-text-secondary:   #2b3a52;
+  --color-text-muted:       #607089;
+  --color-text-disabled:    #a3b1c4;
+
+  --color-accent:           #1F66C7;
+  --color-accent-bright:    #3A82E2;
+  --color-accent-muted:     #2870D0;
+  --color-accent-deep:      #143F7E;
+
+  --color-border:           #d3dfee;
+  --color-border-strong:    #aabfd8;
+
+  --color-graph-active:     #3A82E2;
   --color-graph-connected:  #76A8EA;
-  --color-graph-edge-glow:  #6FB8FF;
+  --color-graph-inactive:   #c5d0de;
+  --color-graph-edge:       #d3dfee;
+  --color-graph-edge-glow:  #3A82E2;
 
-  --color-wikilink:         #9CD2FF;
-  --color-tag:              #8BE9FD;
-  --color-inline-code:      #9CD2FF;
-  --color-semantic-glow:    rgba(111, 184, 255, 0.18);
-  --color-selection:        rgba(111, 184, 255, 0.18);
-  --color-active-line:      rgba(111, 184, 255, 0.04);
-  --shadow-glow:            0 0 24px rgba(111, 184, 255, 0.18);
+  --color-wikilink:         #1F66C7;
+  --color-wikilink-broken:  #c0382b;
+  --color-tag:              #146A8C;
+  --color-embedding:        #2faf6c;
+
+  --color-search-bg:        #eef3fa;
+  --color-search-selected:  #dbe6f4;
+  --color-semantic-glow:    rgba(58, 130, 226, 0.18);
+
+  --color-code-bg:          #eef3fa;
+  --color-inline-code:      #1F66C7;
+
+  --color-selection:        rgba(58, 130, 226, 0.22);
+  --color-active-line:      rgba(0, 0, 0, 0.03);
+
+  --shadow-glow:            0 0 24px rgba(58, 130, 226, 0.18);
+
+  color-scheme: light;
 }
+
+/* Dark-mode palette overrides — shift only the accent-driven tokens. */
 .dark[data-palette='plum'] {
   --color-accent:           #C792EA;
   --color-accent-bright:    #DDB3FF;
