@@ -28,6 +28,10 @@ import { TagSearch } from '@/components/search/TagSearch';
 
 const TAG_GROUP = '__tags__';
 
+const isMac =
+  typeof navigator !== 'undefined' &&
+  /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
 // ── Wire types matching the Rust `graph_data` payload ───────────────────────
 
 interface GraphNote { path: string; title: string; folder: string; }
@@ -667,7 +671,13 @@ export function GraphView({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-surface-0 flex flex-col">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface-0 shrink-0">
+      <div
+        data-tauri-drag-region
+        className={clsx(
+          'flex items-center justify-between pr-4 py-2 border-b border-border bg-surface-0 shrink-0',
+          isMac ? 'pl-[78px]' : 'pl-4',
+        )}
+      >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium text-text-primary">Graph</h2>
           {data && (
