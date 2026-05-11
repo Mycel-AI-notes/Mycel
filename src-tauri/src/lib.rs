@@ -58,6 +58,16 @@ pub fn run() {
             commands::database::db_create_page,
             commands::database::db_pages_dir,
             commands::database::dbs_list,
+            commands::sync::sync_init,
+            commands::sync::sync_clone,
+            commands::sync::sync_now,
+            commands::sync::sync_status,
+            commands::sync::sync_get_config,
+            commands::sync::sync_set_config,
+            commands::sync::sync_disable,
+            commands::sync::sync_set_token,
+            commands::sync::sync_has_token,
+            commands::sync::sync_clear_token,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

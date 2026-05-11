@@ -55,3 +55,32 @@ export interface Tab {
   /// regular pinned tab. Double-clicking the tab also pins it.
   isPreview?: boolean;
 }
+
+export interface SyncConfig {
+  remote: string;
+  branch: string;
+  author_name: string;
+  author_email: string;
+  auto_sync: boolean;
+  debounce_ms: number;
+  last_sync_at?: string | null;
+}
+
+export interface SyncStatus {
+  configured: boolean;
+  has_token: boolean;
+  remote: string | null;
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  dirty: boolean;
+  conflicts: string[];
+  last_sync_at: string | null;
+}
+
+export type SyncOutcome =
+  | { kind: 'up_to_date' }
+  | { kind: 'pulled'; commits: number }
+  | { kind: 'pushed'; commits: number }
+  | { kind: 'pulled_and_pushed'; pulled: number; pushed: number }
+  | { kind: 'conflict'; files: string[] };
