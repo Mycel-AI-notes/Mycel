@@ -19,6 +19,7 @@ import {
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry } from '@/types';
+import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
 import { stripNoteExt } from '@/lib/note-name';
@@ -113,6 +114,13 @@ function FileTreeNode({
       // default menu for those folders. Files keep the native menu so users
       // still get "Inspect Element" while debugging.
       if (!entry.is_dir || isLocked) return;
+      // Folders nested inside the protected `Knowledge Base/` (or `quick/`)
+      // roots can't be promoted to KBs — that territory already belongs to
+      // the database-page mechanism. Fall through to the native menu.
+      const insideProtected =
+        entry.path.startsWith(`${KNOWLEDGE_BASE_DIR}/`) ||
+        entry.path.startsWith(`${QUICK_NOTES_DIR}/`);
+      if (insideProtected) return;
       e.preventDefault();
       e.stopPropagation();
       openKbMenu(e.clientX, e.clientY, entry);

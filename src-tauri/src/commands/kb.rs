@@ -1,4 +1,6 @@
-use crate::core::vault::{read_kb_dirs, write_kb_dirs, KbEntry};
+use crate::core::vault::{
+    read_kb_dirs, write_kb_dirs, KbEntry, KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR,
+};
 use crate::AppState;
 use chrono::Utc;
 use indexmap::IndexMap;
@@ -155,6 +157,21 @@ pub async fn kb_init(
     let dir_rel = dir_path.trim_matches('/').replace('\\', "/");
     if dir_rel.is_empty() {
         return Err("KB path cannot be empty".into());
+    }
+    // Folders inside the protected `Knowledge Base/` / `quick/` roots are
+    // off-limits: that area is owned by the standalone-database / quick-
+    // capture systems. Rejecting at the boundary keeps both mechanisms
+    // tidy regardless of how the request reached us.
+    let kb_prefix = format!("{KNOWLEDGE_BASE_DIR}/");
+    let quick_prefix = format!("{QUICK_NOTES_DIR}/");
+    if dir_rel == KNOWLEDGE_BASE_DIR
+        || dir_rel == QUICK_NOTES_DIR
+        || dir_rel.starts_with(&kb_prefix)
+        || dir_rel.starts_with(&quick_prefix)
+    {
+        return Err(format!(
+            "Folders inside '{KNOWLEDGE_BASE_DIR}/' or '{QUICK_NOTES_DIR}/' cannot be promoted to Knowledge Bases."
+        ));
     }
     let abs_dir = root.join(&dir_rel);
     if !abs_dir.is_dir() {
