@@ -286,13 +286,31 @@ function FileTreeNode({
                   try {
                     if (isEnc) {
                       if (!cryptoStatus.unlocked) {
-                        // Refuse silently-unlocking from a per-file action.
-                        // The user must go through the shield → Unlock so
-                        // Lock actually means something.
                         throw new Error('Vault is locked. Click the shield icon to unlock first.');
                       }
                       await decryptNote(entry.path);
                     } else {
+                      // Warn before encrypting an existing plaintext note —
+                      // its prior content (saved or synced before this
+                      // moment) is NOT protected by encrypting now. Skip
+                      // the warning for "fresh" notes where the body is
+                      // just the auto-generated heading, since there's
+                      // nothing to leak yet.
+                      const cached = useVaultStore.getState().noteCache.get(entry.path);
+                      const body = (cached?.content ?? '').trim();
+                      const stem = entry.name.replace(/\.md$/, '');
+                      const isFresh =
+                        body === '' ||
+                        body === `# ${stem}` ||
+                        body === `# ${stem}\n` ||
+                        body.length < 32;
+                      if (!isFresh) {
+                        const ok = await confirm(
+                          'Anything you have saved or synced before this moment stays plaintext — in git history, in iCloud/Time Machine/Windows backups, in the GitHub remote. Encrypting now only protects FUTURE writes. Continue?',
+                          { title: `Encrypt "${stem}"?`, kind: 'warning' },
+                        );
+                        if (!ok) return;
+                      }
                       await encryptNote(entry.path);
                     }
                     await useVaultStore.getState().refreshTree();

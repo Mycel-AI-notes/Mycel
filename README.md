@@ -164,6 +164,14 @@ the lock icon — the file becomes `<name>.md.age`. Encrypted notes still
 appear in the file tree (with a lock icon) and sync through GitHub as
 opaque ASCII-armored blobs.
 
+**Encryption is not retroactive.** Clicking the lock icon on an existing
+`.md` note only protects writes *from that moment on*. Anything you saved
+or pushed beforehand is still plaintext in git history, in iCloud / Time
+Machine / Windows backups, in the GitHub remote. Mycel will warn you on
+the encrypt action, but the only way to guarantee a note never hits the
+disk plaintext is to create it inside a vault you intend to keep encrypted
+and click the lock icon **before** typing anything sensitive.
+
 Post-quantum hybrid encryption is on the roadmap: once an `age-plugin-pq`
 recipient ships, it can be added to `recipients.txt` without code changes
 here. FIDO2/YubiKey support arrives the same way via the age plugin system.

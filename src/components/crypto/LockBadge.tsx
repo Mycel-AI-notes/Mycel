@@ -373,6 +373,14 @@ function ManageView() {
         </div>
       )}
 
+      <p className="text-[11px] text-text-muted bg-surface-2 p-2 rounded leading-relaxed">
+        <strong className="text-text-secondary">Encryption is not retroactive.</strong>{' '}
+        Clicking the lock icon on a plain note only protects writes from
+        that point on — earlier saves may still exist in git history,
+        sync backups, or filesystem snapshots. Create-then-encrypt only
+        works when there&rsquo;s nothing sensitive yet.
+      </p>
+
       <button
         onClick={() => lock().catch(() => undefined)}
         disabled={busy}
