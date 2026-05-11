@@ -203,15 +203,18 @@ rows:
 
 ## 🗺️ Roadmap
 
-What's next, roughly in priority order:
+The big things on the bench, roughly in priority order:
 
-- 🖼️ **Image support** — drag-and-drop / paste images into a note. Stored next to the note (or in a configurable `attachments/` folder) and rendered inline.
-- 🤖 **Proactive AI** — a local assistant that watches what you're writing, surfaces related notes, suggests links, drafts daily summaries, and answers questions grounded in your vault. Local LLM by default.
-- 🔐 **E2E-encrypted sync** — optional encrypted sync on top of plain Markdown (so Git / iCloud / Syncthing still work alongside it).
+- 🔎 **Semantic search** — embed your notes locally and search by meaning, not just keywords. "What did I write about Bayesian priors in March?" — works even if the note never used those exact words.
+- 🤖 **Local AI integrations** — pluggable local LLM backends (Ollama, llama.cpp, LM Studio). A proactive assistant that surfaces related notes, suggests links, drafts daily summaries, and answers questions grounded in your vault. Everything runs on your machine by default; bring-your-own cloud key is opt-in.
+- 🔐 **Encrypted notes** *(security-grade)* — per-note encryption to `.md.age` files using [age](https://github.com/FiloSottile/age) with X25519 keys, mastered by a hardware-backed identity (Secure Enclave on macOS, TPM on Windows/Linux, FIDO2/YubiKey as a portable option). The plaintext private key **never** touches disk; decryption happens in-process and is wiped on lock. Optional post-quantum (Kyber) wrapping for long-lived secrets. Encrypted notes still sync as opaque blobs through GitHub.
+- 🧮 **LaTeX support** — inline `$…$` and block `$$…$$` math, rendered with KaTeX. Copy-as-image for sharing, optional MathML output for accessibility.
+- 🌳 **Knowledge-base hierarchy** — first-class nested structure: collapsible KB sections, breadcrumb navigation, parent/child relations surfaced in the graph and backlinks, drag-to-reparent in the sidebar.
+- 🖼️ **Image support** — drag-and-drop / paste images, stored next to the note (or in a configurable `attachments/` folder) and rendered inline.
 - 🎨 **Community themes** — a theme picker open to contributions.
 - 📱 **Mobile companion** — read-only first, capture second.
 
-Blocked on one of these? [Open an issue](https://github.com/Mycel-AI-notes/Mycel/issues/new) — that's the strongest signal for what gets built next.
+📋 **The full roadmap lives in [GitHub Issues](https://github.com/Mycel-AI-notes/Mycel/issues)** — that's where the granular tickets, design discussions, and "good first issue" tags live. **Everyone is invited to contribute** — pick a ticket, drop a comment, send a PR. New ideas welcome too.
 
 ---
 
@@ -292,4 +295,6 @@ It's the cheapest way to say thanks, and it genuinely moves the needle on what g
 
 ## 📜 License
 
-[MIT](./LICENSE) — do what you want, just don't blame us. Built with ❤️ by people who'd rather own their notes.
+[AGPL-3.0](./LICENSE) — Mycel is free software. Use it, modify it, share it. If you run a modified version as a network service, you must publish your changes under the same license.
+
+Built with ❤️ by people who'd rather own their notes.
