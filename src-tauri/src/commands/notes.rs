@@ -119,7 +119,7 @@ pub async fn note_save(
             .ok_or("No vault open")?
     };
 
-    write_note(&vault_root, &path, &content, &state).await
+    write_note(&vault_root, &path, &content).await
 }
 
 /// Write `content` only if the file on disk still hashes to
@@ -173,7 +173,7 @@ pub async fn note_save_checked(
         });
     }
 
-    let disk_hash = write_note(&vault_root, &path, &content, &state).await?;
+    let disk_hash = write_note(&vault_root, &path, &content).await?;
     Ok(SaveResult::Saved { disk_hash })
 }
 
@@ -181,7 +181,6 @@ async fn write_note(
     vault_root: &std::path::Path,
     path: &str,
     content: &str,
-    state: &State<'_, AppState>,
 ) -> Result<String, String> {
     let abs_path = vault_root.join(path);
     if let Some(parent) = abs_path.parent() {
