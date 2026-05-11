@@ -20,6 +20,8 @@ import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecoratio
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { databaseSlashCommand } from '@/lib/codemirror/database-slash';
 import { markdownTableField, markdownTableTheme } from '@/lib/codemirror/markdown-table-widget';
+import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
+import { tableSlashCommand } from '@/lib/codemirror/table-slash';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
@@ -171,6 +173,9 @@ export function MarkdownEditor({ path }: Props) {
         markdownPreviewTheme,
         markdownTableField,
         markdownTableTheme,
+        editableTableWidgetPlugin(),
+        editableTableWidgetTheme,
+        tableSlashCommand(),
         databaseWidgetPlugin(path),
         databaseWidgetTheme,
         databaseSlashCommand({

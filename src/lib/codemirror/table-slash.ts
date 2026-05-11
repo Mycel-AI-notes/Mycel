@@ -1,14 +1,10 @@
 import { ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { insertTableFence } from '@/lib/table/insert';
 
-interface Options {
-  openPicker: (replaceFrom: number, replaceTo: number) => void;
-}
-
-// Watches for `/db`, `/database` typed at the end of the cursor position. When
-// detected, opens the picker; the matched range is forwarded so the picker can
-// replace it with the inserted fence on confirm. `/table` is handled by the
-// markdown-table slash command, which inserts an editable mdtable block.
-export function databaseSlashCommand(opts: Options) {
+// Watches for `/table` typed at the cursor and replaces it with a fresh
+// `mdtable` block. The database picker handles `/db` and `/database`; we keep
+// `/table` here so a typed slash command always means "markdown table".
+export function tableSlashCommand() {
   return ViewPlugin.fromClass(
     class {
       private armed = true;
@@ -21,7 +17,7 @@ export function databaseSlashCommand(opts: Options) {
         const line = view.state.doc.lineAt(pos);
         const before = view.state.doc.sliceString(line.from, pos);
 
-        const m = before.match(/(?:^|\s)\/(db|database)$/i);
+        const m = before.match(/(?:^|\s)\/(table|tbl)$/i);
         if (!m) return;
 
         const triggerLen = 1 + m[1].length;
@@ -32,7 +28,9 @@ export function databaseSlashCommand(opts: Options) {
           this.armed = true;
         }, 250);
 
-        opts.openPicker(from, pos);
+        queueMicrotask(() => {
+          insertTableFence(view, { replaceFrom: from, replaceTo: pos });
+        });
       }
     },
   );
