@@ -1,8 +1,33 @@
-import { X, Lock } from 'lucide-react';
+import {
+  X,
+  Lock,
+  Inbox,
+  Zap,
+  ClipboardList,
+  Hourglass,
+  Lightbulb,
+  RefreshCw,
+  type LucideIcon,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
 import { PulseSpore } from '@/components/brand/Spore';
 import { isEncryptedPath } from '@/lib/note-name';
+import { parseGardenTabPath } from '@/lib/garden-tab';
+
+function gardenTabIcon(path: string): LucideIcon | null {
+  const view = parseGardenTabPath(path);
+  if (!view) return null;
+  switch (view.kind) {
+    case 'inbox': return Inbox;
+    case 'actions': return Zap;
+    case 'projects':
+    case 'project-detail': return ClipboardList;
+    case 'waiting': return Hourglass;
+    case 'someday': return Lightbulb;
+    case 'review': return RefreshCw;
+  }
+}
 
 export function EditorTabs() {
   const { openTabs, activeTabPath, setActiveTab, closeTab, pinTab } = useVaultStore();
@@ -11,7 +36,9 @@ export function EditorTabs() {
 
   return (
     <div className="flex items-center border-b border-border bg-surface-0 overflow-x-auto shrink-0">
-      {openTabs.map((tab) => (
+      {openTabs.map((tab) => {
+        const GardenIcon = gardenTabIcon(tab.path);
+        return (
         <button
           key={tab.path}
           onClick={() => setActiveTab(tab.path)}
@@ -25,6 +52,13 @@ export function EditorTabs() {
             tab.isPreview && 'italic',
           )}
         >
+          {GardenIcon && (
+            <GardenIcon
+              size={12}
+              className="shrink-0 text-accent"
+              aria-hidden="true"
+            />
+          )}
           {isEncryptedPath(tab.path) && (
             <Lock
               size={10}
@@ -52,7 +86,8 @@ export function EditorTabs() {
             <X size={11} />
           </span>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }

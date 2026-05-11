@@ -8,10 +8,12 @@ import {
 } from '@/stores/ui';
 import { SyncStatusBadge } from '@/components/sync/SyncStatusBadge';
 import { SyncPanel } from '@/components/sync/SyncPanel';
+import { GardenSidebar } from '@/components/garden/GardenSidebar';
 
 export function Sidebar() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const gardenEnabled = useUIStore((s) => s.features.garden);
   const asideRef = useRef<HTMLElement>(null);
   const [resizing, setResizing] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -65,7 +67,12 @@ export function Sidebar() {
       className="relative flex flex-col h-full bg-surface-0 border-r border-border shrink-0"
       style={{ width: `${sidebarWidth}px` }}
     >
-      <FileTree />
+      <div className="flex flex-col min-h-0 flex-1">
+        {gardenEnabled && <GardenSidebar />}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <FileTree />
+        </div>
+      </div>
 
       <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-t border-border bg-surface-0">
         <SyncStatusBadge onClick={() => setSyncOpen(true)} />

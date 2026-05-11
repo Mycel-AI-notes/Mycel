@@ -18,6 +18,16 @@ export const SIDEBAR_MIN_WIDTH = 160;
 export const SIDEBAR_MAX_WIDTH = 600;
 export const SIDEBAR_DEFAULT_WIDTH = 224;
 
+/// Opt-in / opt-out switches for whole features. Persists across sessions
+/// so a user who hides Garden never has to deal with it again.
+export interface FeatureFlags {
+  garden: boolean;
+}
+
+const DEFAULT_FEATURES: FeatureFlags = {
+  garden: true,
+};
+
 interface UIState {
   theme: Theme;
   palette: Palette;
@@ -25,6 +35,8 @@ interface UIState {
   sidebarWidth: number;
   rightPanelCollapsed: boolean;
   rightPanelTab: 'backlinks' | 'outline' | 'tags';
+  features: FeatureFlags;
+  settingsOpen: boolean;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -32,6 +44,9 @@ interface UIState {
   setSidebarWidth: (width: number) => void;
   toggleRightPanel: () => void;
   setRightPanelTab: (tab: UIState['rightPanelTab']) => void;
+  setFeature: (key: keyof FeatureFlags, value: boolean) => void;
+  openSettings: () => void;
+  closeSettings: () => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -46,6 +61,8 @@ export const useUIStore = create<UIState>()(
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       rightPanelCollapsed: true,
       rightPanelTab: 'backlinks',
+      features: DEFAULT_FEATURES,
+      settingsOpen: false,
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -53,6 +70,10 @@ export const useUIStore = create<UIState>()(
       setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
       toggleRightPanel: () => set((s) => ({ rightPanelCollapsed: !s.rightPanelCollapsed })),
       setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
+      setFeature: (key, value) =>
+        set((s) => ({ features: { ...s.features, [key]: value } })),
+      openSettings: () => set({ settingsOpen: true }),
+      closeSettings: () => set({ settingsOpen: false }),
     }),
     {
       name: 'mycel-ui',
@@ -60,6 +81,7 @@ export const useUIStore = create<UIState>()(
         sidebarWidth: s.sidebarWidth,
         theme: s.theme,
         palette: s.palette,
+        features: s.features,
       }),
     },
   ),

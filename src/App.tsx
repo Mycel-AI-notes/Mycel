@@ -4,6 +4,7 @@ import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
+import { useGardenStore } from '@/stores/garden';
 import { useRecentVaults } from '@/stores/recentVaults';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { EditorTabs } from '@/components/editor/EditorTabs';
@@ -15,6 +16,10 @@ import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
+import { GardenView } from '@/components/garden/GardenView';
+import { QuickCapture } from '@/components/garden/QuickCapture';
+import { SettingsDialog } from '@/components/ui/SettingsDialog';
+import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -31,6 +36,7 @@ import {
   Zap,
   FolderSearch,
   Share2,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
@@ -43,8 +49,16 @@ export default function App() {
   useTheme();
   useAutoLock();
 
-  const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
+  const gardenEnabled = useUIStore((s) => s.features.garden);
+  const openSettings = useUIStore((s) => s.openSettings);
+  const openGardenCapture = useGardenStore((s) => s.openCapture);
+  const toggleGardenSection = useGardenStore((s) => s.toggleSection);
+
+  // Determine which view to render in the main area: a Garden tab, a note,
+  // or the empty state.
+  const activeGardenView = gardenEnabled ? parseGardenTabPath(activeTabPath ?? '') : null;
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
@@ -69,7 +83,7 @@ export default function App() {
     });
   }, [vaultRoot, openVault]);
 
-  // In-app keyboard shortcuts (Quick Switcher).
+  // In-app keyboard shortcuts (Quick Switcher, Garden navigation).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -79,13 +93,39 @@ export default function App() {
         e.preventDefault();
         if (vaultRoot) setQuickSwitcherOpen(true);
       } else if (e.key === 'g' || e.key === 'G') {
+        // Plain Cmd+G keeps Graph; Cmd+Shift+G could be reused later.
+        if (e.shiftKey) return;
         e.preventDefault();
         if (vaultRoot) setGraphOpen((g) => !g);
+      } else if (gardenEnabled && (e.key === 'i' || e.key === 'I')) {
+        // Cmd+I — Garden quick capture.
+        e.preventDefault();
+        if (vaultRoot) openGardenCapture();
+      } else if (gardenEnabled && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        // Cmd+Shift+A — Open Next Actions.
+        e.preventDefault();
+        if (vaultRoot) openGardenTab({ kind: 'actions' }, { preview: true });
+      } else if (gardenEnabled && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        // Cmd+Shift+P — Open Projects.
+        e.preventDefault();
+        if (vaultRoot) openGardenTab({ kind: 'projects' }, { preview: true });
+      } else if (e.key === 's' || e.key === 'S') {
+        // Cmd+S on a Garden tab pins it — there's no document to save, but
+        // the user expects the same "promote preview to pinned" gesture.
+        // For note tabs CodeMirror's keymap handles save+pin already.
+        if (activeTabPath && activeTabPath.startsWith('garden:')) {
+          e.preventDefault();
+          pinTab(activeTabPath);
+        }
+      } else if (gardenEnabled && e.key === '`') {
+        // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
+        e.preventDefault();
+        toggleGardenSection();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot]);
+  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled, activeTabPath, pinTab]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
@@ -200,10 +240,12 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         {!sidebarCollapsed && <Sidebar />}
 
-        {/* Editor area */}
+        {/* Editor area — Garden tabs and notes share the same tab strip. */}
         <main className="flex flex-col flex-1 min-w-0">
           <EditorTabs />
-          {activeTabPath ? (
+          {activeGardenView ? (
+            <GardenView view={activeGardenView} />
+          ) : activeTabPath && !isGardenTabPath(activeTabPath) ? (
             <MarkdownEditor key={activeTabPath} path={activeTabPath} />
           ) : (
             <EmptyEditor />
@@ -213,7 +255,7 @@ export default function App() {
         {!rightPanelCollapsed && <RightPanel />}
       </div>
 
-      {/* Bottom status bar — vault + theme settings */}
+      {/* Bottom status bar — vault + theme + settings */}
       <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
         <button
           onClick={closeVault}
@@ -221,6 +263,13 @@ export default function App() {
           title="Manage vaults — back to vault picker"
         >
           <FolderSearch size={14} />
+        </button>
+        <button
+          onClick={openSettings}
+          className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+          title="Settings"
+        >
+          <SettingsIcon size={14} />
         </button>
         <PalettePicker />
       </footer>
@@ -233,6 +282,12 @@ export default function App() {
 
       {/* Save-conflict resolution. The store decides whether to render. */}
       <ConflictDialog />
+
+      {/* Garden quick-capture (⌘I). Self-renders when open. */}
+      {gardenEnabled && <QuickCapture />}
+
+      {/* Settings dialog. Self-renders when open. */}
+      <SettingsDialog />
     </div>
   );
 }
