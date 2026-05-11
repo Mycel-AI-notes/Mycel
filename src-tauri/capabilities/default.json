@@ -21,6 +21,7 @@
     "global-shortcut:allow-is-registered",
     "core:window:allow-show",
     "core:window:allow-set-focus",
-    "core:window:allow-unminimize"
+    "core:window:allow-unminimize",
+    "core:window:allow-start-dragging"
   ]
 }
