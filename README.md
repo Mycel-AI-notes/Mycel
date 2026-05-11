@@ -12,10 +12,6 @@
   <img src="public/demo_db_start.png" alt="Mycel editor" width="800">
 </p>
 
-<p align="center">
-  <img src="public/demo_db.png" alt="Mycel editor" width="800">
-</p>
-
 
 Mycel is a desktop note-taking app built on [Tauri 2](https://tauri.app) + Rust + React. Open any folder, start writing — your notes stay as plain `.md` files on disk, no cloud account required.
 
@@ -40,6 +36,13 @@ Mycel is a desktop note-taking app built on [Tauri 2](https://tauri.app) + Rust 
 - **Backlinks panel.** Right-side panel shows what links to the current note.
 - **Inline databases.** Notion-style fenced `mycel-db` blocks render tables with typed columns (text, number, date, select, multi-select, checkbox, page link…).
 - **Themes.** Light / dark, follows system by default.
+
+## Graph view
+
+<p align="center">
+  <img src="public/graph.png" alt="Mycel editor" width="800">
+</p>
+
 
 ## Keyboard shortcuts
 
