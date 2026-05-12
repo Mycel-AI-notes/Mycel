@@ -6,7 +6,6 @@ import type {
   ColumnDef,
   Database,
   FilterDef,
-  Row,
   SortDef,
   ViewDef,
 } from '@/types/database';
@@ -120,30 +119,41 @@ export function DatabaseView({
     return limit && limit > 0 ? sorted.slice(0, limit) : sorted;
   }, [db, view]);
 
+  // All mutation handlers below use functional setDb so they're immune to
+  // stale closures: if a file-watcher reload or another mutation lands while
+  // an async dbApi.* call is in flight, the new state is built off the
+  // freshest snapshot, not the snapshot captured at handler creation. Before
+  // this, a quick sequence of ghost-row additions could clobber each other
+  // (each setDb wrote back its own captured `db` with only its own new row),
+  // which looked like the table was "reformatting" itself.
   const persistView = useCallback(
     async (next: ViewDef) => {
-      if (!db || !resolvedViewId) return;
-      setDb({ ...db, views: { ...db.views, [resolvedViewId]: next } });
+      if (!resolvedViewId) return;
+      setDb((prev) =>
+        prev ? { ...prev, views: { ...prev.views, [resolvedViewId]: next } } : prev,
+      );
       try {
         await dbApi.updateView(dbPath, resolvedViewId, next);
       } catch (err) {
         console.error(err);
       }
     },
-    [db, dbPath, resolvedViewId],
+    [dbPath, resolvedViewId],
   );
 
   const handleCellChange = useCallback(
     async (rowId: string, columnId: string, value: unknown) => {
-      if (!db) return;
-      const nextRows = db.rows.map((r) =>
-        r.id === rowId
-          ? columnId === 'page'
-            ? { ...r, page: (value as string | null) ?? null }
-            : { ...r, [columnId]: value }
-          : r,
-      );
-      setDb({ ...db, rows: nextRows });
+      setDb((prev) => {
+        if (!prev) return prev;
+        const nextRows = prev.rows.map((r) =>
+          r.id === rowId
+            ? columnId === 'page'
+              ? { ...r, page: (value as string | null) ?? null }
+              : { ...r, [columnId]: value }
+            : r,
+        );
+        return { ...prev, rows: nextRows };
+      });
       try {
         await dbApi.updateCell(dbPath, rowId, columnId, value);
       } catch (err) {
@@ -151,18 +161,22 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleAddOption = useCallback(
     async (columnId: string, opt: string) => {
-      if (!db) return;
-      const col = db.schema[columnId];
-      if (!col) return;
-      const opts = col.options ?? [];
-      if (opts.includes(opt)) return;
-      const nextCol: ColumnDef = { ...col, options: [...opts, opt] };
-      setDb({ ...db, schema: { ...db.schema, [columnId]: nextCol } });
+      let nextCol: ColumnDef | null = null;
+      setDb((prev) => {
+        if (!prev) return prev;
+        const col = prev.schema[columnId];
+        if (!col) return prev;
+        const opts = col.options ?? [];
+        if (opts.includes(opt)) return prev;
+        nextCol = { ...col, options: [...opts, opt] };
+        return { ...prev, schema: { ...prev.schema, [columnId]: nextCol } };
+      });
+      if (!nextCol) return;
       try {
         await dbApi.updateColumn(dbPath, columnId, nextCol);
       } catch (err) {
@@ -170,20 +184,25 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleSetOptionColor = useCallback(
     async (columnId: string, opt: string, hueIndex: number | null) => {
-      if (!db) return;
-      const col = db.schema[columnId];
-      if (!col) return;
-      const prev = (col.option_colors as Record<string, number> | undefined) ?? {};
-      const next = { ...prev };
-      if (hueIndex === null) delete next[opt];
-      else next[opt] = hueIndex;
-      const nextCol: ColumnDef = { ...col, option_colors: next };
-      setDb({ ...db, schema: { ...db.schema, [columnId]: nextCol } });
+      let nextCol: ColumnDef | null = null;
+      setDb((prev) => {
+        if (!prev) return prev;
+        const col = prev.schema[columnId];
+        if (!col) return prev;
+        const prevColors =
+          (col.option_colors as Record<string, number> | undefined) ?? {};
+        const colors = { ...prevColors };
+        if (hueIndex === null) delete colors[opt];
+        else colors[opt] = hueIndex;
+        nextCol = { ...col, option_colors: colors };
+        return { ...prev, schema: { ...prev.schema, [columnId]: nextCol } };
+      });
+      if (!nextCol) return;
       try {
         await dbApi.updateColumn(dbPath, columnId, nextCol);
       } catch (err) {
@@ -191,26 +210,27 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleAddRow = useCallback(async (): Promise<string | null> => {
-    if (!db) return null;
     try {
       const id = await dbApi.addRow(dbPath);
-      const newRow: Row = { id };
-      setDb({ ...db, rows: [...db.rows, newRow] });
+      setDb((prev) =>
+        prev ? { ...prev, rows: [...prev.rows, { id }] } : prev,
+      );
       return id;
     } catch (err) {
       console.error(err);
       return null;
     }
-  }, [db, dbPath]);
+  }, [dbPath]);
 
   const handleDeleteRow = useCallback(
     async (rowId: string) => {
-      if (!db) return;
-      setDb({ ...db, rows: db.rows.filter((r) => r.id !== rowId) });
+      setDb((prev) =>
+        prev ? { ...prev, rows: prev.rows.filter((r) => r.id !== rowId) } : prev,
+      );
       try {
         await dbApi.deleteRow(dbPath, rowId);
       } catch (err) {
@@ -218,24 +238,29 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleAddColumn = useCallback(
     async (columnId: string, def: ColumnDef) => {
-      if (!db) return;
-      if (db.schema[columnId]) {
-        alert(`Column "${columnId}" already exists`);
-        return;
-      }
-      const nextSchema = { ...db.schema, [columnId]: def };
-      const nextViews: Record<string, ViewDef> = {};
-      for (const [vid, vdef] of Object.entries(db.views)) {
-        nextViews[vid] = vdef.visible_columns.includes(columnId)
-          ? vdef
-          : { ...vdef, visible_columns: [...vdef.visible_columns, columnId] };
-      }
-      setDb({ ...db, schema: nextSchema, views: nextViews });
+      let proceed = true;
+      setDb((prev) => {
+        if (!prev) return prev;
+        if (prev.schema[columnId]) {
+          alert(`Column "${columnId}" already exists`);
+          proceed = false;
+          return prev;
+        }
+        const nextSchema = { ...prev.schema, [columnId]: def };
+        const nextViews: Record<string, ViewDef> = {};
+        for (const [vid, vdef] of Object.entries(prev.views)) {
+          nextViews[vid] = vdef.visible_columns.includes(columnId)
+            ? vdef
+            : { ...vdef, visible_columns: [...vdef.visible_columns, columnId] };
+        }
+        return { ...prev, schema: nextSchema, views: nextViews };
+      });
+      if (!proceed) return;
       setAddColumnOpen(false);
       try {
         await dbApi.addColumn(dbPath, columnId, def);
@@ -245,16 +270,20 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleRenameColumn = useCallback(
     async (columnId: string, label: string) => {
-      if (!db) return;
-      const col = db.schema[columnId];
-      if (!col) return;
-      const next = { ...col, label };
-      setDb({ ...db, schema: { ...db.schema, [columnId]: next } });
+      let next: ColumnDef | null = null;
+      setDb((prev) => {
+        if (!prev) return prev;
+        const col = prev.schema[columnId];
+        if (!col) return prev;
+        next = { ...col, label };
+        return { ...prev, schema: { ...prev.schema, [columnId]: next } };
+      });
+      if (!next) return;
       try {
         await dbApi.updateColumn(dbPath, columnId, next);
       } catch (err) {
@@ -262,29 +291,31 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleDeleteColumn = useCallback(
     async (columnId: string) => {
-      if (!db) return;
-      const nextSchema = { ...db.schema };
-      delete nextSchema[columnId];
-      const nextViews: Record<string, ViewDef> = {};
-      for (const [vid, vdef] of Object.entries(db.views)) {
-        nextViews[vid] = {
-          ...vdef,
-          visible_columns: vdef.visible_columns.filter((c) => c !== columnId),
-          filters: vdef.filters.filter((f) => f.field !== columnId),
-          sort: vdef.sort && vdef.sort.field === columnId ? null : vdef.sort,
-        };
-      }
-      const nextRows = db.rows.map((r) => {
-        if (!(columnId in r)) return r;
-        const { [columnId]: _drop, ...rest } = r;
-        return rest as typeof r;
+      setDb((prev) => {
+        if (!prev) return prev;
+        const nextSchema = { ...prev.schema };
+        delete nextSchema[columnId];
+        const nextViews: Record<string, ViewDef> = {};
+        for (const [vid, vdef] of Object.entries(prev.views)) {
+          nextViews[vid] = {
+            ...vdef,
+            visible_columns: vdef.visible_columns.filter((c) => c !== columnId),
+            filters: vdef.filters.filter((f) => f.field !== columnId),
+            sort: vdef.sort && vdef.sort.field === columnId ? null : vdef.sort,
+          };
+        }
+        const nextRows = prev.rows.map((r) => {
+          if (!(columnId in r)) return r;
+          const { [columnId]: _drop, ...rest } = r;
+          return rest as typeof r;
+        });
+        return { ...prev, schema: nextSchema, views: nextViews, rows: nextRows };
       });
-      setDb({ ...db, schema: nextSchema, views: nextViews, rows: nextRows });
       try {
         await dbApi.deleteColumn(dbPath, columnId);
       } catch (err) {
@@ -292,23 +323,27 @@ export function DatabaseView({
         reload();
       }
     },
-    [db, dbPath, reload],
+    [dbPath, reload],
   );
 
   const handleResizeColumn = useCallback(
     async (columnId: string, width: number) => {
-      if (!db) return;
-      const col = db.schema[columnId];
-      if (!col) return;
-      const next = { ...col, width };
-      setDb({ ...db, schema: { ...db.schema, [columnId]: next } });
+      let next: ColumnDef | null = null;
+      setDb((prev) => {
+        if (!prev) return prev;
+        const col = prev.schema[columnId];
+        if (!col) return prev;
+        next = { ...col, width };
+        return { ...prev, schema: { ...prev.schema, [columnId]: next } };
+      });
+      if (!next) return;
       try {
         await dbApi.updateColumn(dbPath, columnId, next);
       } catch (err) {
         console.error(err);
       }
     },
-    [db, dbPath],
+    [dbPath],
   );
 
   const handleSortColumn = useCallback(
