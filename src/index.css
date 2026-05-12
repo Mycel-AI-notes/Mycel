@@ -1189,8 +1189,8 @@ body {
   padding: 1px 7px;
   margin: 1px 2px;
   border-radius: 10px;
-  background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 70% 60%) 18%, transparent);
-  color: hsl(var(--db-tag-hue, 80) 55% 32%);
+  background: hsl(var(--db-tag-hue, 80) 78% 86%);
+  color: hsl(var(--db-tag-hue, 80) 55% 26%);
   font-size: 11px;
   white-space: nowrap;
 }
