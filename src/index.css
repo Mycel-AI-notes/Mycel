@@ -1277,8 +1277,9 @@ body {
   min-height: 28px;
 }
 
-/* Light: flat pale pastel bg + saturated dark text — Notion / Linear feel.
-   Dark: translucent tint over the surface so tags don't fight the panel. */
+/* Unified Notion-style tags: pale pastel bg + black text in both themes.
+   Mycel defaults to dark mode, so the dark rule needed a brighter bg
+   (was a translucent dark tint) for black text to read. */
 .db-tag {
   display: inline-block;
   padding: 1px 8px;
@@ -1292,10 +1293,10 @@ body {
   white-space: nowrap;
 }
 .dark .db-tag {
-  background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 75% 70%) 18%, transparent);
-  color: hsl(var(--db-tag-hue, 80) 75% 80%);
-  border-color: transparent;
-  font-weight: 400;
+  background: hsl(var(--db-tag-hue, 80) 70% 78%);
+  color: #000;
+  border: 1px solid hsl(var(--db-tag-hue, 80) 60% 60%);
+  font-weight: 500;
 }
 
 /* Cell popovers portaled to body — they don't sit inside .db-popover-anchor
