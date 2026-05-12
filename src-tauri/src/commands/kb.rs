@@ -103,9 +103,25 @@ fn scan_dir_rows(
     abs_dir: &Path,
     dir_rel: &str,
 ) -> Result<(Vec<Row>, BTreeSet<String>), String> {
-    let mut rows = Vec::new();
-    let mut areas: BTreeSet<String> = BTreeSet::new();
-    walk_kb(abs_dir, abs_dir, dir_rel, &mut rows, &mut areas)?;
+    let scanned = scan_kb_files(abs_dir)?;
+    let areas: BTreeSet<String> = scanned
+        .iter()
+        .flat_map(|f| f.area.iter().cloned())
+        .collect();
+    let mut rows: Vec<Row> = scanned
+        .into_iter()
+        .map(|f| {
+            let mut values: HashMap<String, JsonValue> = HashMap::new();
+            if !f.area.is_empty() {
+                values.insert("area".into(), area_to_json(&f.area));
+            }
+            Row {
+                id: Uuid::new_v4().to_string(),
+                page: Some(format!("{}/{}", dir_rel.trim_matches('/'), f.inner_rel)),
+                values,
+            }
+        })
+        .collect();
 
     // Stable, alphabetical order on activation so two runs against the same
     // directory produce the same `rows` order in the .db.json (the file is
@@ -119,12 +135,36 @@ fn scan_dir_rows(
     Ok((rows, areas))
 }
 
+/// A single file discovered during a recursive KB scan.
+struct ScannedFile {
+    /// Path relative to the KB root, with forward slashes
+    /// (e.g. `projects/work/note.md`).
+    inner_rel: String,
+    /// Folder segments between the KB root and the file's parent
+    /// (e.g. `["projects", "work"]`). Empty for files at the KB root.
+    area: Vec<String>,
+}
+
+fn area_to_json(area: &[String]) -> JsonValue {
+    JsonValue::Array(
+        area.iter()
+            .cloned()
+            .map(JsonValue::String)
+            .collect(),
+    )
+}
+
+fn scan_kb_files(abs_dir: &Path) -> Result<Vec<ScannedFile>, String> {
+    let mut out = Vec::new();
+    walk_kb(abs_dir, abs_dir, &mut out)?;
+    out.sort_by(|a, b| a.inner_rel.cmp(&b.inner_rel));
+    Ok(out)
+}
+
 fn walk_kb(
     cur: &Path,
     kb_root: &Path,
-    dir_rel: &str,
-    rows: &mut Vec<Row>,
-    areas: &mut BTreeSet<String>,
+    out: &mut Vec<ScannedFile>,
 ) -> Result<(), String> {
     let read = std::fs::read_dir(cur)
         .map_err(|e| format!("Failed to read {}: {e}", cur.display()))?;
@@ -140,15 +180,13 @@ fn walk_kb(
             continue;
         }
         if path.is_dir() {
-            walk_kb(&path, kb_root, dir_rel, rows, areas)?;
+            walk_kb(&path, kb_root, out)?;
             continue;
         }
         if !path.is_file() || !name.ends_with(".md") {
             continue;
         }
 
-        // Path of this file relative to the KB root, e.g.
-        // `projects/work/note.md`.
         let inner_rel = path
             .strip_prefix(kb_root)
             .map_err(|e| e.to_string())?
@@ -162,36 +200,16 @@ fn walk_kb(
             continue;
         }
 
-        // Folder segments between the KB root and the file's parent are
-        // the row's multi-label `area` tags.
-        let segments: Vec<String> = match inner_rel.rsplit_once('/') {
+        let area: Vec<String> = match inner_rel.rsplit_once('/') {
             Some((parent, _)) => parent
                 .split('/')
                 .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
+                .map(String::from)
                 .collect(),
             None => Vec::new(),
         };
-        for s in &segments {
-            areas.insert(s.clone());
-        }
 
-        let mut values: HashMap<String, JsonValue> = HashMap::new();
-        if !segments.is_empty() {
-            values.insert(
-                "area".into(),
-                JsonValue::Array(
-                    segments.into_iter().map(JsonValue::String).collect(),
-                ),
-            );
-        }
-
-        let full_rel = format!("{}/{}", dir_rel.trim_matches('/'), inner_rel);
-        rows.push(Row {
-            id: Uuid::new_v4().to_string(),
-            page: Some(full_rel),
-            values,
-        });
+        out.push(ScannedFile { inner_rel, area });
     }
 
     Ok(())
@@ -367,4 +385,166 @@ pub async fn kb_deinit(
 pub async fn kb_list(state: State<'_, AppState>) -> Result<Vec<KbEntry>, String> {
     let root = vault_root(&state).await?;
     Ok(read_kb_dirs(&root).unwrap_or_default().dirs)
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct KbRefreshResult {
+    pub db_path: String,
+    pub added: u32,
+    pub removed: u32,
+    pub kept: u32,
+}
+
+/// Reconcile the rows in `<dir>.db.json` with the current filesystem
+/// state of `<dir>/`. Used both by the manual "Refresh" action and by
+/// the watcher when notes are added / renamed / moved / deleted while
+/// the app is open.
+///
+/// Matching is by `page` path: a row whose file still exists is kept
+/// (its `area` value is re-derived from the current path so a folder
+/// rename propagates), missing files cause their row to be dropped,
+/// and files without a row get a new row.
+///
+/// Custom column values, view configuration, and free-form (page-less)
+/// rows are preserved. The `area` column's `options` list is widened
+/// to cover every folder name currently on disk; existing options
+/// (e.g. ones the user added by hand) are kept.
+pub fn refresh_kb_db(
+    root: &Path,
+    dir_rel_raw: &str,
+) -> Result<KbRefreshResult, String> {
+    let dir_rel = dir_rel_raw.trim_matches('/').replace('\\', "/");
+    if dir_rel.is_empty() {
+        return Err("KB path cannot be empty".into());
+    }
+    let abs_dir = root.join(&dir_rel);
+    if !abs_dir.is_dir() {
+        return Err(format!("Not a directory: {dir_rel}"));
+    }
+    let db_rel = db_path_for_dir(&dir_rel);
+    let abs_db = root.join(&db_rel);
+    if !abs_db.exists() {
+        return Err(format!("Not a knowledge base: {dir_rel}"));
+    }
+
+    let raw = std::fs::read_to_string(&abs_db)
+        .map_err(|e| format!("Failed to read {db_rel}: {e}"))?;
+    let mut db: Database = serde_json::from_str(&raw)
+        .map_err(|e| format!("Cannot parse {db_rel}: {e}"))?;
+
+    let scanned = scan_kb_files(&abs_dir)?;
+
+    // Index existing rows by `page` so we can re-match them against the
+    // scan. Rows without a `page` (manually-added detached rows) are
+    // kept verbatim — they never came from the filesystem so file-state
+    // doesn't speak to them.
+    let mut by_page: HashMap<String, Row> = HashMap::new();
+    let mut detached: Vec<Row> = Vec::new();
+    for row in db.rows.drain(..) {
+        match row.page.clone() {
+            Some(p) => {
+                by_page.insert(p, row);
+            }
+            None => detached.push(row),
+        }
+    }
+
+    let dir_prefix = dir_rel.trim_matches('/');
+    let mut synced: Vec<Row> = Vec::with_capacity(scanned.len());
+    let mut added: u32 = 0;
+    let mut kept: u32 = 0;
+    for f in &scanned {
+        let page = format!("{}/{}", dir_prefix, f.inner_rel);
+        if let Some(mut row) = by_page.remove(&page) {
+            // Re-derive area from the current path. `area` here is a
+            // function of the file's location, not user-edited
+            // metadata; a parent-folder rename should surface
+            // immediately on the next refresh.
+            if f.area.is_empty() {
+                row.values.remove("area");
+            } else {
+                row.values.insert("area".into(), area_to_json(&f.area));
+            }
+            synced.push(row);
+            kept += 1;
+        } else {
+            let mut values: HashMap<String, JsonValue> = HashMap::new();
+            if !f.area.is_empty() {
+                values.insert("area".into(), area_to_json(&f.area));
+            }
+            synced.push(Row {
+                id: Uuid::new_v4().to_string(),
+                page: Some(page),
+                values,
+            });
+            added += 1;
+        }
+    }
+    // Anything left in `by_page` no longer exists on disk.
+    let removed = by_page.len() as u32;
+
+    synced.sort_by(|a, b| {
+        let ap = a.page.as_deref().unwrap_or("");
+        let bp = b.page.as_deref().unwrap_or("");
+        ap.cmp(bp)
+    });
+    synced.extend(detached);
+    db.rows = synced;
+
+    // Widen the `area` column's options to cover every folder name
+    // currently on disk. Older KBs (created before the recursive scan
+    // existed) may not have the column at all — add it then.
+    let discovered: BTreeSet<String> = scanned
+        .iter()
+        .flat_map(|f| f.area.iter().cloned())
+        .collect();
+    if let Some(col) = db.schema.get_mut("area") {
+        let mut merged: BTreeSet<String> = col
+            .options
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        merged.extend(discovered);
+        col.options = Some(merged.into_iter().collect());
+    } else {
+        db.schema.insert(
+            "area".into(),
+            ColumnDef {
+                col_type: ColumnType::MultiSelect,
+                label: "Area".into(),
+                options: Some(discovered.into_iter().collect()),
+                width: Some(200),
+                extra: HashMap::new(),
+            },
+        );
+        for view in db.views.values_mut() {
+            if !view.visible_columns.contains(&"area".to_string()) {
+                view.visible_columns.push("area".into());
+            }
+        }
+    }
+
+    let pretty = serde_json::to_string_pretty(&db).map_err(|e| e.to_string())?;
+    std::fs::write(&abs_db, pretty)
+        .map_err(|e| format!("Failed to write {db_rel}: {e}"))?;
+
+    Ok(KbRefreshResult {
+        db_path: db_rel,
+        added,
+        removed,
+        kept,
+    })
+}
+
+#[tauri::command]
+pub async fn kb_refresh(
+    dir_path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<KbRefreshResult, String> {
+    let root = vault_root(&state).await?;
+    let result = refresh_kb_db(&root, &dir_path)?;
+    emit_changed(&app, &result.db_path);
+    Ok(result)
 }

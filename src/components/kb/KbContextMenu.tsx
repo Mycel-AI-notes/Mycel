@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { BookOpen, Sprout, Trash2 } from 'lucide-react';
+import { BookOpen, RefreshCw, Sprout, Trash2 } from 'lucide-react';
 import { confirm } from '@tauri-apps/plugin-dialog';
 import type { FileEntry, KbInitResult } from '@/types';
 import { useVaultStore } from '@/stores/vault';
@@ -58,6 +58,15 @@ export function KbContextMenu({ x, y, entry, onClose }: Props) {
     }
   }
 
+  async function handleRefresh() {
+    onClose();
+    try {
+      await invoke('kb_refresh', { dirPath: entry.path });
+    } catch (e) {
+      console.error('kb_refresh failed', e);
+    }
+  }
+
   async function handleRemove() {
     onClose();
     const ok = await confirm(
@@ -75,7 +84,7 @@ export function KbContextMenu({ x, y, entry, onClose }: Props) {
 
   // Clamp to viewport so the menu doesn't render past the right/bottom edges.
   const menuWidth = 260;
-  const menuHeight = isKb ? 96 : 56;
+  const menuHeight = isKb ? 128 : 56;
   const left = Math.min(x, window.innerWidth - menuWidth - 8);
   const top = Math.min(y, window.innerHeight - menuHeight - 8);
 
@@ -95,6 +104,13 @@ export function KbContextMenu({ x, y, entry, onClose }: Props) {
           >
             <BookOpen size={14} />
             Open Knowledge Base
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-text-primary hover:bg-surface-hover"
+          >
+            <RefreshCw size={14} />
+            Обновить из файлов
           </button>
           <div className="my-1 h-px bg-border" />
           <button
