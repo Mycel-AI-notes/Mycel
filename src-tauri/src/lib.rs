@@ -66,6 +66,7 @@ pub fn run() {
             commands::kb::kb_init,
             commands::kb::kb_deinit,
             commands::kb::kb_list,
+            commands::kb::kb_refresh,
             commands::sync::sync_init,
             commands::sync::sync_clone,
             commands::sync::sync_now,

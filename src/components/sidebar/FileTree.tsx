@@ -130,6 +130,10 @@ function FileTreeNode({
         entry.path.startsWith(`${KNOWLEDGE_BASE_DIR}/`) ||
         entry.path.startsWith(`${QUICK_NOTES_DIR}/`);
       if (insideProtected) return;
+      // Descendants of an existing KB have nothing to show in the KB
+      // menu: they can't be promoted (only the KB root can), and they
+      // aren't a KB themselves. Fall through.
+      if (entry.is_inside_kb && !entry.is_kb_dir) return;
       e.preventDefault();
       e.stopPropagation();
       openKbMenu(e.clientX, e.clientY, entry);

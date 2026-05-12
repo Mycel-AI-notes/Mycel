@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
@@ -163,6 +165,44 @@ export default function App() {
       unregister(QUICK_NOTE_SHORTCUT).catch(() => undefined);
     };
   }, []);
+
+  // Backend file-watcher fires `kb:dir-changed` whenever something moves
+  // inside a registered KB folder. Coalesce bursts per-KB and call
+  // `kb_refresh` once it settles — that command rewrites the .db.json,
+  // which in turn triggers DatabaseView's own `vault:file-changed`
+  // listener to reload.
+  useEffect(() => {
+    if (!vaultRoot) return;
+    let unlisten: UnlistenFn | undefined;
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    // 600 ms = perceived latency floor for auto-refresh. Drop to ~250
+    // ms if a single-file change ever feels too slow; raise if bulk
+    // operations still trigger multiple refreshes. Pairs with the
+    // 750 ms per-KB throttle in core/watcher.rs.
+    const SETTLE_MS = 600;
+
+    void listen<{ path: string }>('kb:dir-changed', (e) => {
+      const kbPath = e.payload?.path;
+      if (!kbPath) return;
+      const existing = timers.get(kbPath);
+      if (existing) clearTimeout(existing);
+      const t = setTimeout(() => {
+        timers.delete(kbPath);
+        invoke('kb_refresh', { dirPath: kbPath }).catch((err) => {
+          console.warn('kb_refresh failed for', kbPath, err);
+        });
+      }, SETTLE_MS);
+      timers.set(kbPath, t);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, [vaultRoot]);
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
 

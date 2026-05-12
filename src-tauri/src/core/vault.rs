@@ -69,6 +69,12 @@ pub struct FileEntry {
     /// single protected root folder named "Knowledge Base").
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_kb_dir: bool,
+    /// True if this entry sits inside a promoted KB folder. Used by the
+    /// UI to suppress actions that don't apply to KB descendants (e.g.
+    /// "Превратить в базу знаний" — a KB can only be created at its
+    /// own root).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_inside_kb: bool,
     /// True if the file is an encrypted note (`*.md.age`). The UI uses this
     /// to render a lock icon and route reads through the decrypt path.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -111,7 +117,7 @@ impl Vault {
         let kb_paths = read_kb_dirs(&self.root)
             .map(|c| c.dirs.into_iter().map(|e| e.path).collect::<HashSet<_>>())
             .unwrap_or_default();
-        read_dir_recursive(&self.root, &self.root, &kb_paths)
+        read_dir_recursive(&self.root, &self.root, &kb_paths, false)
     }
 }
 
@@ -145,6 +151,7 @@ fn read_dir_recursive(
     dir: &Path,
     vault_root: &Path,
     kb_paths: &HashSet<String>,
+    inside_kb: bool,
 ) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
 
@@ -186,10 +193,17 @@ fn read_dir_recursive(
         }
 
         if path.is_dir() {
-            let mut children = read_dir_recursive(&path, vault_root, kb_paths)?;
+            let is_kb_dir = kb_paths.contains(&rel_path);
+            // Descendants of a KB folder inherit the `is_inside_kb`
+            // flag so the UI knows to suppress KB-creation actions on
+            // them. The KB root itself is not "inside" — it _is_ the
+            // KB — so `inside_kb` for its children becomes `true` only
+            // one level down.
+            let child_inside_kb = inside_kb || is_kb_dir;
+            let mut children =
+                read_dir_recursive(&path, vault_root, kb_paths, child_inside_kb)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
             let is_quick = rel_path == QUICK_NOTES_DIR;
-            let is_kb_dir = kb_paths.contains(&rel_path);
             // For KB-promoted directories, the `index.md` is the KB page
             // itself — surfaced by clicking the folder. Hide it from the
             // file tree so it doesn't clutter the sidebar.
@@ -205,6 +219,7 @@ fn read_dir_recursive(
                 is_knowledge_base: is_kb,
                 is_quick_notes: is_quick,
                 is_kb_dir,
+                is_inside_kb: inside_kb,
                 is_encrypted: false,
             });
         } else {
@@ -219,6 +234,7 @@ fn read_dir_recursive(
                     is_knowledge_base: false,
                     is_quick_notes: false,
                     is_kb_dir: false,
+                    is_inside_kb: inside_kb,
                     is_encrypted: is_age,
                 });
             }

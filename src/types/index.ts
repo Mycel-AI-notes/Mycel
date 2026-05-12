@@ -10,6 +10,10 @@ export interface FileEntry {
    *  folder). KB folders render with a 🗃 icon and clicking them opens
    *  `<dir>/index.md` instead of toggling the tree. */
   is_kb_dir?: boolean;
+  /** True if this entry sits inside a promoted KB folder. KB-creation
+   *  actions are hidden on descendants — a KB can only be created at
+   *  its own root. */
+  is_inside_kb?: boolean;
   /** True for `*.md.age` notes — file tree shows a lock icon and reads go
    *  through the decrypt path. */
   is_encrypted?: boolean;
