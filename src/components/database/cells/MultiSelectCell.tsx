@@ -11,7 +11,7 @@ interface Props {
   optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string[]) => void;
-  onAddOption: (opt: string) => void;
+  onAddOption: (opt: string) => void | Promise<void>;
   onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
@@ -87,10 +87,19 @@ export function MultiSelectCell({
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   if (showCreate) {
-                    onAddOption(query.trim());
-                    const next = new Set(selected);
-                    next.add(query.trim());
-                    onChange([...next]);
+                    const v = query.trim();
+                    // Persist the option to the column FIRST so the cell-value
+                    // write below can't race ahead with a snapshot that
+                    // doesn't include it (the bug: tag appeared but never
+                    // landed in column.options because two backend RMWs
+                    // raced — even with the per-path lock, awaiting at the
+                    // call site keeps the order predictable).
+                    void (async () => {
+                      await onAddOption(v);
+                      const next = new Set(selected);
+                      next.add(v);
+                      onChange([...next]);
+                    })();
                     setQuery('');
                   } else if (filtered[0]) {
                     toggle(filtered[0]);
@@ -140,12 +149,13 @@ export function MultiSelectCell({
               {showCreate && (
                 <button
                   className="db-popover-item"
-                  onClick={() => {
-                    onAddOption(query.trim());
-                    const next = new Set(selected);
-                    next.add(query.trim());
-                    onChange([...next]);
+                  onClick={async () => {
+                    const v = query.trim();
                     setQuery('');
+                    await onAddOption(v);
+                    const next = new Set(selected);
+                    next.add(v);
+                    onChange([...next]);
                   }}
                 >
                   + Create "{query.trim()}"

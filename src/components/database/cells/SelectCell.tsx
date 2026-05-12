@@ -11,7 +11,7 @@ interface Props {
   optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string | null) => void;
-  onAddOption: (opt: string) => void;
+  onAddOption: (opt: string) => void | Promise<void>;
   onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
@@ -80,9 +80,15 @@ export function SelectCell({
                     onChange(filtered[0]);
                     onCommit();
                   } else if (showCreate) {
-                    onAddOption(query.trim());
-                    onChange(query.trim());
-                    onCommit();
+                    const v = query.trim();
+                    void (async () => {
+                      // Await the option insert before setting the cell value
+                      // so the column.options write isn't racing the cell
+                      // write at the call site.
+                      await onAddOption(v);
+                      onChange(v);
+                      onCommit();
+                    })();
                   }
                 }
               }}
@@ -140,9 +146,10 @@ export function SelectCell({
               {showCreate && (
                 <button
                   className="db-popover-item"
-                  onClick={() => {
-                    onAddOption(query.trim());
-                    onChange(query.trim());
+                  onClick={async () => {
+                    const v = query.trim();
+                    await onAddOption(v);
+                    onChange(v);
                     onCommit();
                   }}
                 >
