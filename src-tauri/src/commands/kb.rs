@@ -48,7 +48,11 @@ fn default_kb_database(area_options: Vec<String>) -> Database {
     // `area` holds the folder names along the file's path inside the KB
     // root (e.g. a file at `<kb>/projects/work/note.md` gets
     // `["projects", "work"]`). Multi-select so each segment is its own
-    // selectable tag.
+    // selectable tag. Marked readonly because kb_refresh re-derives the
+    // value from the file path on every refresh — letting the user edit
+    // it would just make their change vanish on the next sync.
+    let mut area_extra: HashMap<String, JsonValue> = HashMap::new();
+    area_extra.insert("readonly".into(), JsonValue::Bool(true));
     schema.insert(
         "area".into(),
         ColumnDef {
@@ -56,7 +60,7 @@ fn default_kb_database(area_options: Vec<String>) -> Database {
             label: "Area".into(),
             options: Some(area_options),
             width: Some(200),
-            extra: HashMap::new(),
+            extra: area_extra,
         },
     );
     schema.insert(
@@ -529,7 +533,14 @@ pub fn refresh_kb_db(
             .collect();
         merged.extend(discovered);
         col.options = Some(merged.into_iter().collect());
+        // Forward migration: existing KBs created before the readonly flag
+        // existed get it stamped on every refresh, so their Area column
+        // stops accepting manual edits that the next refresh would wipe.
+        col.extra
+            .insert("readonly".into(), JsonValue::Bool(true));
     } else {
+        let mut area_extra: HashMap<String, JsonValue> = HashMap::new();
+        area_extra.insert("readonly".into(), JsonValue::Bool(true));
         db.schema.insert(
             "area".into(),
             ColumnDef {
@@ -537,7 +548,7 @@ pub fn refresh_kb_db(
                 label: "Area".into(),
                 options: Some(discovered.into_iter().collect()),
                 width: Some(200),
-                extra: HashMap::new(),
+                extra: area_extra,
             },
         );
         for view in db.views.values_mut() {

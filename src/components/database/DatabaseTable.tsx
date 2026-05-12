@@ -61,6 +61,7 @@ export function DatabaseTable({
     const col = schema[columnId];
     if (!col) return;
     if (col.type === 'checkbox') return;
+    if (col.readonly) return;
     setEditing({ rowId, columnId });
   }
 
@@ -70,7 +71,10 @@ export function DatabaseTable({
 
   function nextEditableColumn(currentId: string, dir: 1 | -1): string | null {
     const editable = visibleIds.filter(
-      (c) => c !== PAGE_COL && schema[c]?.type !== 'checkbox',
+      (c) =>
+        c !== PAGE_COL &&
+        schema[c]?.type !== 'checkbox' &&
+        !schema[c]?.readonly,
     );
     const idx = editable.indexOf(currentId);
     if (idx === -1) return null;
@@ -202,8 +206,9 @@ export function DatabaseTable({
                   <td
                     key={cid}
                     data-db-col={cid}
-                    className="db-td"
+                    className={`db-td ${col?.readonly ? 'db-td-readonly' : ''}`}
                     style={{ width: cid === PAGE_COL ? 160 : col?.width ?? 200 }}
+                    title={col?.readonly ? 'Read-only column' : undefined}
                     onClick={() => !isEditing && startEdit(row.id, cid)}
                     onKeyDown={(e) => onCellKeyDown(e, row.id, cid)}
                   >
@@ -248,7 +253,12 @@ export function DatabaseTable({
                   style={{ width: cid === PAGE_COL ? 160 : col?.width ?? 200 }}
                   onClick={async () => {
                     const newId = await onAddRow();
-                    if (newId && cid !== PAGE_COL && col?.type !== 'checkbox') {
+                    if (
+                      newId &&
+                      cid !== PAGE_COL &&
+                      col?.type !== 'checkbox' &&
+                      !col?.readonly
+                    ) {
                       setEditing({ rowId: newId, columnId: cid });
                     }
                   }}

@@ -1237,6 +1237,15 @@ body {
   text-align: center;
   border-right: none;
 }
+/* Read-only cells (e.g. KB Area, auto-derived from folder path): no edit
+   cursor, no hover affordance — clicking does nothing. */
+.db-td-readonly {
+  cursor: default;
+}
+.db-td-readonly .db-cell-text,
+.db-td-readonly .db-tag-row {
+  cursor: default;
+}
 .db-empty {
   padding: 18px;
   text-align: center;
