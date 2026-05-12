@@ -194,14 +194,16 @@ export function DatabaseView({
     [db, dbPath, reload],
   );
 
-  const handleAddRow = useCallback(async () => {
-    if (!db) return;
+  const handleAddRow = useCallback(async (): Promise<string | null> => {
+    if (!db) return null;
     try {
       const id = await dbApi.addRow(dbPath);
       const newRow: Row = { id };
       setDb({ ...db, rows: [...db.rows, newRow] });
+      return id;
     } catch (err) {
       console.error(err);
+      return null;
     }
   }, [db, dbPath]);
 
@@ -444,6 +446,7 @@ export function DatabaseView({
         onAddOption={handleAddOption}
         onSetOptionColor={handleSetOptionColor}
         onDeleteRow={handleDeleteRow}
+        onAddRow={handleAddRow}
         onAddColumnClick={() => setAddColumnOpen((v) => !v)}
         onRenameColumn={handleRenameColumn}
         onDeleteColumn={handleDeleteColumn}

@@ -14,6 +14,9 @@ interface Props {
   onAddOption: (columnId: string, opt: string) => void | Promise<void>;
   onSetOptionColor: (columnId: string, opt: string, hueIndex: number | null) => void | Promise<void>;
   onDeleteRow: (rowId: string) => void | Promise<void>;
+  /// Returns the new row's id (or null on failure) so the ghost-row flow can
+  /// open the just-created cell for editing.
+  onAddRow: () => Promise<string | null>;
   onAddColumnClick: () => void;
   onRenameColumn: (columnId: string, label: string) => void | Promise<void>;
   onDeleteColumn: (columnId: string) => void | Promise<void>;
@@ -36,6 +39,7 @@ export function DatabaseTable({
   onAddOption,
   onSetOptionColor,
   onDeleteRow,
+  onAddRow,
   onAddColumnClick,
   onRenameColumn,
   onDeleteColumn,
@@ -188,13 +192,6 @@ export function DatabaseTable({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td className="db-empty" colSpan={visibleIds.length + 1}>
-                No rows. Click "Add row" to start.
-              </td>
-            </tr>
-          )}
           {rows.map((row) => (
             <tr key={row.id} className="db-tr">
               {visibleIds.map((cid) => {
@@ -236,6 +233,32 @@ export function DatabaseTable({
               </td>
             </tr>
           ))}
+          {/* Ghost row: visually present at the bottom so the user can click
+              any cell to start a new entry. The click creates a real row via
+              onAddRow and immediately opens the clicked column for editing —
+              feels like the table has an always-empty trailing row. */}
+          <tr className="db-tr db-tr-ghost">
+            {visibleIds.map((cid, idx) => {
+              const col = schema[cid];
+              return (
+                <td
+                  key={cid}
+                  data-db-col={cid}
+                  className="db-td db-td-ghost"
+                  style={{ width: cid === PAGE_COL ? 160 : col?.width ?? 200 }}
+                  onClick={async () => {
+                    const newId = await onAddRow();
+                    if (newId && cid !== PAGE_COL && col?.type !== 'checkbox') {
+                      setEditing({ rowId: newId, columnId: cid });
+                    }
+                  }}
+                >
+                  {idx === 0 && <span className="db-ghost-hint">+ New row</span>}
+                </td>
+              );
+            })}
+            <td className="db-td db-td-actions db-td-ghost" />
+          </tr>
         </tbody>
       </table>
     </div>

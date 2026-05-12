@@ -1244,6 +1244,35 @@ body {
   font-size: 12px;
 }
 
+/* Persistent "tap to add" row at the bottom of every table. The cells render
+   without content; clicking one fires onAddRow and opens that column for
+   editing on the freshly-created real row. */
+.db-tr-ghost {
+  cursor: cell;
+}
+.db-tr-ghost:nth-child(even) {
+  background: transparent;
+}
+.db-tr-ghost .db-td-ghost {
+  min-height: 28px;
+  height: 28px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.db-tr-ghost:hover .db-td-ghost {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+.db-ghost-hint {
+  display: inline-block;
+  padding: 6px 10px;
+  font-size: 12px;
+  opacity: 0.55;
+}
+.db-tr-ghost:hover .db-ghost-hint {
+  opacity: 1;
+  color: var(--color-text-primary);
+}
+
 .db-cell-text {
   display: block;
   padding: 6px 10px;
