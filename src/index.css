@@ -1189,14 +1189,14 @@ body {
   padding: 1px 7px;
   margin: 1px 2px;
   border-radius: 10px;
-  background: hsl(var(--db-tag-hue, 80) 70% 88%);
-  color: hsl(var(--db-tag-hue, 80) 45% 28%);
+  background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 70% 60%) 18%, transparent);
+  color: hsl(var(--db-tag-hue, 80) 55% 32%);
   font-size: 11px;
   white-space: nowrap;
 }
 .dark .db-tag {
-  background: hsl(var(--db-tag-hue, 80) 35% 26%);
-  color: hsl(var(--db-tag-hue, 80) 65% 85%);
+  background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 75% 70%) 18%, transparent);
+  color: hsl(var(--db-tag-hue, 80) 75% 80%);
 }
 
 /* Cell popovers portaled to body — they don't sit inside .db-popover-anchor
