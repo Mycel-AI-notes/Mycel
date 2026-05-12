@@ -440,60 +440,70 @@ pub fn refresh_kb_db(
 
     let scanned = scan_kb_files(&abs_dir)?;
 
-    // Index existing rows by `page` so we can re-match them against the
-    // scan. Rows without a `page` (manually-added detached rows) are
-    // kept verbatim — they never came from the filesystem so file-state
-    // doesn't speak to them.
-    let mut by_page: HashMap<String, Row> = HashMap::new();
+    // Build a lookup of scanned files by their full vault-relative `page`
+    // path so we can match existing rows against the current filesystem
+    // state without losing the row's original position in `db.rows`.
+    let dir_prefix = dir_rel.trim_matches('/');
+    let mut by_page_scanned: HashMap<String, &ScannedFile> = HashMap::new();
+    for f in &scanned {
+        by_page_scanned.insert(format!("{}/{}", dir_prefix, f.inner_rel), f);
+    }
+
+    // Walk existing rows in their original order: keep each one whose page
+    // still exists on disk (refreshing its `area`), drop the rest. Detached
+    // rows (no `page`) are preserved verbatim. This preserves the user's
+    // hand-curated row order across refreshes — before, every refresh
+    // re-sorted alphabetically by path and made the "+ New row" entry
+    // appear somewhere in the middle of the table.
+    let mut synced: Vec<Row> = Vec::with_capacity(scanned.len() + db.rows.len());
     let mut detached: Vec<Row> = Vec::new();
+    let mut seen_pages: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    let mut kept: u32 = 0;
+    let mut removed: u32 = 0;
     for row in db.rows.drain(..) {
         match row.page.clone() {
-            Some(p) => {
-                by_page.insert(p, row);
-            }
             None => detached.push(row),
+            Some(p) => {
+                if let Some(f) = by_page_scanned.get(&p) {
+                    let mut row = row;
+                    if f.area.is_empty() {
+                        row.values.remove("area");
+                    } else {
+                        row.values.insert("area".into(), area_to_json(&f.area));
+                    }
+                    seen_pages.insert(p);
+                    synced.push(row);
+                    kept += 1;
+                } else {
+                    removed += 1;
+                }
+            }
         }
     }
 
-    let dir_prefix = dir_rel.trim_matches('/');
-    let mut synced: Vec<Row> = Vec::with_capacity(scanned.len());
+    // Newly-discovered files (no matching row yet) append at the end in the
+    // order `scan_kb_files` returned them — which is alphabetical, but only
+    // among themselves, so freshly-created rows still land after everything
+    // the user already had.
     let mut added: u32 = 0;
-    let mut kept: u32 = 0;
     for f in &scanned {
         let page = format!("{}/{}", dir_prefix, f.inner_rel);
-        if let Some(mut row) = by_page.remove(&page) {
-            // Re-derive area from the current path. `area` here is a
-            // function of the file's location, not user-edited
-            // metadata; a parent-folder rename should surface
-            // immediately on the next refresh.
-            if f.area.is_empty() {
-                row.values.remove("area");
-            } else {
-                row.values.insert("area".into(), area_to_json(&f.area));
-            }
-            synced.push(row);
-            kept += 1;
-        } else {
-            let mut values: HashMap<String, JsonValue> = HashMap::new();
-            if !f.area.is_empty() {
-                values.insert("area".into(), area_to_json(&f.area));
-            }
-            synced.push(Row {
-                id: Uuid::new_v4().to_string(),
-                page: Some(page),
-                values,
-            });
-            added += 1;
+        if seen_pages.contains(&page) {
+            continue;
         }
+        let mut values: HashMap<String, JsonValue> = HashMap::new();
+        if !f.area.is_empty() {
+            values.insert("area".into(), area_to_json(&f.area));
+        }
+        synced.push(Row {
+            id: Uuid::new_v4().to_string(),
+            page: Some(page),
+            values,
+        });
+        added += 1;
     }
-    // Anything left in `by_page` no longer exists on disk.
-    let removed = by_page.len() as u32;
 
-    synced.sort_by(|a, b| {
-        let ap = a.page.as_deref().unwrap_or("");
-        let bp = b.page.as_deref().unwrap_or("");
-        ap.cmp(bp)
-    });
     synced.extend(detached);
     db.rows = synced;
 
