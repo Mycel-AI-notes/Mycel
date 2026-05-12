@@ -1291,9 +1291,14 @@ body {
   font-weight: 500;
   white-space: nowrap;
 }
+/* `.dark` class stays on html even for the "light" data-palettes (amber,
+   azure, plum, coral) which override surfaces back to light. Using
+   var(--color-text-primary) here means the tag text follows the actual
+   visible palette — dark on light palettes, light on true-dark — instead
+   of always rendering as a pastel hue that looked muddy on light surfaces. */
 .dark .db-tag {
   background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 75% 70%) 18%, transparent);
-  color: hsl(var(--db-tag-hue, 80) 75% 80%);
+  color: var(--color-text-primary);
   border-color: transparent;
   font-weight: 400;
 }
