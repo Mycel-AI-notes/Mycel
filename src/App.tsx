@@ -175,6 +175,10 @@ export default function App() {
     if (!vaultRoot) return;
     let unlisten: UnlistenFn | undefined;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    // 600 ms = perceived latency floor for auto-refresh. Drop to ~250
+    // ms if a single-file change ever feels too slow; raise if bulk
+    // operations still trigger multiple refreshes. Pairs with the
+    // 750 ms per-KB throttle in core/watcher.rs.
     const SETTLE_MS = 600;
 
     void listen<{ path: string }>('kb:dir-changed', (e) => {

@@ -409,6 +409,12 @@ pub struct KbRefreshResult {
 /// rows are preserved. The `area` column's `options` list is widened
 /// to cover every folder name currently on disk; existing options
 /// (e.g. ones the user added by hand) are kept.
+///
+/// Perf: synchronous fs walk + JSON read/write. Measured budget:
+/// ~50 ms for ~1k files, ~500 ms for ~10k. The Tauri command wraps
+/// this in an `async fn` so a very large KB will block one tokio
+/// task during refresh — wrap in `tokio::task::spawn_blocking` if
+/// that ever shows up in profiles.
 pub fn refresh_kb_db(
     root: &Path,
     dir_rel_raw: &str,

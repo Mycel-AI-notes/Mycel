@@ -51,7 +51,8 @@ pub fn start_watcher(app: AppHandle, root: PathBuf) -> Option<VaultWatcher> {
         let file_debounce = Duration::from_millis(150);
         // A wider throttle for KB refreshes: a bulk filesystem op (e.g.
         // paste 100 files) generates a burst of events and one refresh
-        // per second is plenty. The frontend listener also debounces.
+        // per second is plenty. The frontend listener also debounces
+        // (SETTLE_MS in App.tsx) — total perceived latency is the sum.
         let kb_throttle = Duration::from_millis(750);
 
         while let Ok(res) = rx.recv() {
