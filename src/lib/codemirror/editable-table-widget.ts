@@ -71,13 +71,21 @@ class EditableTableWidget extends WidgetType {
   private root?: Root;
   private currentData: TableData;
 
-  constructor(public readonly raw: string) {
+  constructor(
+    public readonly raw: string,
+    /// Number of newlines in the replaced source range. Same role as on the
+    /// db-widget: lets CM6 map click coordinates below the widget back to the
+    /// correct document line instead of landing one or more lines off.
+    public readonly replacedLineBreaks: number,
+  ) {
     super();
     this.currentData = parseTable(raw);
   }
 
   eq(other: EditableTableWidget): boolean {
-    return this.raw === other.raw;
+    return (
+      this.raw === other.raw && this.replacedLineBreaks === other.replacedLineBreaks
+    );
   }
 
   get estimatedHeight() {
@@ -86,7 +94,7 @@ class EditableTableWidget extends WidgetType {
   }
 
   get lineBreaks() {
-    return 0;
+    return this.replacedLineBreaks;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -164,11 +172,12 @@ function buildDecorations(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const blocks = findBlocks(state);
   for (const b of blocks) {
+    const lineBreaks = Math.max(0, b.endLine - b.startLine);
     builder.add(
       b.from,
       b.to,
       Decoration.replace({
-        widget: new EditableTableWidget(b.raw),
+        widget: new EditableTableWidget(b.raw, lineBreaks),
         block: true,
       }),
     );
@@ -221,7 +230,17 @@ export function editableTableWidgetPlugin() {
 
 export const editableTableWidgetTheme = EditorView.baseTheme({
   '.cm-md-table-block': {
-    margin: '12px 0',
+    // See the matching comment on .cm-db-widget: outer margin lives outside
+    // the widget's hit-area, so clicks in those 12px fall through to CM6 and
+    // get mapped to a stale document line. Use inner padding instead, with
+    // the visual border / radius / surface on the inner .md-table-root.
+    margin: '0',
+    padding: '12px 0',
+    border: 'none',
+    borderRadius: '0',
+    backgroundColor: 'transparent',
+  },
+  '.cm-md-table-block > .md-table-root': {
     border: '1px solid var(--color-border)',
     borderRadius: '6px',
     backgroundColor: 'var(--color-surface-0)',

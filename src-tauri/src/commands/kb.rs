@@ -232,9 +232,9 @@ fn index_template(dir_rel: &str, db_path: &str) -> String {
     let source = format!("{prefix}{db_path}");
     let mut out = String::new();
     out.push_str(&format!("# {dir_name}\n\n"));
-    out.push_str("> Это страница папки-базы знаний. Таблица ниже автоматически собирает все заметки из этой папки и её подпапок. Колонка **Area** заполняется по пути файла и не редактируется вручную — добавь подпапку, и тег появится сам. Остальные колонки можно править как угодно.\n");
+    out.push_str("> This is a knowledge-base folder page. The table below automatically lists every note in this folder and its subfolders. The **Area** column is filled from each file's path and is read-only — add a subfolder and the tag will appear on its own. Every other column can be edited freely.\n");
     out.push_str(">\n");
-    out.push_str("> Под таблицей можно писать обычный текст — он сохранится как заметка папки.\n\n");
+    out.push_str("> You can write plain text below the table; it'll be saved as the folder's own note.\n\n");
     out.push_str(&format!("```db\nsource: {source}\nview: default\n```\n\n"));
     out
 }
