@@ -1,28 +1,35 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Palette } from 'lucide-react';
 import { useAnchorPos, useClickOutside } from '../floating';
 import { tagStyle } from './tagColor';
+import { TagColorSwatches } from './TagColorSwatches';
 
 interface Props {
   value: string[];
   options: string[];
+  optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string[]) => void;
   onAddOption: (opt: string) => void;
+  onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
 
 export function MultiSelectCell({
   value,
   options,
+  optionColors,
   editing,
   onChange,
   onAddOption,
+  onSetOptionColor,
   onCommit,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
+  const [paletteFor, setPaletteFor] = useState<string | null>(null);
   const pos = useAnchorPos(anchorRef, editing);
   useClickOutside([anchorRef, popRef], editing, onCommit);
 
@@ -45,7 +52,7 @@ export function MultiSelectCell({
       <div ref={anchorRef} className="db-cell-anchor">
         <div className="db-tag-row">
           {(value ?? []).map((v) => (
-            <span key={v} className="db-tag" style={tagStyle(v)}>
+            <span key={v} className="db-tag" style={tagStyle(v, optionColors)}>
               {v}
             </span>
           ))}
@@ -94,14 +101,41 @@ export function MultiSelectCell({
             />
             <div className="db-popover-list">
               {filtered.map((o) => (
-                <button
+                <div
                   key={o}
-                  className={`db-popover-item ${selected.has(o) ? 'is-active' : ''}`}
-                  onClick={() => toggle(o)}
+                  className={`db-popover-item db-popover-item-row ${selected.has(o) ? 'is-active' : ''}`}
                 >
-                  <input type="checkbox" checked={selected.has(o)} readOnly />
-                  <span className="db-tag" style={tagStyle(o)}>{o}</span>
-                </button>
+                  <button
+                    className="db-popover-item-main"
+                    onClick={() => toggle(o)}
+                  >
+                    <input type="checkbox" checked={selected.has(o)} readOnly />
+                    <span className="db-tag" style={tagStyle(o, optionColors)}>{o}</span>
+                  </button>
+                  <button
+                    className={`db-icon-btn db-tag-color-toggle ${
+                      paletteFor === o ? 'is-active' : ''
+                    }`}
+                    title="Change color"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaletteFor(paletteFor === o ? null : o);
+                    }}
+                  >
+                    <Palette size={12} />
+                  </button>
+                  {paletteFor === o && (
+                    <div className="db-tag-swatches-row">
+                      <TagColorSwatches
+                        current={optionColors?.[o]}
+                        onPick={(hue) => {
+                          onSetOptionColor(o, hue);
+                          setPaletteFor(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
               {showCreate && (
                 <button

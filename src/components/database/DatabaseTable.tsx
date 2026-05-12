@@ -12,6 +12,7 @@ interface Props {
   rows: Row[];
   onCellChange: (rowId: string, columnId: string, value: unknown) => void | Promise<void>;
   onAddOption: (columnId: string, opt: string) => void | Promise<void>;
+  onSetOptionColor: (columnId: string, opt: string, hueIndex: number | null) => void | Promise<void>;
   onDeleteRow: (rowId: string) => void | Promise<void>;
   onAddColumnClick: () => void;
   onRenameColumn: (columnId: string, label: string) => void | Promise<void>;
@@ -33,6 +34,7 @@ export function DatabaseTable({
   rows,
   onCellChange,
   onAddOption,
+  onSetOptionColor,
   onDeleteRow,
   onAddColumnClick,
   onRenameColumn,
@@ -217,6 +219,7 @@ export function DatabaseTable({
                       onCommit={commit}
                       onCellChange={onCellChange}
                       onAddOption={onAddOption}
+                      onSetOptionColor={onSetOptionColor}
                       onRowReload={onRowReload}
                     />
                   </td>

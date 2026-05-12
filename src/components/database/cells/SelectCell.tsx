@@ -1,28 +1,35 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Palette } from 'lucide-react';
 import { useAnchorPos, useClickOutside } from '../floating';
 import { tagStyle } from './tagColor';
+import { TagColorSwatches } from './TagColorSwatches';
 
 interface Props {
   value: string | null;
   options: string[];
+  optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string | null) => void;
   onAddOption: (opt: string) => void;
+  onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
 
 export function SelectCell({
   value,
   options,
+  optionColors,
   editing,
   onChange,
   onAddOption,
+  onSetOptionColor,
   onCommit,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
+  const [paletteFor, setPaletteFor] = useState<string | null>(null);
   const pos = useAnchorPos(anchorRef, editing);
   useClickOutside([anchorRef, popRef], editing, onCommit);
 
@@ -36,7 +43,7 @@ export function SelectCell({
     <>
       <div ref={anchorRef} className="db-cell-anchor">
         {value ? (
-          <span className="db-tag" style={tagStyle(value)}>{value}</span>
+          <span className="db-tag" style={tagStyle(value, optionColors)}>{value}</span>
         ) : (
           <span className="db-cell-text" />
         )}
@@ -93,16 +100,42 @@ export function SelectCell({
                 </button>
               )}
               {filtered.map((o) => (
-                <button
-                  key={o}
-                  className="db-popover-item"
-                  onClick={() => {
-                    onChange(o);
-                    onCommit();
-                  }}
-                >
-                  <span className="db-tag" style={tagStyle(o)}>{o}</span>
-                </button>
+                <div key={o} className="db-popover-item db-popover-item-row">
+                  <button
+                    className="db-popover-item-main"
+                    onClick={() => {
+                      onChange(o);
+                      onCommit();
+                    }}
+                  >
+                    <span className="db-tag" style={tagStyle(o, optionColors)}>
+                      {o}
+                    </span>
+                  </button>
+                  <button
+                    className={`db-icon-btn db-tag-color-toggle ${
+                      paletteFor === o ? 'is-active' : ''
+                    }`}
+                    title="Change color"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaletteFor(paletteFor === o ? null : o);
+                    }}
+                  >
+                    <Palette size={12} />
+                  </button>
+                  {paletteFor === o && (
+                    <div className="db-tag-swatches-row">
+                      <TagColorSwatches
+                        current={optionColors?.[o]}
+                        onPick={(hue) => {
+                          onSetOptionColor(o, hue);
+                          setPaletteFor(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
               {showCreate && (
                 <button

@@ -173,6 +173,27 @@ export function DatabaseView({
     [db, dbPath, reload],
   );
 
+  const handleSetOptionColor = useCallback(
+    async (columnId: string, opt: string, hueIndex: number | null) => {
+      if (!db) return;
+      const col = db.schema[columnId];
+      if (!col) return;
+      const prev = (col.option_colors as Record<string, number> | undefined) ?? {};
+      const next = { ...prev };
+      if (hueIndex === null) delete next[opt];
+      else next[opt] = hueIndex;
+      const nextCol: ColumnDef = { ...col, option_colors: next };
+      setDb({ ...db, schema: { ...db.schema, [columnId]: nextCol } });
+      try {
+        await dbApi.updateColumn(dbPath, columnId, nextCol);
+      } catch (err) {
+        console.error(err);
+        reload();
+      }
+    },
+    [db, dbPath, reload],
+  );
+
   const handleAddRow = useCallback(async () => {
     if (!db) return;
     try {
@@ -421,6 +442,7 @@ export function DatabaseView({
         rows={visibleRows}
         onCellChange={handleCellChange}
         onAddOption={handleAddOption}
+        onSetOptionColor={handleSetOptionColor}
         onDeleteRow={handleDeleteRow}
         onAddColumnClick={() => setAddColumnOpen((v) => !v)}
         onRenameColumn={handleRenameColumn}
