@@ -230,9 +230,13 @@ fn index_template(dir_rel: &str, db_path: &str) -> String {
         prefix.push_str("../");
     }
     let source = format!("{prefix}{db_path}");
-    format!(
-        "---\nkb: true\ndir: {dir_rel}\n---\n\n# {dir_name}\n\n```db\nsource: {source}\nview: default\n```\n\n<!-- Свободный текст ниже — редактируй как обычную заметку -->\n"
-    )
+    let mut out = String::new();
+    out.push_str(&format!("# {dir_name}\n\n"));
+    out.push_str("> Это страница папки-базы знаний. Таблица ниже автоматически собирает все заметки из этой папки и её подпапок. Колонка **Area** заполняется по пути файла и не редактируется вручную — добавь подпапку, и тег появится сам. Остальные колонки можно править как угодно.\n");
+    out.push_str(">\n");
+    out.push_str("> Под таблицей можно писать обычный текст — он сохранится как заметка папки.\n\n");
+    out.push_str(&format!("```db\nsource: {source}\nview: default\n```\n\n"));
+    out
 }
 
 #[derive(Debug, Serialize)]
