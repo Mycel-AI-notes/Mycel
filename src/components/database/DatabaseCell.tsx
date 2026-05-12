@@ -18,6 +18,7 @@ interface Props {
   onCommit: () => void;
   onCellChange: (rowId: string, columnId: string, value: unknown) => void | Promise<void>;
   onAddOption: (columnId: string, opt: string) => void | Promise<void>;
+  onSetOptionColor: (columnId: string, opt: string, hueIndex: number | null) => void | Promise<void>;
   onRowReload: () => void;
 }
 
@@ -30,6 +31,7 @@ export function DatabaseCell({
   onCommit,
   onCellChange,
   onAddOption,
+  onSetOptionColor,
   onRowReload,
 }: Props) {
   if (columnId === PAGE_COL) {
@@ -80,9 +82,11 @@ export function DatabaseCell({
         <SelectCell
           value={(value as string) ?? null}
           options={column.options ?? []}
+          optionColors={column.option_colors as Record<string, number> | undefined}
           editing={editing}
           onChange={(v) => onCellChange(row.id, columnId, v)}
           onAddOption={(o) => onAddOption(columnId, o)}
+          onSetOptionColor={(opt, hue) => onSetOptionColor(columnId, opt, hue)}
           onCommit={onCommit}
         />
       );
@@ -91,9 +95,11 @@ export function DatabaseCell({
         <MultiSelectCell
           value={Array.isArray(value) ? (value as string[]) : []}
           options={column.options ?? []}
+          optionColors={column.option_colors as Record<string, number> | undefined}
           editing={editing}
           onChange={(v) => onCellChange(row.id, columnId, v)}
           onAddOption={(o) => onAddOption(columnId, o)}
+          onSetOptionColor={(opt, hue) => onSetOptionColor(columnId, opt, hue)}
           onCommit={onCommit}
         />
       );

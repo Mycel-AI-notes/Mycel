@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { ColumnDef, Row, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
@@ -12,7 +12,11 @@ interface Props {
   rows: Row[];
   onCellChange: (rowId: string, columnId: string, value: unknown) => void | Promise<void>;
   onAddOption: (columnId: string, opt: string) => void | Promise<void>;
+  onSetOptionColor: (columnId: string, opt: string, hueIndex: number | null) => void | Promise<void>;
   onDeleteRow: (rowId: string) => void | Promise<void>;
+  /// Returns the new row's id (or null on failure) so the ghost-row flow can
+  /// open the just-created cell for editing.
+  onAddRow: () => Promise<string | null>;
   onAddColumnClick: () => void;
   onRenameColumn: (columnId: string, label: string) => void | Promise<void>;
   onDeleteColumn: (columnId: string) => void | Promise<void>;
@@ -33,7 +37,9 @@ export function DatabaseTable({
   rows,
   onCellChange,
   onAddOption,
+  onSetOptionColor,
   onDeleteRow,
+  onAddRow,
   onAddColumnClick,
   onRenameColumn,
   onDeleteColumn,
@@ -43,7 +49,6 @@ export function DatabaseTable({
 }: Props) {
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const resizingRef = useRef<{ id: string; startX: number; startW: number } | null>(null);
   // Active column-header button so the popover knows where to anchor.
   const menuAnchorRef = useRef<HTMLButtonElement | null>(null);
 
@@ -56,6 +61,7 @@ export function DatabaseTable({
     const col = schema[columnId];
     if (!col) return;
     if (col.type === 'checkbox') return;
+    if (col.readonly) return;
     setEditing({ rowId, columnId });
   }
 
@@ -65,7 +71,10 @@ export function DatabaseTable({
 
   function nextEditableColumn(currentId: string, dir: 1 | -1): string | null {
     const editable = visibleIds.filter(
-      (c) => c !== PAGE_COL && schema[c]?.type !== 'checkbox',
+      (c) =>
+        c !== PAGE_COL &&
+        schema[c]?.type !== 'checkbox' &&
+        !schema[c]?.readonly,
     );
     const idx = editable.indexOf(currentId);
     if (idx === -1) return null;
@@ -88,45 +97,36 @@ export function DatabaseTable({
     }
   }
 
-  // Column resize handlers
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const ctx = resizingRef.current;
-      if (!ctx) return;
-      const dx = e.clientX - ctx.startX;
-      const next = Math.max(60, ctx.startW + dx);
-      const headers = document.querySelectorAll<HTMLTableCellElement>(
-        `[data-db-col="${ctx.id}"]`,
-      );
-      headers.forEach((th) => (th.style.width = `${next}px`));
-    }
-    function onUp() {
-      const ctx = resizingRef.current;
-      if (!ctx) return;
-      const headers = document.querySelectorAll<HTMLTableCellElement>(
-        `[data-db-col="${ctx.id}"]`,
-      );
-      const w = headers[0]?.offsetWidth ?? ctx.startW;
-      resizingRef.current = null;
-      document.body.style.userSelect = '';
-      void onResizeColumn(ctx.id, w);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, [onResizeColumn]);
-
+  // Column resize. The CodeMirror widget that hosts this table calls
+  // stopPropagation on mousedown/mouseup, which would prevent document-level
+  // listeners from firing when the mouse is released inside the widget — the
+  // resize would never end and the column would keep tracking the cursor.
+  // Attach the move/up listeners in capture phase to run before that handler.
   function startResize(e: React.MouseEvent, columnId: string) {
     const target = e.currentTarget.parentElement as HTMLTableCellElement;
-    resizingRef.current = {
-      id: columnId,
-      startX: e.clientX,
-      startW: target.offsetWidth,
-    };
+    const startX = e.clientX;
+    const startW = target.offsetWidth;
+    let lastWidth = startW;
+
     document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    function onMove(ev: MouseEvent) {
+      const dx = ev.clientX - startX;
+      lastWidth = Math.max(60, startW + dx);
+      document
+        .querySelectorAll<HTMLTableCellElement>(`[data-db-col="${columnId}"]`)
+        .forEach((th) => (th.style.width = `${lastWidth}px`));
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove, true);
+      document.removeEventListener('mouseup', onUp, true);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      void onResizeColumn(columnId, lastWidth);
+    }
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
     e.preventDefault();
   }
 
@@ -196,13 +196,6 @@ export function DatabaseTable({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td className="db-empty" colSpan={visibleIds.length + 1}>
-                No rows. Click "Add row" to start.
-              </td>
-            </tr>
-          )}
           {rows.map((row) => (
             <tr key={row.id} className="db-tr">
               {visibleIds.map((cid) => {
@@ -213,8 +206,9 @@ export function DatabaseTable({
                   <td
                     key={cid}
                     data-db-col={cid}
-                    className="db-td"
+                    className={`db-td ${col?.readonly ? 'db-td-readonly' : ''}`}
                     style={{ width: cid === PAGE_COL ? 160 : col?.width ?? 200 }}
+                    title={col?.readonly ? 'Read-only column' : undefined}
                     onClick={() => !isEditing && startEdit(row.id, cid)}
                     onKeyDown={(e) => onCellKeyDown(e, row.id, cid)}
                   >
@@ -227,6 +221,7 @@ export function DatabaseTable({
                       onCommit={commit}
                       onCellChange={onCellChange}
                       onAddOption={onAddOption}
+                      onSetOptionColor={onSetOptionColor}
                       onRowReload={onRowReload}
                     />
                   </td>
@@ -243,6 +238,37 @@ export function DatabaseTable({
               </td>
             </tr>
           ))}
+          {/* Ghost row: visually present at the bottom so the user can click
+              any cell to start a new entry. The click creates a real row via
+              onAddRow and immediately opens the clicked column for editing —
+              feels like the table has an always-empty trailing row. */}
+          <tr className="db-tr db-tr-ghost">
+            {visibleIds.map((cid, idx) => {
+              const col = schema[cid];
+              return (
+                <td
+                  key={cid}
+                  data-db-col={cid}
+                  className="db-td db-td-ghost"
+                  style={{ width: cid === PAGE_COL ? 160 : col?.width ?? 200 }}
+                  onClick={async () => {
+                    const newId = await onAddRow();
+                    if (
+                      newId &&
+                      cid !== PAGE_COL &&
+                      col?.type !== 'checkbox' &&
+                      !col?.readonly
+                    ) {
+                      setEditing({ rowId: newId, columnId: cid });
+                    }
+                  }}
+                >
+                  {idx === 0 && <span className="db-ghost-hint">+ New row</span>}
+                </td>
+              );
+            })}
+            <td className="db-td db-td-actions db-td-ghost" />
+          </tr>
         </tbody>
       </table>
     </div>

@@ -78,6 +78,10 @@ class DatabaseWidget extends WidgetType {
     public readonly source: string,
     public readonly viewId: string | undefined,
     public readonly notePath: string,
+    /// Number of newlines in the replaced fence range. CM6 uses this to map
+    /// click coordinates to document positions; reporting 0 for a multi-line
+    /// fence makes clicks below the widget land one or more lines off.
+    public readonly replacedLineBreaks: number,
   ) {
     super();
   }
@@ -86,7 +90,8 @@ class DatabaseWidget extends WidgetType {
     return (
       this.source === other.source &&
       this.viewId === other.viewId &&
-      this.notePath === other.notePath
+      this.notePath === other.notePath &&
+      this.replacedLineBreaks === other.replacedLineBreaks
     );
   }
 
@@ -98,7 +103,7 @@ class DatabaseWidget extends WidgetType {
   }
 
   get lineBreaks() {
-    return 0;
+    return this.replacedLineBreaks;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -129,6 +134,22 @@ class DatabaseWidget extends WidgetType {
       view.dispatch({ changes: { from: target.fenceFrom, to, insert: '' } });
     };
 
+    const onChangeViewId = (newViewId: string) => {
+      const blocks = findDbBlocks(view.state);
+      const target = blocks.find(
+        (b) => b.source === this.source && b.view === this.viewId,
+      );
+      if (!target) return;
+      const lines = ['source: ' + this.source, 'view: ' + newViewId];
+      view.dispatch({
+        changes: {
+          from: target.contentStart,
+          to: target.contentEnd,
+          insert: lines.join('\n'),
+        },
+      });
+    };
+
     const dbPath = resolveDbPath(this.notePath, this.source);
     const viewId = this.viewId;
     queueMicrotask(() => {
@@ -137,7 +158,12 @@ class DatabaseWidget extends WidgetType {
         const root = createRoot(container);
         this.root = root;
         root.render(
-          createElement(DatabaseView, { dbPath, viewId, onRemoveFromDoc }),
+          createElement(DatabaseView, {
+            dbPath,
+            viewId,
+            onRemoveFromDoc,
+            onChangeViewId,
+          }),
         );
       } catch (err) {
         console.error('Failed to mount database widget', err);
@@ -164,11 +190,14 @@ function buildDecorations(state: EditorState, notePath: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const blocks = findDbBlocks(state);
   for (const b of blocks) {
+    const startLine = state.doc.lineAt(b.fenceFrom).number;
+    const endLine = state.doc.lineAt(b.fenceTo).number;
+    const lineBreaks = endLine - startLine;
     builder.add(
       b.fenceFrom,
       b.fenceTo,
       Decoration.replace({
-        widget: new DatabaseWidget(b.source, b.view, notePath),
+        widget: new DatabaseWidget(b.source, b.view, notePath, lineBreaks),
         block: true,
       }),
     );
@@ -231,14 +260,25 @@ export function databaseWidgetPlugin(notePath: string) {
 
 export const databaseWidgetTheme = EditorView.baseTheme({
   '.cm-db-widget': {
-    margin: '12px 0',
+    // Use padding (not margin) for the visual gap above / below the table.
+    // Margin would land outside the widget's hit-area, so clicks in those
+    // 12px would fall through to CodeMirror and get mapped to a different
+    // document line than the user expected. Padding keeps the gap inside
+    // the widget where its mousedown handler (added in toDOM) absorbs the
+    // click before CM can act on it.
+    margin: '0',
+    padding: '12px 0',
+    border: 'none',
+    borderRadius: '0',
+    backgroundColor: 'transparent',
+    // No overflow:hidden — popovers in the toolbar (Sort / Columns /
+    // Settings) need to extend below the widget when the table itself is
+    // short, otherwise their content gets clipped.
+  },
+  '.cm-db-widget > .db-root': {
     border: '1px solid var(--color-border)',
     borderRadius: '6px',
     backgroundColor: 'var(--color-surface-0)',
-    // No overflow:hidden — popovers in the toolbar (Sort / Columns /
-    // Settings) need to extend below the widget when the table itself is
-    // short, otherwise their content gets clipped (e.g. the "Remove table"
-    // button became invisible on tables with no rows).
   },
   // Note: .cm-db-fence-gutter / .cm-db-fence-line styles live in index.css
   // because EditorView.theme() classes override baseTheme rules and that

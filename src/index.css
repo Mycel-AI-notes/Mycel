@@ -1039,6 +1039,102 @@ body {
 .db-columns-popover .db-popover-item input[type='checkbox'] {
   accent-color: var(--color-accent);
 }
+.db-views-popover {
+  min-width: 220px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Two-column row inside a popover: a clickable label on the left, a small
+   action button (e.g. color palette toggle) on the right. The wrapper itself
+   isn't clickable; only the inner buttons are. */
+.db-popover-item-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  cursor: default;
+  flex-wrap: wrap;
+}
+.db-popover-item-row.is-active {
+  background: var(--color-surface-2);
+}
+.db-popover-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 6px 6px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.db-popover-item-main:hover {
+  background: var(--color-surface-2);
+}
+.db-tag-color-toggle {
+  margin-right: 6px;
+  opacity: 0.4;
+  transition: opacity 0.1s;
+}
+.db-popover-item-row:hover .db-tag-color-toggle,
+.db-tag-color-toggle.is-active {
+  opacity: 1;
+}
+
+/* Inline 12-swatch palette that drops below an option row when its palette
+   toggle is active. Wraps to a second line on narrow popovers. */
+.db-tag-swatches-row {
+  flex: 1 1 100%;
+  padding: 4px 8px 6px;
+}
+.db-tag-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.db-tag-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+.db-tag-swatch:hover {
+  transform: scale(1.1);
+}
+.db-tag-swatch.is-active {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.db-tag-swatch-reset {
+  background: transparent;
+}
+.db-popover-section-label {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+.db-popover-action {
+  color: var(--color-text-secondary);
+}
+.db-popover-action:hover {
+  color: var(--color-text-primary);
+}
+.db-popover-action svg {
+  color: var(--color-text-muted);
+}
 
 .db-table-wrap {
   overflow-x: auto;
@@ -1141,11 +1237,49 @@ body {
   text-align: center;
   border-right: none;
 }
+/* Read-only cells (e.g. KB Area, auto-derived from folder path): no edit
+   cursor, no hover affordance — clicking does nothing. */
+.db-td-readonly {
+  cursor: default;
+}
+.db-td-readonly .db-cell-text,
+.db-td-readonly .db-tag-row {
+  cursor: default;
+}
 .db-empty {
   padding: 18px;
   text-align: center;
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+/* Persistent "tap to add" row at the bottom of every table. The cells render
+   without content; clicking one fires onAddRow and opens that column for
+   editing on the freshly-created real row. */
+.db-tr-ghost {
+  cursor: cell;
+}
+.db-tr-ghost:nth-child(even) {
+  background: transparent;
+}
+.db-tr-ghost .db-td-ghost {
+  min-height: 28px;
+  height: 28px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.db-tr-ghost:hover .db-td-ghost {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+.db-ghost-hint {
+  display: inline-block;
+  padding: 6px 10px;
+  font-size: 12px;
+  opacity: 0.55;
+}
+.db-tr-ghost:hover .db-ghost-hint {
+  opacity: 1;
+  color: var(--color-text-primary);
 }
 
 .db-cell-text {
@@ -1181,15 +1315,30 @@ body {
   min-height: 28px;
 }
 
+/* Light: flat pale pastel bg + black text — Notion / Linear feel.
+   Dark: translucent tint over the surface so tags don't fight the panel. */
 .db-tag {
   display: inline-block;
-  padding: 1px 7px;
+  padding: 1px 8px;
   margin: 1px 2px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  color: var(--color-accent);
+  background: hsl(var(--db-tag-hue, 80) 85% 92%);
+  color: #000;
+  border: 1px solid hsl(var(--db-tag-hue, 80) 70% 80%);
   font-size: 11px;
+  font-weight: 500;
   white-space: nowrap;
+}
+/* `.dark` class stays on html even for the "light" data-palettes (amber,
+   azure, plum, coral) which override surfaces back to light. Using
+   var(--color-text-primary) here means the tag text follows the actual
+   visible palette — dark on light palettes, light on true-dark — instead
+   of always rendering as a pastel hue that looked muddy on light surfaces. */
+.dark .db-tag {
+  background: color-mix(in srgb, hsl(var(--db-tag-hue, 80) 75% 70%) 18%, transparent);
+  color: var(--color-text-primary);
+  border-color: transparent;
+  font-weight: 400;
 }
 
 /* Cell popovers portaled to body — they don't sit inside .db-popover-anchor
@@ -1221,9 +1370,20 @@ body {
   color: var(--color-accent);
   cursor: pointer;
   font-size: 12px;
+  max-width: 100%;
+  min-width: 0;
 }
-.db-pagelink:hover {
+.db-pagelink:hover .db-pagelink-text {
   text-decoration: underline;
+}
+.db-pagelink-icon {
+  flex: 0 0 auto;
+}
+.db-pagelink-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .db-pagelink-create {
   display: inline-flex;

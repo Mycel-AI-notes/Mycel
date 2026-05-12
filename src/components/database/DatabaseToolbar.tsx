@@ -8,6 +8,9 @@ import {
   Settings,
   Trash2,
   X,
+  Layers,
+  Check,
+  Pencil,
 } from 'lucide-react';
 import type { ColumnDef, FilterDef, SortDef, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
@@ -17,6 +20,8 @@ import { Select } from './Select';
 interface Props {
   schema: Record<string, ColumnDef>;
   view: ViewDef;
+  viewId: string | null;
+  allViews: Record<string, ViewDef>;
   rowLimit: number | null;
   onAddRow: () => void;
   onSortChange: (sort: SortDef | null) => void;
@@ -24,6 +29,13 @@ interface Props {
   onFiltersChange: (filters: FilterDef[]) => void;
   onRowLimitChange: (limit: number | null) => void;
   onRemoveFromDoc?: () => void;
+  /// Switch this fence to a different (existing) view id.
+  onSwitchView?: (viewId: string) => void;
+  /// Clone the current view under a new id and switch to it. Resolves once the
+  /// new view is persisted.
+  onCreateView?: (label: string) => Promise<void> | void;
+  /// Rename the current view in-place (changes only the label).
+  onRenameView?: (label: string) => Promise<void> | void;
 }
 
 function usePopoverClose(
@@ -324,9 +336,117 @@ function SettingsPopover({
   );
 }
 
+function ViewsPopover({
+  view,
+  viewId,
+  allViews,
+  onSwitchView,
+  onCreateView,
+  onRenameView,
+  onClose,
+}: {
+  view: ViewDef;
+  viewId: string | null;
+  allViews: Record<string, ViewDef>;
+  onSwitchView?: (viewId: string) => void;
+  onCreateView?: (label: string) => Promise<void> | void;
+  onRenameView?: (label: string) => Promise<void> | void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(view.label);
+  usePopoverClose(ref, onClose);
+
+  const entries = Object.entries(allViews);
+  // The current fence might point at a not-yet-persisted view id (auto-created
+  // on first edit). Show it in the list anyway so users can see they're on it.
+  if (viewId && !allViews[viewId]) {
+    entries.push([viewId, view]);
+  }
+
+  return (
+    <div ref={ref} className="db-popover db-views-popover">
+      {renaming && onRenameView ? (
+        <div className="db-settings-section">
+          <label className="db-settings-label">Rename view</label>
+          <input
+            autoFocus
+            className="db-settings-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = draft.trim();
+                if (v) void onRenameView(v);
+                setRenaming(false);
+                onClose();
+              }
+              if (e.key === 'Escape') setRenaming(false);
+            }}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="db-popover-section-label">Views</div>
+          <div className="db-popover-list">
+            {entries.map(([id, v]) => (
+              <button
+                key={id}
+                className={`db-popover-item ${id === viewId ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (id !== viewId && onSwitchView) onSwitchView(id);
+                  onClose();
+                }}
+              >
+                {id === viewId ? (
+                  <Check size={12} />
+                ) : (
+                  <span style={{ width: 12 }} />
+                )}
+                <span style={{ flex: 1, textAlign: 'left' }}>{v.label}</span>
+              </button>
+            ))}
+          </div>
+          {(onRenameView || onCreateView) && (
+            <>
+              <div className="db-popover-divider" />
+              <div className="db-popover-section-label">Actions</div>
+              {onRenameView && (
+                <button
+                  className="db-popover-item db-popover-action"
+                  onClick={() => {
+                    setDraft(view.label);
+                    setRenaming(true);
+                  }}
+                >
+                  <Pencil size={12} /> Rename current view
+                </button>
+              )}
+              {onCreateView && (
+                <button
+                  className="db-popover-item db-popover-action"
+                  onClick={async () => {
+                    await onCreateView('New view');
+                    onClose();
+                  }}
+                >
+                  <Plus size={12} /> New view (clone current)
+                </button>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function DatabaseToolbar({
   schema,
   view,
+  viewId,
+  allViews,
   rowLimit,
   onAddRow,
   onSortChange,
@@ -334,17 +454,47 @@ export function DatabaseToolbar({
   onFiltersChange,
   onRowLimitChange,
   onRemoveFromDoc,
+  onSwitchView,
+  onCreateView,
+  onRenameView,
 }: Props) {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewsOpen, setViewsOpen] = useState(false);
+
+  // Show the view selector only when the host can rewrite the fence —
+  // otherwise switching is silently a no-op.
+  const showViewSelector = !!onSwitchView || !!onCreateView;
 
   return (
     <div className="db-toolbar">
       <button className="db-btn db-btn-primary" onClick={onAddRow}>
         <Plus size={12} /> Add row
       </button>
+      {showViewSelector && (
+        <div className="db-popover-anchor">
+          <button
+            className={`db-btn ${viewsOpen ? 'is-active' : ''}`}
+            onClick={() => setViewsOpen((v) => !v)}
+            title="View"
+          >
+            <Layers size={12} /> {view.label}
+          </button>
+          {viewsOpen && (
+            <ViewsPopover
+              view={view}
+              viewId={viewId}
+              allViews={allViews}
+              onSwitchView={onSwitchView}
+              onCreateView={onCreateView}
+              onRenameView={onRenameView}
+              onClose={() => setViewsOpen(false)}
+            />
+          )}
+        </div>
+      )}
       <button
         className={`db-btn ${filtersOpen || view.filters.length > 0 ? 'is-active' : ''}`}
         onClick={() => setFiltersOpen(true)}

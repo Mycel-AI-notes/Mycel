@@ -1,27 +1,35 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Palette } from 'lucide-react';
 import { useAnchorPos, useClickOutside } from '../floating';
+import { tagStyle } from './tagColor';
+import { TagColorSwatches } from './TagColorSwatches';
 
 interface Props {
   value: string[];
   options: string[];
+  optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string[]) => void;
-  onAddOption: (opt: string) => void;
+  onAddOption: (opt: string) => void | Promise<void>;
+  onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
 
 export function MultiSelectCell({
   value,
   options,
+  optionColors,
   editing,
   onChange,
   onAddOption,
+  onSetOptionColor,
   onCommit,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
+  const [paletteFor, setPaletteFor] = useState<string | null>(null);
   const pos = useAnchorPos(anchorRef, editing);
   useClickOutside([anchorRef, popRef], editing, onCommit);
 
@@ -44,7 +52,7 @@ export function MultiSelectCell({
       <div ref={anchorRef} className="db-cell-anchor">
         <div className="db-tag-row">
           {(value ?? []).map((v) => (
-            <span key={v} className="db-tag">
+            <span key={v} className="db-tag" style={tagStyle(v, optionColors)}>
               {v}
             </span>
           ))}
@@ -79,10 +87,19 @@ export function MultiSelectCell({
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   if (showCreate) {
-                    onAddOption(query.trim());
-                    const next = new Set(selected);
-                    next.add(query.trim());
-                    onChange([...next]);
+                    const v = query.trim();
+                    // Persist the option to the column FIRST so the cell-value
+                    // write below can't race ahead with a snapshot that
+                    // doesn't include it (the bug: tag appeared but never
+                    // landed in column.options because two backend RMWs
+                    // raced — even with the per-path lock, awaiting at the
+                    // call site keeps the order predictable).
+                    void (async () => {
+                      await onAddOption(v);
+                      const next = new Set(selected);
+                      next.add(v);
+                      onChange([...next]);
+                    })();
                     setQuery('');
                   } else if (filtered[0]) {
                     toggle(filtered[0]);
@@ -93,24 +110,52 @@ export function MultiSelectCell({
             />
             <div className="db-popover-list">
               {filtered.map((o) => (
-                <button
+                <div
                   key={o}
-                  className={`db-popover-item ${selected.has(o) ? 'is-active' : ''}`}
-                  onClick={() => toggle(o)}
+                  className={`db-popover-item db-popover-item-row ${selected.has(o) ? 'is-active' : ''}`}
                 >
-                  <input type="checkbox" checked={selected.has(o)} readOnly />
-                  <span className="db-tag">{o}</span>
-                </button>
+                  <button
+                    className="db-popover-item-main"
+                    onClick={() => toggle(o)}
+                  >
+                    <input type="checkbox" checked={selected.has(o)} readOnly />
+                    <span className="db-tag" style={tagStyle(o, optionColors)}>{o}</span>
+                  </button>
+                  <button
+                    className={`db-icon-btn db-tag-color-toggle ${
+                      paletteFor === o ? 'is-active' : ''
+                    }`}
+                    title="Change color"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaletteFor(paletteFor === o ? null : o);
+                    }}
+                  >
+                    <Palette size={12} />
+                  </button>
+                  {paletteFor === o && (
+                    <div className="db-tag-swatches-row">
+                      <TagColorSwatches
+                        current={optionColors?.[o]}
+                        onPick={(hue) => {
+                          onSetOptionColor(o, hue);
+                          setPaletteFor(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
               {showCreate && (
                 <button
                   className="db-popover-item"
-                  onClick={() => {
-                    onAddOption(query.trim());
-                    const next = new Set(selected);
-                    next.add(query.trim());
-                    onChange([...next]);
+                  onClick={async () => {
+                    const v = query.trim();
                     setQuery('');
+                    await onAddOption(v);
+                    const next = new Set(selected);
+                    next.add(v);
+                    onChange([...next]);
                   }}
                 >
                   + Create "{query.trim()}"

@@ -12,6 +12,9 @@ export interface ColumnDef {
   label: string;
   options?: string[];
   width?: number;
+  /// Read-only columns can't be edited from the UI — used for auto-derived
+  /// fields like KB `area` that the backend overwrites on every refresh.
+  readonly?: boolean;
   [extra: string]: unknown;
 }
 

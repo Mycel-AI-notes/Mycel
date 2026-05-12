@@ -1,27 +1,35 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Palette } from 'lucide-react';
 import { useAnchorPos, useClickOutside } from '../floating';
+import { tagStyle } from './tagColor';
+import { TagColorSwatches } from './TagColorSwatches';
 
 interface Props {
   value: string | null;
   options: string[];
+  optionColors?: Record<string, number>;
   editing: boolean;
   onChange: (next: string | null) => void;
-  onAddOption: (opt: string) => void;
+  onAddOption: (opt: string) => void | Promise<void>;
+  onSetOptionColor: (opt: string, hueIndex: number | null) => void;
   onCommit: () => void;
 }
 
 export function SelectCell({
   value,
   options,
+  optionColors,
   editing,
   onChange,
   onAddOption,
+  onSetOptionColor,
   onCommit,
 }: Props) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
+  const [paletteFor, setPaletteFor] = useState<string | null>(null);
   const pos = useAnchorPos(anchorRef, editing);
   useClickOutside([anchorRef, popRef], editing, onCommit);
 
@@ -35,7 +43,7 @@ export function SelectCell({
     <>
       <div ref={anchorRef} className="db-cell-anchor">
         {value ? (
-          <span className="db-tag">{value}</span>
+          <span className="db-tag" style={tagStyle(value, optionColors)}>{value}</span>
         ) : (
           <span className="db-cell-text" />
         )}
@@ -72,9 +80,15 @@ export function SelectCell({
                     onChange(filtered[0]);
                     onCommit();
                   } else if (showCreate) {
-                    onAddOption(query.trim());
-                    onChange(query.trim());
-                    onCommit();
+                    const v = query.trim();
+                    void (async () => {
+                      // Await the option insert before setting the cell value
+                      // so the column.options write isn't racing the cell
+                      // write at the call site.
+                      await onAddOption(v);
+                      onChange(v);
+                      onCommit();
+                    })();
                   }
                 }
               }}
@@ -92,23 +106,50 @@ export function SelectCell({
                 </button>
               )}
               {filtered.map((o) => (
-                <button
-                  key={o}
-                  className="db-popover-item"
-                  onClick={() => {
-                    onChange(o);
-                    onCommit();
-                  }}
-                >
-                  <span className="db-tag">{o}</span>
-                </button>
+                <div key={o} className="db-popover-item db-popover-item-row">
+                  <button
+                    className="db-popover-item-main"
+                    onClick={() => {
+                      onChange(o);
+                      onCommit();
+                    }}
+                  >
+                    <span className="db-tag" style={tagStyle(o, optionColors)}>
+                      {o}
+                    </span>
+                  </button>
+                  <button
+                    className={`db-icon-btn db-tag-color-toggle ${
+                      paletteFor === o ? 'is-active' : ''
+                    }`}
+                    title="Change color"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaletteFor(paletteFor === o ? null : o);
+                    }}
+                  >
+                    <Palette size={12} />
+                  </button>
+                  {paletteFor === o && (
+                    <div className="db-tag-swatches-row">
+                      <TagColorSwatches
+                        current={optionColors?.[o]}
+                        onPick={(hue) => {
+                          onSetOptionColor(o, hue);
+                          setPaletteFor(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
               {showCreate && (
                 <button
                   className="db-popover-item"
-                  onClick={() => {
-                    onAddOption(query.trim());
-                    onChange(query.trim());
+                  onClick={async () => {
+                    const v = query.trim();
+                    await onAddOption(v);
+                    onChange(v);
                     onCommit();
                   }}
                 >

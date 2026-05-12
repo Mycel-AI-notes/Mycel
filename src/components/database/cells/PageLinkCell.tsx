@@ -42,12 +42,14 @@ export function PageLinkCell({ dbPath, row, onChanged }: Props) {
     return (
       <button
         className="db-pagelink"
+        title={stem}
         onClick={(e) => {
           e.stopPropagation();
           void openNote(row.page!, { preview: true });
         }}
       >
-        <FileText size={12} /> {stem}
+        <FileText size={12} className="db-pagelink-icon" />
+        <span className="db-pagelink-text">{stem}</span>
       </button>
     );
   }
