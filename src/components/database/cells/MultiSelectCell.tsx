@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnchorPos, useClickOutside } from '../floating';
+import { tagStyle } from './tagColor';
 
 interface Props {
   value: string[];
@@ -44,7 +45,7 @@ export function MultiSelectCell({
       <div ref={anchorRef} className="db-cell-anchor">
         <div className="db-tag-row">
           {(value ?? []).map((v) => (
-            <span key={v} className="db-tag">
+            <span key={v} className="db-tag" style={tagStyle(v)}>
               {v}
             </span>
           ))}
@@ -99,7 +100,7 @@ export function MultiSelectCell({
                   onClick={() => toggle(o)}
                 >
                   <input type="checkbox" checked={selected.has(o)} readOnly />
-                  <span className="db-tag">{o}</span>
+                  <span className="db-tag" style={tagStyle(o)}>{o}</span>
                 </button>
               ))}
               {showCreate && (

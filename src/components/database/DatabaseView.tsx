@@ -20,6 +20,10 @@ interface Props {
   dbPath: string;
   viewId?: string;
   onRemoveFromDoc?: () => void;
+  /// Rewrite the `view:` line in the host fence so it points at a new view id.
+  /// The widget host (CodeMirror) supplies this; without it the view selector
+  /// falls back to read-only behavior because we can't redirect the fence.
+  onChangeViewId?: (newViewId: string) => void;
 }
 
 interface ErrorState {
@@ -27,7 +31,12 @@ interface ErrorState {
   message: string;
 }
 
-export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
+export function DatabaseView({
+  dbPath,
+  viewId,
+  onRemoveFromDoc,
+  onChangeViewId,
+}: Props) {
   const [db, setDb] = useState<Database | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
@@ -70,17 +79,37 @@ export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
     };
   }, [dbPath, reload]);
 
+  // When the fence specifies a view that doesn't exist in the file yet, keep
+  // the requested id as the "resolved" id and synthesize a fresh ViewDef from
+  // the default view. This lets each fence own its own filters — the first
+  // edit will persist a new ViewDef under that id.
   const resolvedViewId = useMemo(() => {
     if (!db) return null;
     const ids = Object.keys(db.views);
+    if (viewId) return viewId;
     if (ids.length === 0) return null;
-    if (viewId && db.views[viewId]) return viewId;
     return ids[0];
   }, [db, viewId]);
 
   const view: ViewDef | null = useMemo(() => {
     if (!db || !resolvedViewId) return null;
-    return db.views[resolvedViewId];
+    const existing = db.views[resolvedViewId];
+    if (existing) return existing;
+    const fallback = Object.values(db.views)[0];
+    if (fallback) {
+      return {
+        ...fallback,
+        label: resolvedViewId,
+        filters: [],
+        sort: null,
+      };
+    }
+    return {
+      label: resolvedViewId,
+      visible_columns: [PAGE_COL, ...Object.keys(db.schema)],
+      filters: [],
+      sort: null,
+    };
   }, [db, resolvedViewId]);
 
   const visibleRows = useMemo(() => {
@@ -340,16 +369,13 @@ export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
     return <div className="db-error">No views defined in this database.</div>;
   }
 
-  const viewMissing = viewId && !db.views[viewId];
-
   return (
     <div className="db-root">
-      {viewMissing && (
-        <div className="db-warning">View "{viewId}" not found, showing default.</div>
-      )}
       <DatabaseToolbar
         schema={db.schema}
         view={view}
+        viewId={resolvedViewId}
+        allViews={db.views}
         rowLimit={view.row_limit ?? null}
         onAddRow={handleAddRow}
         onSortChange={handleSortChange}
@@ -357,6 +383,36 @@ export function DatabaseView({ dbPath, viewId, onRemoveFromDoc }: Props) {
         onFiltersChange={handleFiltersChange}
         onRowLimitChange={handleRowLimitChange}
         onRemoveFromDoc={onRemoveFromDoc}
+        onSwitchView={onChangeViewId}
+        onCreateView={
+          onChangeViewId
+            ? async (label) => {
+                const newId = `view-${Math.random().toString(36).slice(2, 8)}`;
+                // Clone the current view (filters, columns, sort, limit) so the
+                // user immediately sees the same configuration and can diverge
+                // from there.
+                const clone: ViewDef = { ...view, label: label || 'New view' };
+                try {
+                  await dbApi.updateView(dbPath, newId, clone);
+                  setDb((prev) =>
+                    prev ? { ...prev, views: { ...prev.views, [newId]: clone } } : prev,
+                  );
+                  onChangeViewId(newId);
+                } catch (err) {
+                  console.error(err);
+                  alert(String(err));
+                }
+              }
+            : undefined
+        }
+        onRenameView={
+          resolvedViewId
+            ? async (label) => {
+                if (!view) return;
+                await persistView({ ...view, label });
+              }
+            : undefined
+        }
       />
       <DatabaseTable
         dbPath={dbPath}

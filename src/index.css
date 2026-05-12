@@ -1039,6 +1039,9 @@ body {
 .db-columns-popover .db-popover-item input[type='checkbox'] {
   accent-color: var(--color-accent);
 }
+.db-views-popover {
+  min-width: 200px;
+}
 
 .db-table-wrap {
   overflow-x: auto;
@@ -1186,10 +1189,14 @@ body {
   padding: 1px 7px;
   margin: 1px 2px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  color: var(--color-accent);
+  background: hsl(var(--db-tag-hue, 80) 70% 88%);
+  color: hsl(var(--db-tag-hue, 80) 45% 28%);
   font-size: 11px;
   white-space: nowrap;
+}
+.dark .db-tag {
+  background: hsl(var(--db-tag-hue, 80) 35% 26%);
+  color: hsl(var(--db-tag-hue, 80) 65% 85%);
 }
 
 /* Cell popovers portaled to body — they don't sit inside .db-popover-anchor
@@ -1221,9 +1228,20 @@ body {
   color: var(--color-accent);
   cursor: pointer;
   font-size: 12px;
+  max-width: 100%;
+  min-width: 0;
 }
-.db-pagelink:hover {
+.db-pagelink:hover .db-pagelink-text {
   text-decoration: underline;
+}
+.db-pagelink-icon {
+  flex: 0 0 auto;
+}
+.db-pagelink-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .db-pagelink-create {
   display: inline-flex;

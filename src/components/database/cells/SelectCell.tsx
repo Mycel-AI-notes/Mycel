@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnchorPos, useClickOutside } from '../floating';
+import { tagStyle } from './tagColor';
 
 interface Props {
   value: string | null;
@@ -35,7 +36,7 @@ export function SelectCell({
     <>
       <div ref={anchorRef} className="db-cell-anchor">
         {value ? (
-          <span className="db-tag">{value}</span>
+          <span className="db-tag" style={tagStyle(value)}>{value}</span>
         ) : (
           <span className="db-cell-text" />
         )}
@@ -100,7 +101,7 @@ export function SelectCell({
                     onCommit();
                   }}
                 >
-                  <span className="db-tag">{o}</span>
+                  <span className="db-tag" style={tagStyle(o)}>{o}</span>
                 </button>
               ))}
               {showCreate && (

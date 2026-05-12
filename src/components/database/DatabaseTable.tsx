@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { ColumnDef, Row, ViewDef } from '@/types/database';
 import { PAGE_COL } from '@/types/database';
@@ -43,7 +43,6 @@ export function DatabaseTable({
 }: Props) {
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const resizingRef = useRef<{ id: string; startX: number; startW: number } | null>(null);
   // Active column-header button so the popover knows where to anchor.
   const menuAnchorRef = useRef<HTMLButtonElement | null>(null);
 
@@ -88,45 +87,36 @@ export function DatabaseTable({
     }
   }
 
-  // Column resize handlers
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const ctx = resizingRef.current;
-      if (!ctx) return;
-      const dx = e.clientX - ctx.startX;
-      const next = Math.max(60, ctx.startW + dx);
-      const headers = document.querySelectorAll<HTMLTableCellElement>(
-        `[data-db-col="${ctx.id}"]`,
-      );
-      headers.forEach((th) => (th.style.width = `${next}px`));
-    }
-    function onUp() {
-      const ctx = resizingRef.current;
-      if (!ctx) return;
-      const headers = document.querySelectorAll<HTMLTableCellElement>(
-        `[data-db-col="${ctx.id}"]`,
-      );
-      const w = headers[0]?.offsetWidth ?? ctx.startW;
-      resizingRef.current = null;
-      document.body.style.userSelect = '';
-      void onResizeColumn(ctx.id, w);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, [onResizeColumn]);
-
+  // Column resize. The CodeMirror widget that hosts this table calls
+  // stopPropagation on mousedown/mouseup, which would prevent document-level
+  // listeners from firing when the mouse is released inside the widget — the
+  // resize would never end and the column would keep tracking the cursor.
+  // Attach the move/up listeners in capture phase to run before that handler.
   function startResize(e: React.MouseEvent, columnId: string) {
     const target = e.currentTarget.parentElement as HTMLTableCellElement;
-    resizingRef.current = {
-      id: columnId,
-      startX: e.clientX,
-      startW: target.offsetWidth,
-    };
+    const startX = e.clientX;
+    const startW = target.offsetWidth;
+    let lastWidth = startW;
+
     document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    function onMove(ev: MouseEvent) {
+      const dx = ev.clientX - startX;
+      lastWidth = Math.max(60, startW + dx);
+      document
+        .querySelectorAll<HTMLTableCellElement>(`[data-db-col="${columnId}"]`)
+        .forEach((th) => (th.style.width = `${lastWidth}px`));
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove, true);
+      document.removeEventListener('mouseup', onUp, true);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      void onResizeColumn(columnId, lastWidth);
+    }
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
     e.preventDefault();
   }
 

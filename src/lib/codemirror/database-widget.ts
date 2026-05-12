@@ -129,6 +129,22 @@ class DatabaseWidget extends WidgetType {
       view.dispatch({ changes: { from: target.fenceFrom, to, insert: '' } });
     };
 
+    const onChangeViewId = (newViewId: string) => {
+      const blocks = findDbBlocks(view.state);
+      const target = blocks.find(
+        (b) => b.source === this.source && b.view === this.viewId,
+      );
+      if (!target) return;
+      const lines = ['source: ' + this.source, 'view: ' + newViewId];
+      view.dispatch({
+        changes: {
+          from: target.contentStart,
+          to: target.contentEnd,
+          insert: lines.join('\n'),
+        },
+      });
+    };
+
     const dbPath = resolveDbPath(this.notePath, this.source);
     const viewId = this.viewId;
     queueMicrotask(() => {
@@ -137,7 +153,12 @@ class DatabaseWidget extends WidgetType {
         const root = createRoot(container);
         this.root = root;
         root.render(
-          createElement(DatabaseView, { dbPath, viewId, onRemoveFromDoc }),
+          createElement(DatabaseView, {
+            dbPath,
+            viewId,
+            onRemoveFromDoc,
+            onChangeViewId,
+          }),
         );
       } catch (err) {
         console.error('Failed to mount database widget', err);
