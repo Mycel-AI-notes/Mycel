@@ -260,14 +260,25 @@ export function databaseWidgetPlugin(notePath: string) {
 
 export const databaseWidgetTheme = EditorView.baseTheme({
   '.cm-db-widget': {
-    margin: '12px 0',
+    // Use padding (not margin) for the visual gap above / below the table.
+    // Margin would land outside the widget's hit-area, so clicks in those
+    // 12px would fall through to CodeMirror and get mapped to a different
+    // document line than the user expected. Padding keeps the gap inside
+    // the widget where its mousedown handler (added in toDOM) absorbs the
+    // click before CM can act on it.
+    margin: '0',
+    padding: '12px 0',
+    border: 'none',
+    borderRadius: '0',
+    backgroundColor: 'transparent',
+    // No overflow:hidden — popovers in the toolbar (Sort / Columns /
+    // Settings) need to extend below the widget when the table itself is
+    // short, otherwise their content gets clipped.
+  },
+  '.cm-db-widget > .db-root': {
     border: '1px solid var(--color-border)',
     borderRadius: '6px',
     backgroundColor: 'var(--color-surface-0)',
-    // No overflow:hidden — popovers in the toolbar (Sort / Columns /
-    // Settings) need to extend below the widget when the table itself is
-    // short, otherwise their content gets clipped (e.g. the "Remove table"
-    // button became invisible on tables with no rows).
   },
   // Note: .cm-db-fence-gutter / .cm-db-fence-line styles live in index.css
   // because EditorView.theme() classes override baseTheme rules and that
