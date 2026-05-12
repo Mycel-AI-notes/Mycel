@@ -1040,7 +1040,25 @@ body {
   accent-color: var(--color-accent);
 }
 .db-views-popover {
-  min-width: 200px;
+  min-width: 220px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.db-popover-section-label {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+.db-popover-action {
+  color: var(--color-text-secondary);
+}
+.db-popover-action:hover {
+  color: var(--color-text-primary);
+}
+.db-popover-action svg {
+  color: var(--color-text-muted);
 }
 
 .db-table-wrap {
@@ -1184,14 +1202,16 @@ body {
   min-height: 28px;
 }
 
+/* Light: flat pale pastel bg + saturated dark text — Notion / Linear feel.
+   Dark: translucent tint over the surface so tags don't fight the panel. */
 .db-tag {
   display: inline-block;
   padding: 1px 8px;
   margin: 1px 2px;
   border-radius: 10px;
-  background: hsl(var(--db-tag-hue, 80) 75% 76%);
-  color: hsl(var(--db-tag-hue, 80) 65% 18%);
-  border: 1px solid hsl(var(--db-tag-hue, 80) 60% 64%);
+  background: hsl(var(--db-tag-hue, 80) 85% 92%);
+  color: hsl(var(--db-tag-hue, 80) 70% 30%);
+  border: 1px solid hsl(var(--db-tag-hue, 80) 70% 80%);
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;

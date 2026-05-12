@@ -78,6 +78,10 @@ class DatabaseWidget extends WidgetType {
     public readonly source: string,
     public readonly viewId: string | undefined,
     public readonly notePath: string,
+    /// Number of newlines in the replaced fence range. CM6 uses this to map
+    /// click coordinates to document positions; reporting 0 for a multi-line
+    /// fence makes clicks below the widget land one or more lines off.
+    public readonly replacedLineBreaks: number,
   ) {
     super();
   }
@@ -86,7 +90,8 @@ class DatabaseWidget extends WidgetType {
     return (
       this.source === other.source &&
       this.viewId === other.viewId &&
-      this.notePath === other.notePath
+      this.notePath === other.notePath &&
+      this.replacedLineBreaks === other.replacedLineBreaks
     );
   }
 
@@ -98,7 +103,7 @@ class DatabaseWidget extends WidgetType {
   }
 
   get lineBreaks() {
-    return 0;
+    return this.replacedLineBreaks;
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -185,11 +190,14 @@ function buildDecorations(state: EditorState, notePath: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const blocks = findDbBlocks(state);
   for (const b of blocks) {
+    const startLine = state.doc.lineAt(b.fenceFrom).number;
+    const endLine = state.doc.lineAt(b.fenceTo).number;
+    const lineBreaks = endLine - startLine;
     builder.add(
       b.fenceFrom,
       b.fenceTo,
       Decoration.replace({
-        widget: new DatabaseWidget(b.source, b.view, notePath),
+        widget: new DatabaseWidget(b.source, b.view, notePath, lineBreaks),
         block: true,
       }),
     );

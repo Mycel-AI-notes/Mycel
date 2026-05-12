@@ -388,6 +388,7 @@ function ViewsPopover({
         </div>
       ) : (
         <>
+          <div className="db-popover-section-label">Views</div>
           <div className="db-popover-list">
             {entries.map(([id, v]) => (
               <button
@@ -407,27 +408,33 @@ function ViewsPopover({
               </button>
             ))}
           </div>
-          {onRenameView && (
-            <button
-              className="db-popover-item"
-              onClick={() => {
-                setDraft(view.label);
-                setRenaming(true);
-              }}
-            >
-              <Pencil size={12} /> Rename current view
-            </button>
-          )}
-          {onCreateView && (
-            <button
-              className="db-popover-item"
-              onClick={async () => {
-                await onCreateView('New view');
-                onClose();
-              }}
-            >
-              <Plus size={12} /> New view (clone current)
-            </button>
+          {(onRenameView || onCreateView) && (
+            <>
+              <div className="db-popover-divider" />
+              <div className="db-popover-section-label">Actions</div>
+              {onRenameView && (
+                <button
+                  className="db-popover-item db-popover-action"
+                  onClick={() => {
+                    setDraft(view.label);
+                    setRenaming(true);
+                  }}
+                >
+                  <Pencil size={12} /> Rename current view
+                </button>
+              )}
+              {onCreateView && (
+                <button
+                  className="db-popover-item db-popover-action"
+                  onClick={async () => {
+                    await onCreateView('New view');
+                    onClose();
+                  }}
+                >
+                  <Plus size={12} /> New view (clone current)
+                </button>
+              )}
+            </>
           )}
         </>
       )}
