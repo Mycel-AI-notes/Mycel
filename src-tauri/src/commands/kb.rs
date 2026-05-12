@@ -292,6 +292,9 @@ pub async fn kb_init(
     let abs_db = root.join(&db_rel);
     let abs_index = root.join(&index_rel);
 
+    let lock = state.db_lock(&abs_db);
+    let _guard = lock.lock().await;
+
     // 1. db.json — reuse existing if present, otherwise create with default
     //    schema and scanned rows. Per spec edge case: existing .db.json
     //    wins, we don't overwrite it.
@@ -363,6 +366,9 @@ pub async fn kb_deinit(
     let index_rel = index_path_for_dir(&dir_rel);
     let abs_db = root.join(&db_rel);
     let abs_index = root.join(&index_rel);
+
+    let lock = state.db_lock(&abs_db);
+    let _guard = lock.lock().await;
 
     if abs_db.exists() {
         std::fs::remove_file(&abs_db)
@@ -560,6 +566,13 @@ pub async fn kb_refresh(
     state: State<'_, AppState>,
 ) -> Result<KbRefreshResult, String> {
     let root = vault_root(&state).await?;
+    // Hold the per-db lock so a concurrent db_update_cell / db_create_page
+    // can't read the same db.json snapshot we're about to overwrite.
+    let dir_rel = dir_path.trim_matches('/').replace('\\', "/");
+    let db_rel = db_path_for_dir(&dir_rel);
+    let abs_db = root.join(&db_rel);
+    let lock = state.db_lock(&abs_db);
+    let _guard = lock.lock().await;
     let result = refresh_kb_db(&root, &dir_path)?;
     emit_changed(&app, &result.db_path);
     Ok(result)

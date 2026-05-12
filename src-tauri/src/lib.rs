@@ -1,7 +1,9 @@
 mod commands;
 mod core;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
 
 pub struct AppState {
@@ -10,6 +12,26 @@ pub struct AppState {
     /// In-memory holder of the unwrapped X25519 identity for the open vault.
     /// Cleared on `crypto_lock` and when the vault closes.
     pub crypto: Arc<core::crypto::Session>,
+    /// Per-file mutexes for database operations. Every db_* command that
+    /// does read-modify-write on a .db.json acquires the lock for its path
+    /// before reading; without this, two near-simultaneous commands (e.g.
+    /// `db_update_cell` setting a tag and `db_create_page` setting `page`)
+    /// can each read the same snapshot and the second writer clobbers the
+    /// first's change — that's how the user lost their multi-select label
+    /// the moment they created the page.
+    pub db_locks: Arc<StdMutex<HashMap<PathBuf, Arc<Mutex<()>>>>>,
+}
+
+impl AppState {
+    /// Returns the per-path mutex for a database file, creating it on first
+    /// use. Use `let _guard = lock.lock().await;` around the read-modify-write
+    /// sequence.
+    pub fn db_lock(&self, path: &std::path::Path) -> Arc<Mutex<()>> {
+        let mut map = self.db_locks.lock().expect("db_locks poisoned");
+        map.entry(path.to_path_buf())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
 }
 
 impl Default for AppState {
@@ -18,6 +40,7 @@ impl Default for AppState {
             vault: Arc::new(Mutex::new(None)),
             watcher: Arc::new(Mutex::new(None)),
             crypto: Arc::new(core::crypto::Session::default()),
+            db_locks: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
 }

@@ -137,6 +137,8 @@ fn write_db(abs: &PathBuf, db: &Database) -> Result<(), String> {
 pub async fn db_read(path: String, state: State<'_, AppState>) -> Result<Database, String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     read_db(&abs)
 }
 
@@ -149,6 +151,8 @@ pub async fn db_write(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     write_db(&abs, &database)?;
     emit_changed(&app, &path);
     Ok(())
@@ -162,6 +166,8 @@ pub async fn db_create(
 ) -> Result<Database, String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     if abs.exists() {
         return read_db(&abs);
     }
@@ -203,6 +209,8 @@ pub async fn db_update_cell(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
 
     let row = db
@@ -237,6 +245,8 @@ pub async fn db_add_row(
 ) -> Result<String, String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
 
     let mut new_row = row.unwrap_or_else(|| Row {
@@ -263,6 +273,8 @@ pub async fn db_delete_row(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
     db.rows.retain(|r| r.id != row_id);
     write_db(&abs, &db)?;
@@ -280,6 +292,8 @@ pub async fn db_add_column(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
     if db.schema.contains_key(&column_id) {
         return Err(format!("Column '{column_id}' already exists"));
@@ -305,6 +319,8 @@ pub async fn db_delete_column(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
     db.schema.shift_remove(&column_id);
     for row in db.rows.iter_mut() {
@@ -334,6 +350,8 @@ pub async fn db_update_column(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
     if !db.schema.contains_key(&column_id) {
         return Err(format!("Column '{column_id}' not found"));
@@ -354,6 +372,8 @@ pub async fn db_update_view(
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let mut db = read_db(&abs)?;
     db.views.insert(view_id, view_def);
     write_db(&abs, &db)?;
@@ -368,6 +388,8 @@ pub async fn db_update_view(
 pub async fn db_pages_dir(path: String, state: State<'_, AppState>) -> Result<String, String> {
     let root = vault_root(&state).await?;
     let abs = root.join(&path);
+    let lock = state.db_lock(&abs);
+    let _guard = lock.lock().await;
     let db = read_db(&abs)?;
     Ok(resolve_pages_dir(&path, db.pages_dir.as_deref()))
 }
@@ -405,6 +427,11 @@ pub async fn db_create_page(
     let root = vault_root(&state).await?;
     let abs_db = root.join(&db_path);
     let abs_note = root.join(&note_path);
+    // Hold the db lock across the .md write AND the db.json update so a
+    // concurrent db_update_cell (e.g. the multi-select label the user just
+    // committed) cannot interleave and lose its write.
+    let lock = state.db_lock(&abs_db);
+    let _guard = lock.lock().await;
 
     if abs_note.exists() {
         return Err(format!("File already exists: {note_path}"));
