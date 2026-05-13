@@ -45,7 +45,12 @@ export function SettingsDialog() {
       onClick={close}
     >
       <div
-        className="w-full max-w-2xl mx-4 bg-surface-1 border border-border rounded-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+        // Fixed size, not content-driven. Switching tabs (Features → AI →
+        // back) used to make the dialog jump because each tab's height
+        // differed; pinning width and height keeps the chrome anchored and
+        // lets the right pane scroll inside. `max-*` clamps cover tiny
+        // viewports so the dialog still fits on small windows.
+        className="w-[42rem] max-w-[calc(100vw-2rem)] h-[34rem] max-h-[calc(100vh-2rem)] bg-surface-1 border border-border rounded-lg shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-0">
