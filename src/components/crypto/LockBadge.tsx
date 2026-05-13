@@ -36,28 +36,36 @@ export function LockBadge() {
 
   if (!vaultRoot) return null;
 
+  // Colour scheme is security-state, not friendliness:
+  //   * Red    — encryption not configured / unusable on this device.
+  //              Notes are stored in cleartext, this needs attention.
+  //   * Yellow — vault is unlocked. Secrets are loaded into memory and
+  //              tabs are decrypted; not a danger, but not "at rest"
+  //              either, so a caution colour.
+  //   * Green  — vault is locked. Everything is encrypted on disk and
+  //              the key isn't in memory. Safest state.
   let icon = <Shield size={14} />;
   let label = 'Encryption: off';
-  let tone = 'text-text-muted hover:text-text-primary';
+  let tone = 'text-error hover:text-error';
   if (status?.configured) {
     if (!status.local_identity_present) {
-      // Vault was set up on another device; this one hasn't joined yet.
+      // Vault was set up on another device; this one hasn't joined yet,
+      // so from here it's effectively "no encryption available".
       icon = <Shield size={14} />;
       label = 'This device has not joined the vault — click to set up';
-      tone = 'text-accent hover:text-accent';
+      tone = 'text-error hover:text-error';
     } else if (status.unlocked) {
       icon = <LockOpen size={14} />;
       if (status.has_passphrase) {
         label = 'Encryption: unlocked';
-        tone = 'text-accent hover:text-accent';
       } else {
         label = 'Encryption: unlocked (no passphrase — Lock is decorative)';
-        tone = 'text-warning hover:text-warning';
       }
+      tone = 'text-warning hover:text-warning';
     } else {
       icon = <Lock size={14} />;
       label = 'Encryption: locked — click to unlock';
-      tone = 'text-warning hover:text-warning';
+      tone = 'text-accent hover:text-accent';
     }
   }
 
