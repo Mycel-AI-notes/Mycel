@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 type Token =
   | { kind: 'text'; value: string }
@@ -135,6 +136,10 @@ function renderToken(t: Token, key: number): ReactNode {
           target="_blank"
           rel="noopener noreferrer"
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault();
+            void openUrl(t.href).catch((err) => console.error('Open URL failed:', err));
+          }}
         >
           {renderInlineMarkdown(t.label)}
         </a>

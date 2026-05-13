@@ -10,7 +10,13 @@ import {
   EditorView,
   WidgetType,
 } from '@codemirror/view';
-import { EditorState, EditorSelection, StateField } from '@codemirror/state';
+import {
+  EditorState,
+  EditorSelection,
+  RangeSet,
+  RangeSetBuilder,
+  StateField,
+} from '@codemirror/state';
 import { parseMathRanges, type MathRange } from '@/lib/math';
 import { renderKatex } from '../math/katex-render';
 
@@ -98,6 +104,37 @@ export const mathDecorationField = StateField.define<DecorationSet>({
     return value;
   },
   provide: (f) => EditorView.decorations.from(f),
+});
+
+// Mark rendered math widgets as atomic so the caret skips over them instead
+// of stopping at every internal position. Without this, ArrowLeft/Right
+// march through each character of the source even though the rendered
+// widget visually occupies one slot, which lands the caret in spots that
+// don't match what the user sees. We only mark *widget* ranges atomic —
+// when the selection is touching the math, the source is shown via mark
+// decorations and the caret must stay free.
+function buildMathAtomicRanges(state: EditorState): RangeSet<Decoration> {
+  const ranges = parseMathRanges(state);
+  const sel = state.selection;
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const r of ranges) {
+    if (selectionTouches(sel, r)) continue;
+    builder.add(r.from, r.to, Decoration.replace({}));
+  }
+  return builder.finish();
+}
+
+export const mathAtomicRangesField = StateField.define<RangeSet<Decoration>>({
+  create(state) {
+    return buildMathAtomicRanges(state);
+  },
+  update(value, tr) {
+    if (tr.docChanged || tr.selection) {
+      return buildMathAtomicRanges(tr.state);
+    }
+    return value;
+  },
+  provide: (f) => EditorView.atomicRanges.of((view) => view.state.field(f) ?? Decoration.none),
 });
 
 export const mathDecorationTheme = EditorView.baseTheme({

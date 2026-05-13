@@ -20,7 +20,12 @@ import { useVaultStore } from '@/stores/vault';
 import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
-import { mathDecorationField, mathDecorationTheme } from './decorations/MathDecoration';
+import { externalLinkClickHandler } from './ExternalLinkNavigation';
+import {
+  mathDecorationField,
+  mathAtomicRangesField,
+  mathDecorationTheme,
+} from './decorations/MathDecoration';
 import { imageDecorationField, imageDecorationTheme } from './decorations/ImageDecoration';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
@@ -182,7 +187,9 @@ export function MarkdownEditor({ path }: Props) {
         }),
         markdownPreviewPlugin,
         markdownPreviewTheme,
+        externalLinkClickHandler,
         mathDecorationField,
+        mathAtomicRangesField,
         mathDecorationTheme,
         imageDecorationField,
         imageDecorationTheme,

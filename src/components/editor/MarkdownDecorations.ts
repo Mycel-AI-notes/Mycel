@@ -30,6 +30,9 @@ class LinkWidget extends WidgetType {
     a.className = 'cm-md-link';
     a.textContent = this.label;
     a.href = this.href;
+    // Stash the URL in a dataset attribute so the editor-level click handler
+    // can read it without poking at href (which Tauri's webview rewrites).
+    a.dataset.url = this.href;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     return a;
@@ -215,10 +218,12 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (!inCode(mf, mt)) wrapInline(mf, mt, 2, 'cm-md-strike');
       }
 
+      const linkRanges: [number, number][] = [];
       for (const m of text.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)\)/g)) {
         const mf = lf + m.index!;
         const mt = mf + m[0].length;
         if (inCode(mf, mt)) continue;
+        linkRanges.push([mf, mt]);
         if (cursorInSpan(sel, mf, mt)) {
           mark(mf, mt, 'cm-md-link-mark');
         } else {
@@ -226,6 +231,33 @@ function buildDecorations(view: EditorView): DecorationSet {
             from: mf,
             to: mt,
             deco: Decoration.replace({ widget: new LinkWidget(m[1], m[2]) }),
+          });
+        }
+      }
+
+      // Bare URLs (autolink). Skip anything sitting inside a markdown-link
+      // bracket pair we already rendered above, anything in code, and the
+      // trailing punctuation users typically put after a URL ("see https://
+      // example.com.") so it doesn't end up inside the link.
+      const inLink = (mf: number, mt: number) =>
+        linkRanges.some(([cf, ct]) => mf < ct && mt > cf);
+      for (const m of text.matchAll(/(?<![[\w(])https?:\/\/[^\s<>")\]]+/g)) {
+        let urlText = m[0];
+        // Strip a single trailing punctuation char so sentences read right.
+        while (urlText.length > 0 && /[.,;:!?)\]]/.test(urlText[urlText.length - 1])) {
+          urlText = urlText.slice(0, -1);
+        }
+        if (!urlText) continue;
+        const mf = lf + m.index!;
+        const mt = mf + urlText.length;
+        if (inCode(mf, mt) || inLink(mf, mt)) continue;
+        if (cursorInSpan(sel, mf, mt)) {
+          mark(mf, mt, 'cm-md-link-mark');
+        } else {
+          spanDecos.push({
+            from: mf,
+            to: mt,
+            deco: Decoration.replace({ widget: new LinkWidget(urlText, urlText) }),
           });
         }
       }

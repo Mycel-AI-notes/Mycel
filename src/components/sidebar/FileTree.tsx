@@ -42,6 +42,20 @@ function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
 }
 
+// Flatten visible (expanded) entries in display order so keyboard nav can
+// move "up/down one row" without re-walking the tree at every keypress.
+function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
+  const out: FileEntry[] = [];
+  const walk = (entries: FileEntry[]) => {
+    for (const e of entries) {
+      out.push(e);
+      if (e.is_dir && expanded.has(e.path) && e.children) walk(e.children);
+    }
+  };
+  walk(tree);
+  return out;
+}
+
 interface NodeProps {
   entry: FileEntry;
   depth: number;
@@ -55,6 +69,13 @@ interface NodeProps {
   cancelCreate: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   openKbMenu: (x: number, y: number, entry: FileEntry) => void;
+  focusedPath: string | null;
+  tabbablePath: string | null;
+  autoFocusPath: string | null;
+  setFocusedPath: (p: string | null) => void;
+  renameRequest: string | null;
+  clearRenameRequest: () => void;
+  onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
 }
 
 function FileTreeNode({
@@ -70,12 +91,22 @@ function FileTreeNode({
   cancelCreate,
   inputRef,
   openKbMenu,
+  focusedPath,
+  tabbablePath,
+  autoFocusPath,
+  setFocusedPath,
+  renameRequest,
+  clearRenameRequest,
+  onRowKeyDown,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
+  const rowRef = useRef<HTMLDivElement>(null);
+  const isFocused = focusedPath === entry.path;
+  const isTabbable = tabbablePath === entry.path;
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
@@ -98,10 +129,11 @@ function FileTreeNode({
 
   const handleClick = useCallback(() => {
     if (entry.is_dir) {
-      // KB-promoted folders open their index.md on plain click; the chevron
-      // still toggles the tree independently (see chevron handler below).
+      // KB-promoted folders open their index.md on plain click AND toggle
+      // the tree so the user sees the folder's contents alongside the note.
       if (isKbDir) {
         openNote(`${entry.path}/index.md`, { preview: true });
+        toggleExpand();
       } else {
         toggleExpand();
       }
@@ -157,13 +189,43 @@ function FileTreeNode({
   );
 
   const startRename = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
       setRenameValue(entry.is_dir ? entry.name : stripNoteExt(entry.name));
       setRenaming(true);
     },
     [entry],
   );
+
+  // Space-key rename requests come from the parent tree's keyboard handler.
+  // We listen for our own path appearing in `renameRequest`, start renaming,
+  // then clear the request so it doesn't refire on re-renders.
+  useEffect(() => {
+    if (renameRequest !== entry.path) return;
+    if (renaming) {
+      clearRenameRequest();
+      return;
+    }
+    if (isLocked) {
+      clearRenameRequest();
+      return;
+    }
+    setRenameValue(entry.is_dir ? entry.name : stripNoteExt(entry.name));
+    setRenaming(true);
+    clearRenameRequest();
+  }, [renameRequest, entry.path, entry.is_dir, entry.name, isLocked, renaming, clearRenameRequest]);
+
+  // Only move browser focus when arrow-key navigation explicitly asks us to
+  // (via autoFocusPath). Clicking a row sets focusedPath but should *not*
+  // steal focus from the editor.
+  useEffect(() => {
+    if (autoFocusPath === entry.path && !renaming && rowRef.current) {
+      const active = document.activeElement;
+      if (active !== rowRef.current) {
+        rowRef.current.focus({ preventScroll: false });
+      }
+    }
+  }, [autoFocusPath, entry.path, renaming]);
 
   const commitRename = useCallback(() => {
     const trimmed = renameValue.trim();
@@ -230,22 +292,32 @@ function FileTreeNode({
   return (
     <div>
       <div
+        ref={rowRef}
         draggable={!renaming && !isLocked}
+        tabIndex={isTabbable ? 0 : -1}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={clsx(
-          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors',
-          'hover:bg-surface-hover',
+          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+          'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
+          isFocused && !isActive && 'bg-surface-hover',
           isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={handleClick}
+        onClick={() => {
+          setFocusedPath(entry.path);
+          handleClick();
+        }}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleContextMenu}
+        onKeyDown={(e) => {
+          if (renaming) return;
+          onRowKeyDown(e, entry);
+        }}
       >
         {entry.is_dir ? (
           <>
@@ -452,6 +524,13 @@ function FileTreeNode({
               cancelCreate={cancelCreate}
               inputRef={inputRef}
               openKbMenu={openKbMenu}
+              focusedPath={focusedPath}
+              tabbablePath={tabbablePath}
+              autoFocusPath={autoFocusPath}
+              setFocusedPath={setFocusedPath}
+              renameRequest={renameRequest}
+              clearRenameRequest={clearRenameRequest}
+              onRowKeyDown={onRowKeyDown}
             />
           ))}
         </div>
@@ -474,8 +553,109 @@ export function FileTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
+  const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
+  const [renameRequest, setRenameRequest] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
+
+  const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
+
+  // The tree exposes exactly one Tab stop using the roving tabindex pattern.
+  // If the user has explicitly focused a row, that's the tab stop; otherwise
+  // fall back to the first visible row so Tab into the tree always lands
+  // somewhere.
+  const tabbablePath = (() => {
+    const flat = flattenVisible(fileTree, expanded);
+    if (focusedPath && flat.some((e) => e.path === focusedPath)) return focusedPath;
+    return flat[0]?.path ?? null;
+  })();
+
+  const onRowKeyDown = useCallback(
+    (e: React.KeyboardEvent, entry: FileEntry) => {
+      const flat = flattenVisible(fileTree, expanded);
+      const idx = flat.findIndex((x) => x.path === entry.path);
+      if (idx < 0) return;
+
+      const moveFocus = (path: string) => {
+        setFocusedPath(path);
+        setAutoFocusPath(path);
+      };
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const next = flat[idx + 1];
+          if (next) moveFocus(next.path);
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prev = flat[idx - 1];
+          if (prev) moveFocus(prev.path);
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          if (entry.is_dir) {
+            if (!expanded.has(entry.path)) {
+              setExpanded((s) => new Set(s).add(entry.path));
+            } else {
+              const child = entry.children?.[0];
+              if (child) moveFocus(child.path);
+            }
+          }
+          break;
+        }
+        case 'ArrowLeft': {
+          e.preventDefault();
+          if (entry.is_dir && expanded.has(entry.path)) {
+            setExpanded((s) => {
+              const n = new Set(s);
+              n.delete(entry.path);
+              return n;
+            });
+          } else {
+            const parent = parentOf(entry.path);
+            if (parent) moveFocus(parent);
+          }
+          break;
+        }
+        case 'Enter': {
+          e.preventDefault();
+          if (entry.is_dir) {
+            if (entry.is_kb_dir) {
+              void useVaultStore.getState().openNote(`${entry.path}/index.md`, {
+                preview: true,
+              });
+              setExpanded((s) => new Set(s).add(entry.path));
+            } else {
+              setExpanded((s) => {
+                const n = new Set(s);
+                if (n.has(entry.path)) n.delete(entry.path);
+                else n.add(entry.path);
+                return n;
+              });
+            }
+          } else if (isAttachmentPath(entry.path)) {
+            void useVaultStore.getState().openImageTab(entry.path, { preview: true });
+          } else {
+            void useVaultStore.getState().openNote(entry.path, { preview: true });
+          }
+          break;
+        }
+        case ' ': {
+          // Don't hijack space on locked roots (KB/quick) since they can't be
+          // renamed anyway.
+          if (entry.is_knowledge_base || entry.is_quick_notes) return;
+          e.preventDefault();
+          setRenameRequest(entry.path);
+          break;
+        }
+      }
+    },
+    [fileTree, expanded],
+  );
 
   const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
     setKbMenu({ x, y, entry });
@@ -645,6 +825,13 @@ export function FileTree() {
             cancelCreate={cancelCreate}
             inputRef={inputRef}
             openKbMenu={openKbMenu}
+            focusedPath={focusedPath}
+            tabbablePath={tabbablePath}
+            autoFocusPath={autoFocusPath}
+            setFocusedPath={setFocusedPath}
+            renameRequest={renameRequest}
+            clearRenameRequest={clearRenameRequest}
+            onRowKeyDown={onRowKeyDown}
           />
         ))}
         {fileTree.length === 0 && !creating && (
