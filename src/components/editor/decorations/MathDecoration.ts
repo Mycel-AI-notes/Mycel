@@ -29,6 +29,9 @@ class MathWidget extends WidgetType {
     /// beneath a block math widget land one or more lines off — exactly the
     /// "клик в одно место, курсор падает ниже" bug the DB widget had.
     public readonly replacedLineBreaks: number,
+    /// Position to drop the caret on a double-click "edit this math"
+    /// gesture — just after the opening `$` / `$$`.
+    public readonly innerPos: number,
   ) {
     super();
   }
@@ -37,7 +40,8 @@ class MathWidget extends WidgetType {
     return (
       this.body === other.body &&
       this.displayMode === other.displayMode &&
-      this.replacedLineBreaks === other.replacedLineBreaks
+      this.replacedLineBreaks === other.replacedLineBreaks &&
+      this.innerPos === other.innerPos
     );
   }
 
@@ -52,11 +56,12 @@ class MathWidget extends WidgetType {
     return this.replacedLineBreaks;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const { html, error } = renderKatex(this.body, this.displayMode);
     const el = document.createElement(this.displayMode ? 'div' : 'span');
     el.className = this.displayMode ? 'cm-math-block' : 'cm-math-inline';
     el.setAttribute('aria-label', this.displayMode ? 'math block' : 'inline math');
+    el.contentEditable = 'false';
     if (error) {
       el.classList.add('cm-math-error');
       el.title = error;
@@ -65,11 +70,40 @@ class MathWidget extends WidgetType {
     } else {
       el.innerHTML = html;
     }
+
+    // Swallow mousedown so CM never places the caret inside the math
+    // range from a stray click. Without this, *any* click on a tall
+    // block formula would land the caret somewhere in the source,
+    // flip the math from widget → raw `$$…$$` text, push every line
+    // below it down by 5–15 rows, and leave the user staring at a
+    // caret that has visually "flown away".
+    //
+    // We deliberately don't preventDefault here — that would block
+    // selection / text-drag through the surrounding lines.
+    const stop = (e: Event) => e.stopPropagation();
+    el.addEventListener('mousedown', stop);
+    el.addEventListener('click', stop);
+
+    // Double-click is the explicit "I want to edit this formula"
+    // gesture: drop the caret just past the opening delimiter so
+    // the StateField re-renders this range as editable source.
+    el.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      view.dispatch({ selection: { anchor: this.innerPos } });
+      view.focus();
+    });
+
+    el.style.cursor = 'text';
+    el.title = 'Double-click to edit';
+
     return el;
   }
 
+  // Tell CM to ignore events on the widget — combined with the DOM
+  // listeners above, single clicks no longer move the caret here.
   ignoreEvent(): boolean {
-    return false;
+    return true;
   }
 }
 
@@ -102,11 +136,17 @@ function buildMathDecorations(state: EditorState): DecorationSet {
       });
       continue;
     }
+    const innerPos = r.from + (r.kind === 'block' ? 2 : 1);
     decos.push({
       from: r.from,
       to: r.to,
       deco: Decoration.replace({
-        widget: new MathWidget(r.body, r.kind === 'block', rangeLineBreaks(state, r)),
+        widget: new MathWidget(
+          r.body,
+          r.kind === 'block',
+          rangeLineBreaks(state, r),
+          innerPos,
+        ),
         block: r.kind === 'block',
       }),
     });
