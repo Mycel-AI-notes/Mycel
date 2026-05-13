@@ -26,6 +26,23 @@ export type SetupStage =
   | 'refresh'
   | null;
 
+/** Stages the lock flow can be in. Lock itself is fast (one in-memory
+ *  zeroize), so we drive these entirely from JS rather than emitting
+ *  events from Rust. A small minimum dwell per stage in `lock()` keeps
+ *  the animation visible — otherwise it would flash by in one frame. */
+export type LockStage = 'wipe' | 'tabs' | 'refresh' | null;
+
+/** Resolve `fn()` no sooner than `min` ms later. Used by the lock flow
+ *  so the UI animation has time to render each stage even when the
+ *  underlying work is sub-millisecond. */
+async function withMinDelay<T>(min: number, fn: () => Promise<T> | T): Promise<T> {
+  const [v] = await Promise.all([
+    Promise.resolve().then(fn),
+    new Promise((r) => setTimeout(r, min)),
+  ]);
+  return v as T;
+}
+
 /** Auto-lock kicks in after this many ms of user inactivity while the
  *  vault is unlocked. 5 minutes is a familiar default (matches macOS
  *  Keychain's idle-lock window). */
@@ -55,6 +72,8 @@ interface CryptoState {
   unlockStage: UnlockStage;
   /** Same idea for setup. Driven by `crypto:setup-stage` events. */
   setupStage: SetupStage;
+  /** Same idea for lock. Driven purely from JS — see `lock()`. */
+  lockStage: LockStage;
   /** Epoch-ms of the last user input. Set by `useAutoLock`. */
   lastActivityAt: number;
   /** Whether the crypto panel (the modal opened by the toolbar shield)
@@ -110,6 +129,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   busy: false,
   unlockStage: null,
   setupStage: null,
+  lockStage: null,
   lastActivityAt: Date.now(),
   panelOpen: false,
 
@@ -206,12 +226,30 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   lock: async () => {
-    await run(set, () => invoke<void>('crypto_lock'));
-    // Drop every plaintext body the JS side cached and close every open
-    // `.md.age` tab. Otherwise the wrap secret is gone from Rust but the
-    // already-decrypted markdown lingers in memory and tabs keep working.
-    useVaultStore.getState().purgeEncryptedFromMemory();
-    await get().refresh();
+    // Walk through the three real lock steps with a minimum dwell on
+    // each so the user sees the animation. The underlying work is fast
+    // (memory zeroize + close cached tabs + status refresh), so without
+    // the dwell each stage would render for <1 frame.
+    set({ busy: true, error: null, lockStage: 'wipe' });
+    try {
+      await withMinDelay(180, () => invoke<void>('crypto_lock'));
+      set({ lockStage: 'tabs' });
+      // Drop every plaintext body the JS side cached and close every
+      // open `.md.age` tab. Otherwise the wrap secret is gone from
+      // Rust but the already-decrypted markdown lingers in memory and
+      // tabs keep working.
+      await withMinDelay(180, () => useVaultStore.getState().purgeEncryptedFromMemory());
+      set({ lockStage: 'refresh' });
+      await withMinDelay(180, () => get().refresh());
+      set({ busy: false, lockStage: null });
+    } catch (e) {
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        lockStage: null,
+      });
+      throw e;
+    }
   },
 
   reset: async () => {

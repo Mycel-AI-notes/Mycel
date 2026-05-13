@@ -6,6 +6,7 @@ import {
   AUTO_LOCK_IDLE_MS,
   type UnlockStage,
   type SetupStage,
+  type LockStage,
 } from '@/stores/crypto';
 import { useVaultStore } from '@/stores/vault';
 import { confirm } from '@tauri-apps/plugin-dialog';
@@ -88,6 +89,7 @@ function CryptoPanel({ onClose }: { onClose: () => void }) {
   const status = useCryptoStore((s) => s.status);
   const error = useCryptoStore((s) => s.error);
   const clearError = useCryptoStore((s) => s.clearError);
+  const lockStage = useCryptoStore((s) => s.lockStage);
 
   useEffect(() => {
     clearError();
@@ -95,7 +97,7 @@ function CryptoPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-start justify-center pt-20"
+      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center"
       onClick={onClose}
     >
       <div
@@ -103,7 +105,14 @@ function CryptoPanel({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <Header onClose={onClose} />
-        {!status?.configured ? (
+        {lockStage != null ? (
+          // The lock flow updates the status mid-flight (unlocked → false
+          // before the final stage finishes), which would otherwise flip
+          // the panel to UnlockView while the animation is still running.
+          // Short-circuit on `lockStage` so the user sees the whole
+          // sequence end-to-end.
+          <LockingProgress />
+        ) : !status?.configured ? (
           <SetupView onDone={onClose} mode="fresh" />
         ) : !status.local_identity_present ? (
           <SetupView onDone={onClose} mode="join" />
@@ -512,6 +521,51 @@ const SETUP_STAGE_LABELS: Record<
     hint: 'Picking up the new encrypted state so the UI knows the vault is set up.',
   },
 };
+
+const LOCK_STAGE_ORDER: Exclude<LockStage, null>[] = ['wipe', 'tabs', 'refresh'];
+
+const LOCK_STAGE_LABELS: Record<
+  Exclude<LockStage, null>,
+  { title: string; hint: string }
+> = {
+  wipe: {
+    title: 'Wiping the X25519 secret from memory',
+    hint: 'Zeroes out the in-memory copy of your private key. Only the encrypted file on disk remains.',
+  },
+  tabs: {
+    title: 'Closing decrypted notes',
+    hint: 'Drops cached plaintext bodies and closes every open .md.age tab so nothing readable lingers.',
+  },
+  refresh: {
+    title: 'Refreshing vault status',
+    hint: 'Updates the UI to reflect the locked state.',
+  },
+};
+
+function LockingProgress() {
+  const stage = useCryptoStore((s) => s.lockStage);
+  const currentIdx = stage == null ? -1 : LOCK_STAGE_ORDER.indexOf(stage);
+  return (
+    <div
+      className="space-y-3 py-2"
+      role="status"
+      aria-live="polite"
+      aria-label="Locking vault"
+    >
+      <div className="flex items-center justify-center gap-2">
+        <Lock size={20} className="text-accent" />
+        <span className="text-sm font-medium text-text-primary">
+          Locking your vault…
+        </span>
+      </div>
+      <StageList
+        stages={LOCK_STAGE_ORDER}
+        currentIdx={currentIdx}
+        labels={LOCK_STAGE_LABELS}
+      />
+    </div>
+  );
+}
 
 function SetupProgress({
   hasPassphrase,
