@@ -103,15 +103,28 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   unlock: async (passphrase) => {
-    await run(set, () => invoke<void>('crypto_unlock', { args: { passphrase } }));
-    await get().refresh();
-    // If somebody was waiting for an unlock (a click on a locked
-    // `.md.age` note, for instance), resolve their promise and close
-    // the panel so they return straight to the editor.
-    if (pendingUnlock) {
-      pendingUnlock.resolve();
-      pendingUnlock = null;
-      set({ panelOpen: false });
+    // Inlined (not using `run`) so `busy` stays `true` across both the
+    // unlock invoke AND the follow-up status refresh, and the final
+    // `busy: false` is batched with `panelOpen: false`. Otherwise the
+    // button flashes back to its idle "Unlock" label between the two
+    // awaits, which looks like the unlock failed.
+    set({ busy: true, error: null });
+    try {
+      await invoke<void>('crypto_unlock', { args: { passphrase } });
+      await get().refresh();
+      // If somebody was waiting for an unlock (a click on a locked
+      // `.md.age` note, for instance), resolve their promise.
+      if (pendingUnlock) {
+        pendingUnlock.resolve();
+        pendingUnlock = null;
+      }
+      // Close panel and clear busy in a single update so the unlock
+      // dialog vanishes without a flash of ManageView or a re-armed
+      // Unlock button in between.
+      set({ panelOpen: false, busy: false });
+    } catch (e) {
+      set({ error: typeof e === 'string' ? e : (e as Error).message, busy: false });
+      throw e;
     }
   },
 
