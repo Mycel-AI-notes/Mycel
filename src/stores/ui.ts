@@ -34,7 +34,7 @@ interface UIState {
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   rightPanelCollapsed: boolean;
-  rightPanelTab: 'backlinks' | 'outline' | 'tags';
+  rightPanelTab: 'backlinks' | 'outline' | 'tags' | 'insights';
   features: FeatureFlags;
   settingsOpen: boolean;
 

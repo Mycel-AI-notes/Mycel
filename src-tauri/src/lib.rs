@@ -158,6 +158,13 @@ pub fn run() {
             commands::ai::settings::ai_set_key,
             commands::ai::settings::ai_clear_key,
             commands::ai::settings::ai_test_key,
+            commands::ai::insights::insights_list,
+            commands::ai::insights::insights_run_now,
+            commands::ai::insights::insights_dismiss,
+            commands::ai::insights::insights_act,
+            commands::ai::insights::insights_settings_get,
+            commands::ai::insights::insights_settings_set,
+            commands::ai::insights::insights_telemetry_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

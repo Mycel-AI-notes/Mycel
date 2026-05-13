@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
 import type { FeatureFlags } from '@/stores/ui';
 import { AISettings } from '@/components/settings/AISettings';
+import { InsightsSettings } from '@/components/settings/InsightsSettings';
 
 interface FeatureRow {
   key: keyof FeatureFlags;
@@ -72,6 +73,11 @@ export function SettingsDialog() {
             AI
           </h3>
           <AISettings />
+
+          <h3 className="text-xs uppercase tracking-wider text-text-muted mt-6 mb-3">
+            Insights
+          </h3>
+          <InsightsSettings />
         </div>
 
         <footer className="px-5 py-2 border-t border-border bg-surface-0 text-[11px] text-text-muted">
