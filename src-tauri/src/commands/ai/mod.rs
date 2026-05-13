@@ -13,6 +13,7 @@ use crate::core::ai::{config, store::AiStore, AiState};
 use crate::AppState;
 
 pub mod index;
+pub mod search;
 pub mod settings;
 
 pub(crate) fn err(e: impl std::fmt::Display) -> String {

@@ -161,6 +161,7 @@ pub fn run() {
             commands::ai::index::ai_index_status,
             commands::ai::index::ai_index_bulk,
             commands::ai::index::ai_index_note,
+            commands::ai::search::ai_semantic_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
