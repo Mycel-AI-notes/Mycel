@@ -212,7 +212,14 @@ export const mathDecorationTheme = EditorView.baseTheme({
   '.cm-math-block': {
     display: 'block',
     textAlign: 'center',
-    margin: '12px 0',
+    // Use padding (not margin) for the visual gap above / below the
+    // formula. Margin would land outside the widget's hit-area, so
+    // clicks in those 12px would fall through to CodeMirror and get
+    // mapped to a position inside the math range — flipping the
+    // widget to raw source and making the caret appear to "fly
+    // away" exactly as reported. The DB widget had the same bug.
+    margin: '0',
+    padding: '12px 0',
     color: 'var(--color-text-primary)',
   },
   '.cm-math-error': {
