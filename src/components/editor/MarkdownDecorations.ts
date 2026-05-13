@@ -239,16 +239,28 @@ function buildDecorations(view: EditorView): DecorationSet {
       // bracket pair we already rendered above, anything in code, and the
       // trailing punctuation users typically put after a URL ("see https://
       // example.com.") so it doesn't end up inside the link.
+      //
+      // We deliberately avoid a regex lookbehind here — WebKit shipped
+      // ECMAScript lookbehind only in Safari 16.4 (2023), and a regex
+      // *parse* error from older WKWebView kills the whole plugin, which
+      // is what was wiping out heading/markdown styling on big notes.
+      // Instead we match unconditionally and reject matches whose
+      // preceding character would have been excluded by the lookbehind.
       const inLink = (mf: number, mt: number) =>
         linkRanges.some(([cf, ct]) => mf < ct && mt > cf);
-      for (const m of text.matchAll(/(?<![[\w(])https?:\/\/[^\s<>")\]]+/g)) {
+      const URL_RE = /https?:\/\/[^\s<>")\]]+/g;
+      for (const m of text.matchAll(URL_RE)) {
+        const matchIdx = m.index!;
+        const prev = matchIdx > 0 ? text[matchIdx - 1] : '';
+        // `[`, `(`, word char before — already part of a markdown link,
+        // image, or wikilink syntax, so let the dedicated regex handle it.
+        if (prev === '[' || prev === '(' || /\w/.test(prev)) continue;
         let urlText = m[0];
-        // Strip a single trailing punctuation char so sentences read right.
         while (urlText.length > 0 && /[.,;:!?)\]]/.test(urlText[urlText.length - 1])) {
           urlText = urlText.slice(0, -1);
         }
         if (!urlText) continue;
-        const mf = lf + m.index!;
+        const mf = lf + matchIdx;
         const mt = mf + urlText.length;
         if (inCode(mf, mt) || inLink(mf, mt)) continue;
         if (cursorInSpan(sel, mf, mt)) {
@@ -316,15 +328,27 @@ function buildDecorations(view: EditorView): DecorationSet {
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
+// Wrap buildDecorations so a single regex / range hiccup can never wipe out
+// every other decoration on the page (headings, bold, etc.). If something
+// throws we keep the previous decoration set and log once.
+function safeBuild(view: EditorView, prev: DecorationSet): DecorationSet {
+  try {
+    return buildDecorations(view);
+  } catch (err) {
+    console.error('markdownPreviewPlugin: buildDecorations failed', err);
+    return prev;
+  }
+}
+
 export const markdownPreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     constructor(view: EditorView) {
-      this.decorations = buildDecorations(view);
+      this.decorations = safeBuild(view, Decoration.none);
     }
     update(update: ViewUpdate) {
       if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        this.decorations = buildDecorations(update.view);
+        this.decorations = safeBuild(update.view, this.decorations);
       }
     }
   },
