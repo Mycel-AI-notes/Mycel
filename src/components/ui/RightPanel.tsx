@@ -10,11 +10,12 @@ import {
   FileText,
   Folder,
   Link as LinkIcon,
+  Link2,
   Sparkles,
 } from 'lucide-react';
 import { DisconnectedSpore } from '@/components/brand/Spore';
 import { TagSearch } from '@/components/search/TagSearch';
-import { scrollEditorToLine } from '@/lib/editor-registry';
+import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
 import { displayName, isEncryptedPath } from '@/lib/note-name';
 
@@ -279,10 +280,13 @@ export function RightPanel() {
               </section>
             )}
 
-            {relatedEligible && related.length > 0 && (
+            {relatedEligible && related.length > 0 && activeTabPath && (
               <RelatedSection
                 hits={related}
                 onOpen={(path) => openNote(path)}
+                onInsertLink={(path) => {
+                  insertAtCursor(activeTabPath, `[[${displayName(path)}]]`);
+                }}
               />
             )}
           </div>
@@ -325,9 +329,11 @@ export function RightPanel() {
 function RelatedSection({
   hits,
   onOpen,
+  onInsertLink,
 }: {
   hits: RelatedHit[];
   onOpen: (path: string) => void;
+  onInsertLink: (path: string) => void;
 }) {
   const min = hits.reduce((a, b) => Math.min(a, b.distance), hits[0].distance);
   const max = hits.reduce((a, b) => Math.max(a, b.distance), hits[0].distance);
@@ -349,17 +355,35 @@ function RelatedSection({
       </h4>
       <div className="space-y-1.5">
         {hits.map((h) => (
-          <button
+          // A nested <button> inside the title <button> would be invalid
+          // HTML, so each row is a <div> with two separate buttons
+          // inside: title (opens the note) and link-insert (drops a
+          // wikilink into the active editor).
+          <div
             key={h.note_path}
-            onClick={() => onOpen(h.note_path)}
-            className="w-full text-left group"
+            className="group"
             title={h.note_path}
           >
-            <div className="flex items-center gap-1.5 text-text-secondary group-hover:text-text-primary">
-              <FileText size={11} className="shrink-0 text-text-muted" />
-              <span className="text-xs font-medium truncate flex-1">
-                {displayName(h.note_path)}
-              </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpen(h.note_path)}
+                className="flex-1 min-w-0 flex items-center gap-1.5 text-left text-text-secondary group-hover:text-text-primary"
+              >
+                <FileText size={11} className="shrink-0 text-text-muted" />
+                <span className="text-xs font-medium truncate">
+                  {displayName(h.note_path)}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onInsertLink(h.note_path)}
+                className="shrink-0 p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover opacity-0 group-hover:opacity-100 focus:opacity-100"
+                title="Insert wikilink at cursor"
+                aria-label="Insert wikilink at cursor"
+              >
+                <Link2 size={11} />
+              </button>
             </div>
             <div className="pl-4 mt-0.5">
               <div className="h-1 rounded-full bg-surface-0 overflow-hidden">
@@ -369,7 +393,7 @@ function RelatedSection({
                 />
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </section>
