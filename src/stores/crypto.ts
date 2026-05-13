@@ -241,7 +241,11 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       await withMinDelay(180, () => useVaultStore.getState().purgeEncryptedFromMemory());
       set({ lockStage: 'refresh' });
       await withMinDelay(180, () => get().refresh());
-      set({ busy: false, lockStage: null });
+      // Close the panel rather than letting it flip to UnlockView. The
+      // user clicked Lock to lock, not to immediately re-unlock — being
+      // asked for the passphrase right away is the opposite of what
+      // they asked for.
+      set({ busy: false, lockStage: null, panelOpen: false });
     } catch (e) {
       set({
         error: typeof e === 'string' ? e : (e as Error).message,
