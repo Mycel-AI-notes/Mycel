@@ -12,6 +12,10 @@ pub struct AppState {
     /// In-memory holder of the unwrapped X25519 identity for the open vault.
     /// Cleared on `crypto_lock` and when the vault closes.
     pub crypto: Arc<core::crypto::Session>,
+    /// Per-vault AI state: SQLite handle to `.mycel/ai/index.db` plus the
+    /// loaded `AiConfig`. Lazily materialized on the first AI command so
+    /// vaults that never use AI never open the DB.
+    pub ai: Arc<Mutex<Option<Arc<core::ai::AiState>>>>,
     /// Per-file mutexes for database operations. Every db_* command that
     /// does read-modify-write on a .db.json acquires the lock for its path
     /// before reading; without this, two near-simultaneous commands (e.g.
@@ -40,6 +44,7 @@ impl Default for AppState {
             vault: Arc::new(Mutex::new(None)),
             watcher: Arc::new(Mutex::new(None)),
             crypto: Arc::new(core::crypto::Session::default()),
+            ai: Arc::new(Mutex::new(None)),
             db_locks: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
@@ -148,6 +153,11 @@ pub fn run() {
             commands::attachments::attachment_save_bytes,
             commands::attachments::attachment_list,
             commands::attachments::attachment_delete,
+            commands::ai::settings::ai_get_status,
+            commands::ai::settings::ai_update_config,
+            commands::ai::settings::ai_set_key,
+            commands::ai::settings::ai_clear_key,
+            commands::ai::settings::ai_test_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

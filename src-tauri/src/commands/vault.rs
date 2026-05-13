@@ -18,6 +18,11 @@ pub async fn vault_open(
     // previous vault — keys are per-vault.
     state.crypto.lock();
 
+    // Same reasoning for AI state: the SQLite handle and the loaded config
+    // belong to the previous vault. Clearing forces lazy re-init against the
+    // new vault's `.mycel/ai/`.
+    *state.ai.lock().await = None;
+
     let new_watcher = start_watcher(app, root);
     *state.watcher.lock().await = new_watcher;
 
