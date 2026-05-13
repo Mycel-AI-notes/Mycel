@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use zeroize::Zeroizing;
 
 use crate::core::crypto::{
@@ -51,6 +51,7 @@ pub async fn crypto_setup(
 #[tauri::command]
 pub async fn crypto_unlock(
     args: PassphraseArg,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = vault_root(&state).await?;
@@ -58,7 +59,13 @@ pub async fn crypto_unlock(
     // overwritten when this scope exits, rather than left lying around until
     // the allocator decides to reuse the memory.
     let pass = Zeroizing::new(args.passphrase);
-    state.crypto.unlock(&root, &pass).map_err(err)
+    // Emit a progress event between major steps so the unlock dialog can
+    // show real "doing X…" labels while scrypt grinds — without this the
+    // UI just spins for 1–3s with no signal that anything is happening.
+    let on_stage = |stage: &str| {
+        let _ = app.emit("crypto:unlock-stage", stage);
+    };
+    state.crypto.unlock(&root, &pass, &on_stage).map_err(err)
 }
 
 /// Upgrade a passphrase-less vault (or change the passphrase on a

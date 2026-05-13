@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Lock, LockOpen, Shield, KeyRound, X, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Lock, LockOpen, Shield, KeyRound, X, Eye, EyeOff, Loader2, Check } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useCryptoStore, AUTO_LOCK_IDLE_MS } from '@/stores/crypto';
+import { useCryptoStore, AUTO_LOCK_IDLE_MS, type UnlockStage } from '@/stores/crypto';
 import { useVaultStore } from '@/stores/vault';
 import { confirm } from '@tauri-apps/plugin-dialog';
 
@@ -298,7 +298,7 @@ function UnlockView({ onDone }: { onDone: () => void }) {
   // While the backend is running scrypt, swap the form for a clear
   // progress panel that explains why it's slow. Otherwise users see a
   // dimmed button for 1–3s and assume the app hung.
-  if (busy) return <UnlockingProgress hasPassphrase={hasPassphrase} />;
+  if (busy) return <UnlockingProgress />;
 
   if (!hasPassphrase) {
     return (
@@ -349,10 +349,59 @@ function UnlockView({ onDone }: { onDone: () => void }) {
   );
 }
 
-function UnlockingProgress({ hasPassphrase }: { hasPassphrase: boolean }) {
+/**
+ * Real (not faked) step-by-step progress for the unlock flow. The Rust
+ * backend emits a `crypto:unlock-stage` event between major steps and
+ * the store mirrors it into `unlockStage`. We walk through the four
+ * possible stages in order, showing each as either "current" (spinner),
+ * "done" (check), or "pending" (dim) so the user can see what's
+ * happening and roughly how far we are.
+ */
+const STAGE_ORDER: Exclude<UnlockStage, null>[] = [
+  'keyring',
+  'outer',
+  'passphrase',
+  'identity',
+  'refresh',
+];
+
+const STAGE_LABELS: Record<Exclude<UnlockStage, null>, { title: string; hint: string }> = {
+  keyring: {
+    title: 'Reading wrap secret from the OS keyring',
+    hint: 'Asks the OS keychain for the device-bound secret that wraps your identity.',
+  },
+  outer: {
+    title: 'Unwrapping the device key',
+    hint: 'Running scrypt on the keyring secret. Slow on purpose — this is the cost an attacker would pay per guess if they stole the vault.',
+  },
+  passphrase: {
+    title: 'Verifying your passphrase',
+    hint: 'Running scrypt on what you typed. Same story: slow by design so brute-forcing the passphrase offline is unaffordable.',
+  },
+  identity: {
+    title: 'Loading your X25519 identity',
+    hint: 'Parsing the decrypted age secret key into memory so notes can be decrypted on demand.',
+  },
+  refresh: {
+    title: 'Refreshing vault status',
+    hint: 'Picking up the new unlocked state so the UI knows the vault is open.',
+  },
+};
+
+function UnlockingProgress() {
+  const stage = useCryptoStore((s) => s.unlockStage);
+  const hasPassphrase = useCryptoStore((s) => s.status?.has_passphrase ?? false);
+
+  // The `passphrase` step is only emitted when the vault is double-wrapped.
+  // Hide it from the list otherwise so single-wrap users don't see a step
+  // that will never be visited.
+  const stages = STAGE_ORDER.filter((s) => s !== 'passphrase' || hasPassphrase);
+
+  const currentIdx = stage == null ? -1 : stages.indexOf(stage);
+
   return (
     <div
-      className="space-y-3 py-3"
+      className="space-y-3 py-2"
       role="status"
       aria-live="polite"
       aria-label="Unlocking vault"
@@ -365,19 +414,51 @@ function UnlockingProgress({ hasPassphrase }: { hasPassphrase: boolean }) {
             className="absolute inset-0 animate-spin text-accent"
           />
         </div>
+        <span className="text-sm font-medium text-text-primary">
+          Unlocking your vault…
+        </span>
       </div>
-      <p className="text-sm font-medium text-text-primary text-center">
-        Unlocking your vault…
-      </p>
-      <p className="text-[11px] text-text-muted leading-relaxed text-center px-2">
-        Running{' '}
-        <code className="px-1 bg-surface-2 rounded">scrypt</code> to unwrap
-        your X25519 identity
-        {hasPassphrase ? ' with your passphrase' : ''}. This step is{' '}
-        <strong className="text-text-secondary">intentionally slow</strong>{' '}
-        (about 1–3 seconds) — the same cost an attacker would pay per guess
-        if they ever got hold of the vault. Hang tight.
-      </p>
+
+      <ol className="space-y-1.5 text-[11px]">
+        {stages.map((s, idx) => {
+          const state =
+            currentIdx === -1 || idx > currentIdx
+              ? 'pending'
+              : idx === currentIdx
+                ? 'current'
+                : 'done';
+          const { title, hint } = STAGE_LABELS[s];
+          return (
+            <li key={s} className="flex gap-2 items-start">
+              <span className="mt-0.5 w-3 shrink-0 flex items-center justify-center">
+                {state === 'done' && (
+                  <Check size={11} className="text-accent" />
+                )}
+                {state === 'current' && (
+                  <Loader2 size={11} className="animate-spin text-accent" />
+                )}
+                {state === 'pending' && (
+                  <span className="w-1 h-1 rounded-full bg-text-muted/40" />
+                )}
+              </span>
+              <span className="flex-1 leading-relaxed">
+                <span
+                  className={clsx(
+                    state === 'pending' && 'text-text-muted',
+                    state === 'current' && 'text-text-primary font-medium',
+                    state === 'done' && 'text-text-secondary',
+                  )}
+                >
+                  {title}
+                </span>
+                {state === 'current' && (
+                  <span className="block text-text-muted">{hint}</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

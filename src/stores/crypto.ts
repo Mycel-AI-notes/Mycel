@@ -1,7 +1,19 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { CryptoStatus, ReencryptReport } from '@/types';
 import { useVaultStore } from './vault';
+
+/** Stages the unlock dialog can be in. The Rust side emits the first
+ *  four via `crypto:unlock-stage`; the JS layer adds `"refresh"` for the
+ *  follow-up `crypto_status` call. `null` means "not unlocking". */
+export type UnlockStage =
+  | 'keyring'
+  | 'outer'
+  | 'passphrase'
+  | 'identity'
+  | 'refresh'
+  | null;
 
 /** Auto-lock kicks in after this many ms of user inactivity while the
  *  vault is unlocked. 5 minutes is a familiar default (matches macOS
@@ -26,6 +38,10 @@ interface CryptoState {
   error: string | null;
   /** True while a backend crypto call is in flight. */
   busy: boolean;
+  /** Current step the unlock flow is on. Driven by `crypto:unlock-stage`
+   *  events from Rust plus the JS-side `"refresh"` step. `null` outside
+   *  of an active unlock. */
+  unlockStage: UnlockStage;
   /** Epoch-ms of the last user input. Set by `useAutoLock`. */
   lastActivityAt: number;
   /** Whether the crypto panel (the modal opened by the toolbar shield)
@@ -79,6 +95,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   status: null,
   error: null,
   busy: false,
+  unlockStage: null,
   lastActivityAt: Date.now(),
   panelOpen: false,
 
@@ -108,9 +125,22 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     // `busy: false` is batched with `panelOpen: false`. Otherwise the
     // button flashes back to its idle "Unlock" label between the two
     // awaits, which looks like the unlock failed.
-    set({ busy: true, error: null });
+    //
+    // We also subscribe to the `crypto:unlock-stage` event for the
+    // duration of the unlock so the dialog can show real "doing X…"
+    // labels instead of a generic spinner. The listener is registered
+    // BEFORE invoke() to avoid missing the first stage event.
+    set({ busy: true, error: null, unlockStage: null });
+    let unlisten: UnlistenFn | undefined;
     try {
+      unlisten = await listen<string>('crypto:unlock-stage', (e) => {
+        set({ unlockStage: e.payload as UnlockStage });
+      });
       await invoke<void>('crypto_unlock', { args: { passphrase } });
+      // After the Rust unlock returns, we still have one more (fast)
+      // Tauri round-trip to refresh status. Surface it so the user
+      // doesn't wonder why the dialog hasn't closed yet.
+      set({ unlockStage: 'refresh' });
       await get().refresh();
       // If somebody was waiting for an unlock (a click on a locked
       // `.md.age` note, for instance), resolve their promise.
@@ -121,10 +151,16 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       // Close panel and clear busy in a single update so the unlock
       // dialog vanishes without a flash of ManageView or a re-armed
       // Unlock button in between.
-      set({ panelOpen: false, busy: false });
+      set({ panelOpen: false, busy: false, unlockStage: null });
     } catch (e) {
-      set({ error: typeof e === 'string' ? e : (e as Error).message, busy: false });
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        unlockStage: null,
+      });
       throw e;
+    } finally {
+      unlisten?.();
     }
   },
 
