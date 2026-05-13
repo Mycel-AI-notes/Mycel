@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { clsx } from 'clsx';
 import {
   forceCenter,
@@ -16,13 +17,16 @@ import {
   Globe,
   Hash,
   Link2,
+  Loader2,
   Maximize2,
   RotateCcw,
+  Sparkles,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
+import { useAiStore } from '@/stores/ai';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { TagSearch } from '@/components/search/TagSearch';
 
@@ -77,9 +81,18 @@ interface SimNode {
 interface SimLink {
   source: string | SimNode;
   target: string | SimNode;
-  kind: 'contain' | 'wiki' | 'external' | 'tag';
+  kind: 'contain' | 'wiki' | 'external' | 'tag' | 'semantic';
   /** Edge strength scaler (1 for normal, used for domain counts). */
   weight?: number;
+  /** Cosine similarity for semantic edges; drives line opacity so
+   *  stronger pairs read more confidently. Undefined for other kinds. */
+  score?: number;
+}
+
+interface SemanticEdgePayload {
+  a_path: string;
+  b_path: string;
+  score: number;
 }
 
 interface Props {
@@ -101,9 +114,26 @@ export function GraphView({ onClose }: Props) {
     tags: true,
     domains: true,
     folders: true,
+    semantic: false,
   });
   const [, force] = useState(0); // tick re-render trigger
   const { openNote } = useVaultStore();
+  const aiStatus = useAiStore((s) => s.status);
+  const aiIndex = useAiStore((s) => s.indexStatus);
+
+  // Semantic-edges UI state. Threshold matches the spec (0.6-0.95,
+  // default 0.75). Edges are fetched lazily on toggle-on and
+  // re-fetched whenever the threshold settles, so a freshly dragged
+  // slider doesn't re-query mid-drag.
+  const [threshold, setThreshold] = useState(0.75);
+  const [semanticEdges, setSemanticEdges] = useState<SemanticEdgePayload[]>([]);
+  const [edgesRecomputing, setEdgesRecomputing] = useState(false);
+  const [edgesProgress, setEdgesProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const semanticAvailable =
+    !!aiStatus?.enabled &&
+    !!aiStatus?.has_key &&
+    (aiIndex?.chunks_indexed ?? 0) > 0;
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,6 +141,90 @@ export function GraphView({ onClose }: Props) {
       .then(setData)
       .catch((e) => setError(String(e)));
   }, []);
+
+  // ── Semantic edges ──────────────────────────────────────────────────────
+  //
+  // Subscribe to progress events once per mount. The listener stays
+  // attached even if the toggle is off — it costs nothing when no
+  // events fire, and re-attaching on every toggle change would just
+  // churn handles.
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    void listen<{ done: number; total: number }>('ai-edges-progress', (e) => {
+      setEdgesProgress(e.payload);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Fetch (or recompute then fetch) when the toggle goes on or the
+  // threshold settles. We debounce the threshold so dragging the
+  // slider doesn't fire a query per frame; the query itself is fast
+  // but the round-trip + state churn would still spam the renderer.
+  useEffect(() => {
+    if (!show.semantic || !semanticAvailable) {
+      setSemanticEdges([]);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const status = await invoke<{ total: number }>('ai_edges_status');
+        if (cancelled) return;
+        if (status.total === 0) {
+          // First time the toggle is flipped on for this vault — run
+          // the O(N²) pass before we can render anything.
+          setEdgesRecomputing(true);
+          setEdgesProgress(null);
+          try {
+            await invoke('ai_recompute_edges');
+          } finally {
+            if (!cancelled) {
+              setEdgesRecomputing(false);
+              setEdgesProgress(null);
+            }
+          }
+          if (cancelled) return;
+        }
+        const edges = await invoke<SemanticEdgePayload[]>(
+          'ai_list_semantic_edges',
+          { args: { threshold } },
+        );
+        if (!cancelled) setSemanticEdges(edges);
+      } catch {
+        // Silent: an error here means the toggle just won't render
+        // edges. The toolbar still shows the toggle state, and the
+        // user can flip it off.
+        if (!cancelled) setSemanticEdges([]);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [show.semantic, semanticAvailable, threshold]);
+
+  const recomputeEdges = async () => {
+    if (edgesRecomputing || !semanticAvailable) return;
+    setEdgesRecomputing(true);
+    setEdgesProgress(null);
+    try {
+      await invoke('ai_recompute_edges');
+      const edges = await invoke<SemanticEdgePayload[]>(
+        'ai_list_semantic_edges',
+        { args: { threshold } },
+      );
+      setSemanticEdges(edges);
+    } catch {
+      // ignored — see comment above
+    } finally {
+      setEdgesRecomputing(false);
+      setEdgesProgress(null);
+    }
+  };
 
   // ── Esc-to-close ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,6 +296,28 @@ export function GraphView({ onClose }: Props) {
       }
     }
 
+    if (show.semantic) {
+      // Build a set of note ids actually present so a stale edge
+      // referencing a note deleted since the last edges recompute
+      // doesn't crash d3-force (which dereferences source/target by id).
+      const noteIds = new Set(data.notes.map((n) => `note:${n.path}`));
+      for (const e of semanticEdges) {
+        const from = `note:${e.a_path}`;
+        const to = `note:${e.b_path}`;
+        if (!noteIds.has(from) || !noteIds.has(to)) continue;
+        links.push({
+          source: from,
+          target: to,
+          kind: 'semantic',
+          score: e.score,
+          // Lower physical pull than wikilinks — semantic edges are
+          // hints, not declared relationships, and shouldn't yank
+          // explicit-link clusters apart.
+          weight: 0.3,
+        });
+      }
+    }
+
     if (show.tags) {
       for (const tg of data.tags) {
         nodes.push({
@@ -224,7 +360,7 @@ export function GraphView({ onClose }: Props) {
     }
 
     return { nodes, links };
-  }, [data, show]);
+  }, [data, show, semanticEdges]);
 
   // ── Force simulation ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -488,6 +624,37 @@ export function GraphView({ onClose }: Props) {
       );
     }
 
+    if (l.kind === 'semantic') {
+      // Dashed amber line, straight (no glow, no curve). Visually
+      // marked as derived/inferred so it doesn't read as a declared
+      // wikilink. Opacity scales with the similarity score above
+      // baseline 0.6 — top end (~0.95) is near-full opacity, bottom
+      // is faint.
+      const sxp = s.x! + (dx / dist) * s.r;
+      const syp = s.y! + (dy / dist) * s.r;
+      const exp = t.x! - (dx / dist) * t.r;
+      const eyp = t.y! - (dy / dist) * t.r;
+      const score = l.score ?? 0.6;
+      // Map [0.6, 0.95] → [0.35, 0.85]. Floor keeps low-confidence
+      // edges visible; ceiling keeps even perfect matches from
+      // outshouting the wiki edges they sit alongside.
+      const opacity = 0.35 + Math.min(1, Math.max(0, (score - 0.6) / 0.35)) * 0.5;
+      return (
+        <line
+          key={i}
+          x1={sxp.toFixed(2)}
+          y1={syp.toFixed(2)}
+          x2={exp.toFixed(2)}
+          y2={eyp.toFixed(2)}
+          className="stroke-accent-bright"
+          strokeOpacity={opacity}
+          strokeWidth={1}
+          strokeDasharray="4 3"
+          strokeLinecap="round"
+        />
+      );
+    }
+
     // Helper: trim endpoints to circumferences + perpendicular Bezier curve.
     const curvedPath = (curveScale: number, prefix: string) => {
       const seed = hash(`${prefix}:${s.id}->${t.id}`);
@@ -710,6 +877,68 @@ export function GraphView({ onClose }: Props) {
               <Icon size={14} />
             </button>
           ))}
+
+          {semanticAvailable && (
+            <>
+              <button
+                onClick={() => setShow((s) => ({ ...s, semantic: !s.semantic }))}
+                disabled={edgesRecomputing}
+                className={clsx(
+                  'p-1 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed',
+                  show.semantic
+                    ? 'text-accent bg-surface-2 hover:bg-surface-hover'
+                    : 'text-text-muted/60 hover:text-text-secondary hover:bg-surface-hover line-through',
+                )}
+                title={
+                  edgesRecomputing
+                    ? 'Computing semantic edges…'
+                    : show.semantic
+                    ? 'Hide AI-derived edges'
+                    : 'Show AI-derived edges'
+                }
+              >
+                {edgesRecomputing ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+              </button>
+              {show.semantic && !edgesRecomputing && (
+                <div
+                  className="flex items-center gap-1.5 ml-1"
+                  title="Semantic similarity threshold"
+                >
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={0.95}
+                    step={0.01}
+                    value={threshold}
+                    onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                    className="w-20 accent-accent"
+                  />
+                  <span className="text-[10px] tabular-nums text-text-muted w-7 text-right">
+                    {threshold.toFixed(2)}
+                  </span>
+                  <button
+                    onClick={() => void recomputeEdges()}
+                    className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+                    title="Recompute semantic edges from current vault"
+                  >
+                    <RotateCcw size={11} />
+                  </button>
+                </div>
+              )}
+              {edgesRecomputing && (
+                <span className="text-[10px] tabular-nums text-text-muted ml-1">
+                  {edgesProgress
+                    ? `${edgesProgress.done} / ${edgesProgress.total}`
+                    : 'starting…'}
+                </span>
+              )}
+            </>
+          )}
+
           <span className="w-px h-4 bg-border mx-1" />
           <button
             onClick={() =>
@@ -801,6 +1030,16 @@ export function GraphView({ onClose }: Props) {
             <g>
               {links
                 .filter((l) => l.kind === 'wiki')
+                .map((l, i) => renderLink(l, i))}
+            </g>
+            <g>
+              {/* Semantic edges sit between wiki edges and nodes:
+                  above the explicit links (per spec) but below the
+                  node circles so a node always wins a click. The
+                  dashed + low-opacity styling keeps them from
+                  outshouting the glowy wiki layer. */}
+              {links
+                .filter((l) => l.kind === 'semantic')
                 .map((l, i) => renderLink(l, i))}
             </g>
             <g>{nodes.map((n) => renderNode(n))}</g>

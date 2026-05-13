@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use crate::core::ai::{config, store::AiStore, AiState};
 use crate::AppState;
 
+pub mod edges;
 pub mod index;
 pub mod related;
 pub mod search;

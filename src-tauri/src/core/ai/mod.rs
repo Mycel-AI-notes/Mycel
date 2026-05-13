@@ -18,6 +18,7 @@
 pub mod budget;
 pub mod chunker;
 pub mod config;
+pub mod edges;
 pub mod embedder;
 pub mod indexer;
 pub mod keyring;
