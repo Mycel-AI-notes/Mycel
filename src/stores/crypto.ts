@@ -15,6 +15,17 @@ export type UnlockStage =
   | 'refresh'
   | null;
 
+/** Stages the setup dialog can be in. Rust emits `keypair`,
+ *  `wrap-passphrase` (only when a passphrase was chosen), `wrap-keyring`,
+ *  and `store` via `crypto:setup-stage`; JS appends `refresh`. */
+export type SetupStage =
+  | 'keypair'
+  | 'wrap-passphrase'
+  | 'wrap-keyring'
+  | 'store'
+  | 'refresh'
+  | null;
+
 /** Auto-lock kicks in after this many ms of user inactivity while the
  *  vault is unlocked. 5 minutes is a familiar default (matches macOS
  *  Keychain's idle-lock window). */
@@ -42,6 +53,8 @@ interface CryptoState {
    *  events from Rust plus the JS-side `"refresh"` step. `null` outside
    *  of an active unlock. */
   unlockStage: UnlockStage;
+  /** Same idea for setup. Driven by `crypto:setup-stage` events. */
+  setupStage: SetupStage;
   /** Epoch-ms of the last user input. Set by `useAutoLock`. */
   lastActivityAt: number;
   /** Whether the crypto panel (the modal opened by the toolbar shield)
@@ -96,6 +109,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   error: null,
   busy: false,
   unlockStage: null,
+  setupStage: null,
   lastActivityAt: Date.now(),
   panelOpen: false,
 
@@ -112,11 +126,31 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   setup: async (passphrase) => {
-    const recipient = await run(set, () =>
-      invoke<string>('crypto_setup', { args: { passphrase } }),
-    );
-    await get().refresh();
-    return recipient;
+    // Mirrors `unlock`: stays `busy` across both Tauri round-trips,
+    // subscribes to per-stage events from Rust so the dialog can show a
+    // real checklist, batches the final `busy: false` so the form
+    // doesn't flash back between the invoke and the refresh.
+    set({ busy: true, error: null, setupStage: null });
+    let unlisten: UnlistenFn | undefined;
+    try {
+      unlisten = await listen<string>('crypto:setup-stage', (e) => {
+        set({ setupStage: e.payload as SetupStage });
+      });
+      const recipient = await invoke<string>('crypto_setup', { args: { passphrase } });
+      set({ setupStage: 'refresh' });
+      await get().refresh();
+      set({ busy: false, setupStage: null });
+      return recipient;
+    } catch (e) {
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        setupStage: null,
+      });
+      throw e;
+    } finally {
+      unlisten?.();
+    }
   },
 
   unlock: async (passphrase) => {

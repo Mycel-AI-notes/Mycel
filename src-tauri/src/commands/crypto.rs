@@ -41,11 +41,18 @@ pub struct PassphraseArg {
 #[tauri::command]
 pub async fn crypto_setup(
     args: PassphraseArg,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = vault_root(&state).await?;
     let pass = Zeroizing::new(args.passphrase);
-    crypto::setup(&root, &state.crypto, &pass).map_err(err)
+    // Same pattern as `crypto_unlock`: emit a progress event between
+    // major steps so the setup dialog can show a real checklist while
+    // the (slow) scrypt wraps run.
+    let on_stage = |stage: &str| {
+        let _ = app.emit("crypto:setup-stage", stage);
+    };
+    crypto::setup(&root, &state.crypto, &pass, &on_stage).map_err(err)
 }
 
 #[tauri::command]

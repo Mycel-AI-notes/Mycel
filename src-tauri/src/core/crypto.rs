@@ -369,7 +369,12 @@ fn identity_has_passphrase(vault_root: &Path) -> Result<bool> {
 /// signed up for, and `set_passphrase` upgrades to double-wrap later.
 ///
 /// Returns the public recipient string for this device.
-pub fn setup(vault_root: &Path, session: &Session, passphrase: &str) -> Result<String> {
+pub fn setup(
+    vault_root: &Path,
+    session: &Session,
+    passphrase: &str,
+    on_stage: &dyn Fn(&str),
+) -> Result<String> {
     if !passphrase.is_empty() && passphrase.len() < 8 {
         bail!("Passphrase must be at least 8 characters (or empty to skip).");
     }
@@ -386,12 +391,17 @@ pub fn setup(vault_root: &Path, session: &Session, passphrase: &str) -> Result<S
         );
     }
 
+    on_stage("keypair");
     let identity = x25519::Identity::generate();
     let pubkey = identity.to_public().to_string();
     let raw = identity.to_string().expose_secret().to_string();
 
     let kek = fresh_wrap_secret();
-    encrypt_identity_file(vault_root, &raw, &kek, passphrase)?;
+    // `encrypt_identity_file` emits "wrap-passphrase" (if any) and
+    // "wrap-keyring" itself — those are the two slow scrypt passes the
+    // user is waiting on.
+    encrypt_identity_file(vault_root, &raw, &kek, passphrase, on_stage)?;
+    on_stage("store");
     write_wrap_secret(vault_root, &kek)?;
 
     std::fs::write(pubkey_path(vault_root), format!("{pubkey}\n"))
@@ -560,12 +570,15 @@ fn encrypt_identity_file(
     raw_identity: &str,
     kek: &str,
     passphrase: &str,
+    on_stage: &dyn Fn(&str),
 ) -> Result<()> {
     let inner: Vec<u8> = if passphrase.is_empty() {
         raw_identity.as_bytes().to_vec()
     } else {
+        on_stage("wrap-passphrase");
         scrypt_wrap_bytes(raw_identity.as_bytes(), passphrase, false)?
     };
+    on_stage("wrap-keyring");
     let outer = scrypt_wrap_bytes(&inner, kek, true)?;
     std::fs::write(identity_path(vault_root), outer)
         .context("Failed to write identity.age")?;
@@ -627,7 +640,7 @@ pub fn set_passphrase(
         .ok_or_else(|| anyhow!("No wrap secret in keyring — cannot re-wrap identity."))?;
     session.with_identity(|id| {
         let raw = id.to_string().expose_secret().to_string();
-        encrypt_identity_file(vault_root, &raw, &kek, new_passphrase)?;
+        encrypt_identity_file(vault_root, &raw, &kek, new_passphrase, &|_| {})?;
         Ok(())
     })
 }
@@ -843,7 +856,7 @@ mod tests {
         let raw = id.to_string().expose_secret().to_string();
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
-        encrypt_identity_file(dir.path(), &raw, "kek-secret-32-bytes", "correct horse battery").unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-secret-32-bytes", "correct horse battery", &|_| {}).unwrap();
         // Both factors required: right kek + right passphrase succeeds.
         let got =
             decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "correct horse battery", &|_| {}).unwrap();
@@ -865,7 +878,7 @@ mod tests {
         let raw = id.to_string().expose_secret().to_string();
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
-        encrypt_identity_file(dir.path(), &raw, "kek-secret", "").unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-secret", "", &|_| {}).unwrap();
 
         // Unlock with empty passphrase succeeds.
         let got = decrypt_identity_file(dir.path(), "kek-secret", "", &|_| {}).unwrap();
@@ -882,12 +895,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
         // Start as legacy single-wrap.
-        encrypt_identity_file(dir.path(), &raw, "kek-x", "").unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-x", "", &|_| {}).unwrap();
 
         // Re-wrap with passphrase using the helper directly (mirrors what
         // `set_passphrase` does, minus the keyring/session plumbing the
         // unit test environment lacks).
-        encrypt_identity_file(dir.path(), &raw, "kek-x", "new-passphrase").unwrap();
+        encrypt_identity_file(dir.path(), &raw, "kek-x", "new-passphrase", &|_| {}).unwrap();
         // Now empty passphrase no longer works.
         assert!(decrypt_identity_file(dir.path(), "kek-x", "", &|_| {}).is_err());
         // The new passphrase does.

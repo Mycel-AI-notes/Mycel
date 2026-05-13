@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Lock, LockOpen, Shield, KeyRound, X, Eye, EyeOff, Loader2, Check } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useCryptoStore, AUTO_LOCK_IDLE_MS, type UnlockStage } from '@/stores/crypto';
+import {
+  useCryptoStore,
+  AUTO_LOCK_IDLE_MS,
+  type UnlockStage,
+  type SetupStage,
+} from '@/stores/crypto';
 import { useVaultStore } from '@/stores/vault';
 import { confirm } from '@tauri-apps/plugin-dialog';
 
@@ -178,6 +183,11 @@ function SetupView({
     }
   };
 
+  // Same pattern as UnlockView: while the backend is wrapping the new
+  // identity (two scrypt passes), swap the form for a step-by-step
+  // progress checklist instead of just dimming the button.
+  if (busy) return <SetupProgress hasPassphrase={usePassphrase} mode={mode} />;
+
   return (
     <div className="space-y-3">
       {mode === 'join' ? (
@@ -260,11 +270,7 @@ function SetupView({
         disabled={!canSubmit}
         className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep disabled:opacity-50"
       >
-        {busy
-          ? 'Generating identity…'
-          : mode === 'join'
-            ? 'Join this device'
-            : 'Set up encryption'}
+        {mode === 'join' ? 'Join this device' : 'Set up encryption'}
       </button>
     </div>
   );
@@ -350,6 +356,63 @@ function UnlockView({ onDone }: { onDone: () => void }) {
 }
 
 /**
+ * Tiny renderer for the unlock/setup progress checklist. Both flows have
+ * a list of stages each in one of three states (pending, current, done)
+ * with a one-line hint shown on the current step. This keeps the two
+ * progress panels visually identical without duplicating layout.
+ */
+function StageList<S extends string>({
+  stages,
+  currentIdx,
+  labels,
+}: {
+  stages: S[];
+  currentIdx: number;
+  labels: Record<S, { title: string; hint: string }>;
+}) {
+  return (
+    <ol className="space-y-1.5 text-[11px]">
+      {stages.map((s, idx) => {
+        const state =
+          currentIdx === -1 || idx > currentIdx
+            ? 'pending'
+            : idx === currentIdx
+              ? 'current'
+              : 'done';
+        const { title, hint } = labels[s];
+        return (
+          <li key={s} className="flex gap-2 items-start">
+            <span className="mt-0.5 w-3 shrink-0 flex items-center justify-center">
+              {state === 'done' && <Check size={11} className="text-accent" />}
+              {state === 'current' && (
+                <Loader2 size={11} className="animate-spin text-accent" />
+              )}
+              {state === 'pending' && (
+                <span className="w-1 h-1 rounded-full bg-text-muted/40" />
+              )}
+            </span>
+            <span className="flex-1 leading-relaxed">
+              <span
+                className={clsx(
+                  state === 'pending' && 'text-text-muted',
+                  state === 'current' && 'text-text-primary font-medium',
+                  state === 'done' && 'text-text-secondary',
+                )}
+              >
+                {title}
+              </span>
+              {state === 'current' && (
+                <span className="block text-text-muted">{hint}</span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
  * Real (not faked) step-by-step progress for the unlock flow. The Rust
  * backend emits a `crypto:unlock-stage` event between major steps and
  * the store mirrors it into `unlockStage`. We walk through the four
@@ -396,7 +459,6 @@ function UnlockingProgress() {
   // Hide it from the list otherwise so single-wrap users don't see a step
   // that will never be visited.
   const stages = STAGE_ORDER.filter((s) => s !== 'passphrase' || hasPassphrase);
-
   const currentIdx = stage == null ? -1 : stages.indexOf(stage);
 
   return (
@@ -407,58 +469,84 @@ function UnlockingProgress() {
       aria-label="Unlocking vault"
     >
       <div className="flex items-center justify-center gap-2">
-        <div className="relative">
-          <Shield size={20} className="text-accent/30" />
-          <Loader2
-            size={20}
-            className="absolute inset-0 animate-spin text-accent"
-          />
-        </div>
+        <Shield size={20} className="text-accent" />
         <span className="text-sm font-medium text-text-primary">
           Unlocking your vault…
         </span>
       </div>
+      <StageList stages={stages} currentIdx={currentIdx} labels={STAGE_LABELS} />
+    </div>
+  );
+}
 
-      <ol className="space-y-1.5 text-[11px]">
-        {stages.map((s, idx) => {
-          const state =
-            currentIdx === -1 || idx > currentIdx
-              ? 'pending'
-              : idx === currentIdx
-                ? 'current'
-                : 'done';
-          const { title, hint } = STAGE_LABELS[s];
-          return (
-            <li key={s} className="flex gap-2 items-start">
-              <span className="mt-0.5 w-3 shrink-0 flex items-center justify-center">
-                {state === 'done' && (
-                  <Check size={11} className="text-accent" />
-                )}
-                {state === 'current' && (
-                  <Loader2 size={11} className="animate-spin text-accent" />
-                )}
-                {state === 'pending' && (
-                  <span className="w-1 h-1 rounded-full bg-text-muted/40" />
-                )}
-              </span>
-              <span className="flex-1 leading-relaxed">
-                <span
-                  className={clsx(
-                    state === 'pending' && 'text-text-muted',
-                    state === 'current' && 'text-text-primary font-medium',
-                    state === 'done' && 'text-text-secondary',
-                  )}
-                >
-                  {title}
-                </span>
-                {state === 'current' && (
-                  <span className="block text-text-muted">{hint}</span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+const SETUP_STAGE_ORDER: Exclude<SetupStage, null>[] = [
+  'keypair',
+  'wrap-passphrase',
+  'wrap-keyring',
+  'store',
+  'refresh',
+];
+
+const SETUP_STAGE_LABELS: Record<
+  Exclude<SetupStage, null>,
+  { title: string; hint: string }
+> = {
+  keypair: {
+    title: 'Generating your X25519 keypair',
+    hint: 'A fresh public/private key pair for this device. The public key goes into recipients.txt, the private key stays wrapped on disk.',
+  },
+  'wrap-passphrase': {
+    title: 'Wrapping the key with your passphrase',
+    hint: 'Running scrypt on the passphrase you typed. Slow on purpose — same KDF that defends unlock from offline brute-force.',
+  },
+  'wrap-keyring': {
+    title: 'Wrapping the key with the device secret',
+    hint: 'Second scrypt pass, this time using a random secret bound to this machine via the OS keyring.',
+  },
+  store: {
+    title: 'Storing wrap secret in the OS keyring',
+    hint: 'Hands the device secret to the OS keychain and writes recipients.txt + the public key file.',
+  },
+  refresh: {
+    title: 'Refreshing vault status',
+    hint: 'Picking up the new encrypted state so the UI knows the vault is set up.',
+  },
+};
+
+function SetupProgress({
+  hasPassphrase,
+  mode,
+}: {
+  hasPassphrase: boolean;
+  mode: 'fresh' | 'join';
+}) {
+  const stage = useCryptoStore((s) => s.setupStage);
+  // `wrap-passphrase` only fires when a passphrase was chosen.
+  const stages = SETUP_STAGE_ORDER.filter(
+    (s) => s !== 'wrap-passphrase' || hasPassphrase,
+  );
+  const currentIdx = stage == null ? -1 : stages.indexOf(stage);
+
+  return (
+    <div
+      className="space-y-3 py-2"
+      role="status"
+      aria-live="polite"
+      aria-label="Setting up encryption"
+    >
+      <div className="flex items-center justify-center gap-2">
+        <Shield size={20} className="text-accent" />
+        <span className="text-sm font-medium text-text-primary">
+          {mode === 'join'
+            ? 'Joining this device to the vault…'
+            : 'Setting up encryption…'}
+        </span>
+      </div>
+      <StageList
+        stages={stages}
+        currentIdx={currentIdx}
+        labels={SETUP_STAGE_LABELS}
+      />
     </div>
   );
 }
@@ -544,9 +632,10 @@ function ManageView() {
       <button
         onClick={() => lock().catch(() => undefined)}
         disabled={busy}
-        className="w-full py-1.5 rounded border border-border text-text-primary text-sm hover:bg-surface-hover disabled:opacity-50"
+        className="w-full py-1.5 rounded border border-border text-text-primary text-sm hover:bg-surface-hover disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
-        Lock now
+        {busy && <Loader2 size={12} className="animate-spin" />}
+        {busy ? 'Locking…' : 'Lock now'}
       </button>
 
       <details>
