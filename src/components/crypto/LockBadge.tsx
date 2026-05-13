@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lock, LockOpen, Shield, KeyRound, X, Eye, EyeOff } from 'lucide-react';
+import { Lock, LockOpen, Shield, KeyRound, X, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useCryptoStore, AUTO_LOCK_IDLE_MS } from '@/stores/crypto';
 import { useVaultStore } from '@/stores/vault';
@@ -295,6 +295,11 @@ function UnlockView({ onDone }: { onDone: () => void }) {
     }
   };
 
+  // While the backend is running scrypt, swap the form for a clear
+  // progress panel that explains why it's slow. Otherwise users see a
+  // dimmed button for 1–3s and assume the app hung.
+  if (busy) return <UnlockingProgress hasPassphrase={hasPassphrase} />;
+
   if (!hasPassphrase) {
     return (
       <div className="space-y-3">
@@ -309,10 +314,9 @@ function UnlockView({ onDone }: { onDone: () => void }) {
         </p>
         <button
           onClick={submit}
-          disabled={busy}
-          className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep disabled:opacity-50"
+          className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep"
         >
-          {busy ? 'Unlocking…' : 'Unlock'}
+          Unlock
         </button>
       </div>
     );
@@ -336,11 +340,44 @@ function UnlockView({ onDone }: { onDone: () => void }) {
       />
       <button
         onClick={submit}
-        disabled={!pass || busy}
+        disabled={!pass}
         className="w-full py-1.5 rounded bg-accent text-surface-0 text-sm font-medium hover:bg-accent-deep disabled:opacity-50"
       >
-        {busy ? 'Unlocking…' : 'Unlock'}
+        Unlock
       </button>
+    </div>
+  );
+}
+
+function UnlockingProgress({ hasPassphrase }: { hasPassphrase: boolean }) {
+  return (
+    <div
+      className="space-y-3 py-3"
+      role="status"
+      aria-live="polite"
+      aria-label="Unlocking vault"
+    >
+      <div className="flex items-center justify-center gap-2">
+        <div className="relative">
+          <Shield size={20} className="text-accent/30" />
+          <Loader2
+            size={20}
+            className="absolute inset-0 animate-spin text-accent"
+          />
+        </div>
+      </div>
+      <p className="text-sm font-medium text-text-primary text-center">
+        Unlocking your vault…
+      </p>
+      <p className="text-[11px] text-text-muted leading-relaxed text-center px-2">
+        Running{' '}
+        <code className="px-1 bg-surface-2 rounded">scrypt</code> to unwrap
+        your X25519 identity
+        {hasPassphrase ? ' with your passphrase' : ''}. This step is{' '}
+        <strong className="text-text-secondary">intentionally slow</strong>{' '}
+        (about 1–3 seconds) — the same cost an attacker would pay per guess
+        if they ever got hold of the vault. Hang tight.
+      </p>
     </div>
   );
 }
