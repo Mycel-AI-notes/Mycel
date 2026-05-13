@@ -122,6 +122,12 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     // Drop the previous vault's AI status. Next time the Settings dialog
     // opens, it'll pull fresh status for this vault.
     useAiStore.getState().reset();
+    // Pull fresh status (which includes has_key + enabled) before the
+    // watcher hook starts firing — the queue early-outs when AI is off,
+    // and that check reads from the store.
+    void useAiStore.getState().load().then(() => {
+      void useAiStore.getState().attachWatcher();
+    });
   },
 
   closeVault: () => {
@@ -138,6 +144,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     useSyncStore.getState().reset();
     useCryptoStore.getState().reset_for_new_vault();
     useGardenStore.getState().reset();
+    useAiStore.getState().detachWatcher();
     useAiStore.getState().reset();
   },
 

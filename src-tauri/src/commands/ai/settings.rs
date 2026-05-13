@@ -4,56 +4,12 @@
 //! and which keyring entry to use). Returning errors as `String` matches the
 //! existing convention used by `commands::sync`.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::core::ai::{budget, config, keyring, openrouter, store::AiStore, AiState};
+use super::{ensure_ai_state, err, err_chain, vault_root};
+use crate::core::ai::{budget, config, keyring, openrouter};
 use crate::AppState;
-
-fn err(e: impl std::fmt::Display) -> String {
-    e.to_string()
-}
-
-/// Like `err`, but uses anyhow's alternate Display ({:#}) to walk the full
-/// `context()` chain. We use this on network paths where the top-level
-/// message ("OpenRouter request failed") is useless without the underlying
-/// cause (TLS error, DNS, HTTP 401, …).
-fn err_chain(e: anyhow::Error) -> String {
-    format!("{:#}", e)
-}
-
-async fn vault_root(state: &State<'_, AppState>) -> Result<PathBuf, String> {
-    let guard = state.vault.lock().await;
-    guard
-        .as_ref()
-        .map(|v| v.root.clone())
-        .ok_or_else(|| "No vault open".to_string())
-}
-
-/// Lazily build (or fetch) the AI state for the open vault.
-///
-/// This is the single chokepoint where the SQLite handle gets opened on
-/// disk. Settings UI calls it on mount via `ai_get_status`, which means a
-/// fresh vault gets `.mycel/ai/` materialized the moment the user opens
-/// Settings — but nothing is written to OpenRouter until the user pastes a
-/// key and clicks Test.
-async fn ensure_ai_state(state: &State<'_, AppState>) -> Result<std::sync::Arc<AiState>, String> {
-    let root = vault_root(state).await?;
-    let mut guard = state.ai.lock().await;
-    if let Some(existing) = guard.as_ref() {
-        return Ok(existing.clone());
-    }
-    let cfg = config::load(&root).map_err(err)?;
-    let store = AiStore::open(&root).map_err(err)?;
-    let new_state = std::sync::Arc::new(AiState {
-        config: std::sync::Arc::new(tokio::sync::Mutex::new(cfg)),
-        store: std::sync::Arc::new(store),
-    });
-    *guard = Some(new_state.clone());
-    Ok(new_state)
-}
 
 #[derive(Debug, Serialize)]
 pub struct AiStatus {

@@ -37,6 +37,24 @@ export function scrollEditorToLine(path: string, line: number) {
   view.focus();
 }
 
+/** Insert `text` at the current cursor position of `path`'s editor and
+ *  move the cursor to the end of the inserted text. Used by the Related
+ *  panel's "insert link" button so the user can pin a discovered note
+ *  into the current document without leaving the keyboard.
+ *  Returns true if a view was found. */
+export function insertAtCursor(path: string, text: string): boolean {
+  const view = views.get(path);
+  if (!view) return false;
+  const pos = view.state.selection.main.head;
+  view.dispatch({
+    changes: { from: pos, insert: text },
+    selection: { anchor: pos + text.length },
+    scrollIntoView: true,
+  });
+  view.focus();
+  return true;
+}
+
 /** Replace the editor doc entirely. Used when the on-disk content was
  *  changed by sync (or by the conflict-resolution "Reload" action) and we
  *  need to push the new text into the live CodeMirror view without
