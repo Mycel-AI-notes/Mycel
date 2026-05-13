@@ -65,7 +65,10 @@ export function LockBadge() {
     } else {
       icon = <Lock size={14} />;
       label = 'Encryption: locked — click to unlock';
-      tone = 'text-accent hover:text-accent';
+      // Use `text-success` (a stable green CSS var) rather than
+      // `text-accent`, which is theme-coloured and can be orange,
+      // blue, purple, etc. depending on the active theme.
+      tone = 'text-success hover:text-success';
     }
   }
 
