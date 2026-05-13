@@ -24,12 +24,32 @@ class MathWidget extends WidgetType {
   constructor(
     public readonly body: string,
     public readonly displayMode: boolean,
+    /// Number of newlines in the replaced `$$…$$` range. CM6 uses this to
+    /// map screen coordinates back to document positions; without it, clicks
+    /// beneath a block math widget land one or more lines off — exactly the
+    /// "клик в одно место, курсор падает ниже" bug the DB widget had.
+    public readonly replacedLineBreaks: number,
   ) {
     super();
   }
 
   eq(other: MathWidget): boolean {
-    return this.body === other.body && this.displayMode === other.displayMode;
+    return (
+      this.body === other.body &&
+      this.displayMode === other.displayMode &&
+      this.replacedLineBreaks === other.replacedLineBreaks
+    );
+  }
+
+  // Inline math is roughly one line tall; block math averages ~60px when
+  // KaTeX is rendering a standard formula. These are estimates — CM6 only
+  // uses them before measurement to avoid laying out at 0px height.
+  get estimatedHeight() {
+    return this.displayMode ? 60 : 22;
+  }
+
+  get lineBreaks() {
+    return this.replacedLineBreaks;
   }
 
   toDOM(): HTMLElement {
@@ -57,6 +77,12 @@ function selectionTouches(sel: EditorSelection, r: MathRange): boolean {
   return sel.ranges.some((s) => s.from <= r.to && s.to >= r.from);
 }
 
+function rangeLineBreaks(state: EditorState, r: MathRange): number {
+  const startLine = state.doc.lineAt(r.from).number;
+  const endLine = state.doc.lineAt(r.to).number;
+  return Math.max(0, endLine - startLine);
+}
+
 function buildMathDecorations(state: EditorState): DecorationSet {
   const ranges = parseMathRanges(state);
   const sel = state.selection;
@@ -80,7 +106,7 @@ function buildMathDecorations(state: EditorState): DecorationSet {
       from: r.from,
       to: r.to,
       deco: Decoration.replace({
-        widget: new MathWidget(r.body, r.kind === 'block'),
+        widget: new MathWidget(r.body, r.kind === 'block', rangeLineBreaks(state, r)),
         block: r.kind === 'block',
       }),
     });
