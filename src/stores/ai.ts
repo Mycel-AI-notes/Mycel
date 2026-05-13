@@ -63,6 +63,12 @@ interface AiState {
   clearKey: () => Promise<void>;
   testKey: () => Promise<void>;
   reindexAll: () => Promise<void>;
+  /// Schedule an auto-index of a single note. Each call resets the
+  /// per-path timer, so a flurry of saves (e.g. CodeMirror auto-save)
+  /// collapses into one embedding call after the user stops typing.
+  queueReindex: (relPath: string) => void;
+  attachWatcher: () => Promise<void>;
+  detachWatcher: () => void;
 }
 
 // Tauri event listener for `ai-index-progress`. Attached lazily on the
@@ -75,6 +81,54 @@ async function ensureProgressListener() {
   progressUnlisten = await listen<IndexProgress>('ai-index-progress', (e) => {
     useAiStore.setState({ indexProgress: e.payload });
   });
+}
+
+// ---- Auto-index on file change -----------------------------------------
+//
+// We mirror sync.ts's `scheduleAutoSync` pattern: a per-path setTimeout
+// that resets on every file-changed event. After DEBOUNCE_MS of quiet for
+// a given path, we fire `ai_index_note` for just that file. This keeps
+// the indexer current without burning embeddings on every keystroke.
+
+const DEBOUNCE_MS = 5_000;
+const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let watcherUnlisten: UnlistenFn | null = null;
+
+/// Returns true if the path is something the indexer cares about. We
+/// short-circuit here so a torrent of `.db.json` or attachment changes
+/// doesn't fill the timer map. Encrypted notes are skipped by the indexer
+/// itself, but filtering here saves a Tauri round-trip.
+function isIndexable(path: string): boolean {
+  if (path.endsWith('.md.age')) return false;
+  if (!path.endsWith('.md')) return false;
+  // `.mycel/**` is our own metadata directory — never index it.
+  if (path.startsWith('.mycel/') || path.includes('/.mycel/')) return false;
+  return true;
+}
+
+async function runQueuedIndex(path: string) {
+  pendingTimers.delete(path);
+  const { status } = useAiStore.getState();
+  // Re-check at fire time, not enqueue time: the user may have toggled
+  // AI off during the debounce window, and we'd rather quietly skip than
+  // hit the budget for a now-disabled flow.
+  if (!status?.enabled || !status?.has_key) return;
+  try {
+    await invoke('ai_index_note', { args: { path } });
+    // Refresh the counter so the Settings card stays in sync if open.
+    try {
+      const indexStatus = await invoke<IndexStatus>('ai_index_status');
+      useAiStore.setState({ indexStatus });
+    } catch {
+      // ignored: vault might have closed
+    }
+  } catch (e) {
+    // Single-file errors are silent — auto-index is a background nicety;
+    // surfacing every transient OpenRouter blip as a toast would be
+    // noisier than the value it adds. The error reaches the user via
+    // the next manual "Reindex now" or the Settings card lastError.
+    useAiStore.setState({ lastError: String(e) });
+  }
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -195,5 +249,45 @@ export const useAiStore = create<AiState>((set, get) => ({
     } finally {
       set({ indexing: false, indexProgress: null });
     }
+  },
+
+  queueReindex: (relPath: string) => {
+    if (!isIndexable(relPath)) return;
+    const { status, indexing } = get();
+    // Cheap upfront guard. Re-checked at fire time anyway, but skipping
+    // the timer keeps the Map clean when AI is off.
+    if (!status?.enabled || !status?.has_key) return;
+    // While a bulk run is going, every file would race the bulk's own
+    // pass. Skip — bulk will catch up to current state.
+    if (indexing) return;
+
+    const existing = pendingTimers.get(relPath);
+    if (existing) clearTimeout(existing);
+    pendingTimers.set(
+      relPath,
+      setTimeout(() => void runQueuedIndex(relPath), DEBOUNCE_MS),
+    );
+  },
+
+  attachWatcher: async () => {
+    if (watcherUnlisten) return;
+    watcherUnlisten = await listen<{ path: string }>(
+      'vault:file-changed',
+      (e) => {
+        const p = e.payload?.path;
+        if (typeof p === 'string') {
+          useAiStore.getState().queueReindex(p);
+        }
+      },
+    );
+  },
+
+  detachWatcher: () => {
+    if (watcherUnlisten) {
+      watcherUnlisten();
+      watcherUnlisten = null;
+    }
+    for (const t of pendingTimers.values()) clearTimeout(t);
+    pendingTimers.clear();
   },
 }));
