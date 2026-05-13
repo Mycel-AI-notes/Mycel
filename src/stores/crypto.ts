@@ -1,7 +1,47 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { CryptoStatus, ReencryptReport } from '@/types';
 import { useVaultStore } from './vault';
+
+/** Stages the unlock dialog can be in. The Rust side emits the first
+ *  four via `crypto:unlock-stage`; the JS layer adds `"refresh"` for the
+ *  follow-up `crypto_status` call. `null` means "not unlocking". */
+export type UnlockStage =
+  | 'keyring'
+  | 'outer'
+  | 'passphrase'
+  | 'identity'
+  | 'refresh'
+  | null;
+
+/** Stages the setup dialog can be in. Rust emits `keypair`,
+ *  `wrap-passphrase` (only when a passphrase was chosen), `wrap-keyring`,
+ *  and `store` via `crypto:setup-stage`; JS appends `refresh`. */
+export type SetupStage =
+  | 'keypair'
+  | 'wrap-passphrase'
+  | 'wrap-keyring'
+  | 'store'
+  | 'refresh'
+  | null;
+
+/** Stages the lock flow can be in. Lock itself is fast (one in-memory
+ *  zeroize), so we drive these entirely from JS rather than emitting
+ *  events from Rust. A small minimum dwell per stage in `lock()` keeps
+ *  the animation visible — otherwise it would flash by in one frame. */
+export type LockStage = 'wipe' | 'tabs' | 'refresh' | null;
+
+/** Resolve `fn()` no sooner than `min` ms later. Used by the lock flow
+ *  so the UI animation has time to render each stage even when the
+ *  underlying work is sub-millisecond. */
+async function withMinDelay<T>(min: number, fn: () => Promise<T> | T): Promise<T> {
+  const [v] = await Promise.all([
+    Promise.resolve().then(fn),
+    new Promise((r) => setTimeout(r, min)),
+  ]);
+  return v as T;
+}
 
 /** Auto-lock kicks in after this many ms of user inactivity while the
  *  vault is unlocked. 5 minutes is a familiar default (matches macOS
@@ -26,6 +66,14 @@ interface CryptoState {
   error: string | null;
   /** True while a backend crypto call is in flight. */
   busy: boolean;
+  /** Current step the unlock flow is on. Driven by `crypto:unlock-stage`
+   *  events from Rust plus the JS-side `"refresh"` step. `null` outside
+   *  of an active unlock. */
+  unlockStage: UnlockStage;
+  /** Same idea for setup. Driven by `crypto:setup-stage` events. */
+  setupStage: SetupStage;
+  /** Same idea for lock. Driven purely from JS — see `lock()`. */
+  lockStage: LockStage;
   /** Epoch-ms of the last user input. Set by `useAutoLock`. */
   lastActivityAt: number;
   /** Whether the crypto panel (the modal opened by the toolbar shield)
@@ -79,6 +127,9 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   status: null,
   error: null,
   busy: false,
+  unlockStage: null,
+  setupStage: null,
+  lockStage: null,
   lastActivityAt: Date.now(),
   panelOpen: false,
 
@@ -95,23 +146,75 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   setup: async (passphrase) => {
-    const recipient = await run(set, () =>
-      invoke<string>('crypto_setup', { args: { passphrase } }),
-    );
-    await get().refresh();
-    return recipient;
+    // Mirrors `unlock`: stays `busy` across both Tauri round-trips,
+    // subscribes to per-stage events from Rust so the dialog can show a
+    // real checklist, batches the final `busy: false` so the form
+    // doesn't flash back between the invoke and the refresh.
+    set({ busy: true, error: null, setupStage: null });
+    let unlisten: UnlistenFn | undefined;
+    try {
+      unlisten = await listen<string>('crypto:setup-stage', (e) => {
+        set({ setupStage: e.payload as SetupStage });
+      });
+      const recipient = await invoke<string>('crypto_setup', { args: { passphrase } });
+      set({ setupStage: 'refresh' });
+      await get().refresh();
+      set({ busy: false, setupStage: null });
+      return recipient;
+    } catch (e) {
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        setupStage: null,
+      });
+      throw e;
+    } finally {
+      unlisten?.();
+    }
   },
 
   unlock: async (passphrase) => {
-    await run(set, () => invoke<void>('crypto_unlock', { args: { passphrase } }));
-    await get().refresh();
-    // If somebody was waiting for an unlock (a click on a locked
-    // `.md.age` note, for instance), resolve their promise and close
-    // the panel so they return straight to the editor.
-    if (pendingUnlock) {
-      pendingUnlock.resolve();
-      pendingUnlock = null;
-      set({ panelOpen: false });
+    // Inlined (not using `run`) so `busy` stays `true` across both the
+    // unlock invoke AND the follow-up status refresh, and the final
+    // `busy: false` is batched with `panelOpen: false`. Otherwise the
+    // button flashes back to its idle "Unlock" label between the two
+    // awaits, which looks like the unlock failed.
+    //
+    // We also subscribe to the `crypto:unlock-stage` event for the
+    // duration of the unlock so the dialog can show real "doing X…"
+    // labels instead of a generic spinner. The listener is registered
+    // BEFORE invoke() to avoid missing the first stage event.
+    set({ busy: true, error: null, unlockStage: null });
+    let unlisten: UnlistenFn | undefined;
+    try {
+      unlisten = await listen<string>('crypto:unlock-stage', (e) => {
+        set({ unlockStage: e.payload as UnlockStage });
+      });
+      await invoke<void>('crypto_unlock', { args: { passphrase } });
+      // After the Rust unlock returns, we still have one more (fast)
+      // Tauri round-trip to refresh status. Surface it so the user
+      // doesn't wonder why the dialog hasn't closed yet.
+      set({ unlockStage: 'refresh' });
+      await get().refresh();
+      // If somebody was waiting for an unlock (a click on a locked
+      // `.md.age` note, for instance), resolve their promise.
+      if (pendingUnlock) {
+        pendingUnlock.resolve();
+        pendingUnlock = null;
+      }
+      // Close panel and clear busy in a single update so the unlock
+      // dialog vanishes without a flash of ManageView or a re-armed
+      // Unlock button in between.
+      set({ panelOpen: false, busy: false, unlockStage: null });
+    } catch (e) {
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        unlockStage: null,
+      });
+      throw e;
+    } finally {
+      unlisten?.();
     }
   },
 
@@ -123,12 +226,34 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   lock: async () => {
-    await run(set, () => invoke<void>('crypto_lock'));
-    // Drop every plaintext body the JS side cached and close every open
-    // `.md.age` tab. Otherwise the wrap secret is gone from Rust but the
-    // already-decrypted markdown lingers in memory and tabs keep working.
-    useVaultStore.getState().purgeEncryptedFromMemory();
-    await get().refresh();
+    // Walk through the three real lock steps with a minimum dwell on
+    // each so the user sees the animation. The underlying work is fast
+    // (memory zeroize + close cached tabs + status refresh), so without
+    // the dwell each stage would render for <1 frame.
+    set({ busy: true, error: null, lockStage: 'wipe' });
+    try {
+      await withMinDelay(180, () => invoke<void>('crypto_lock'));
+      set({ lockStage: 'tabs' });
+      // Drop every plaintext body the JS side cached and close every
+      // open `.md.age` tab. Otherwise the wrap secret is gone from
+      // Rust but the already-decrypted markdown lingers in memory and
+      // tabs keep working.
+      await withMinDelay(180, () => useVaultStore.getState().purgeEncryptedFromMemory());
+      set({ lockStage: 'refresh' });
+      await withMinDelay(180, () => get().refresh());
+      // Close the panel rather than letting it flip to UnlockView. The
+      // user clicked Lock to lock, not to immediately re-unlock — being
+      // asked for the passphrase right away is the opposite of what
+      // they asked for.
+      set({ busy: false, lockStage: null, panelOpen: false });
+    } catch (e) {
+      set({
+        error: typeof e === 'string' ? e : (e as Error).message,
+        busy: false,
+        lockStage: null,
+      });
+      throw e;
+    }
   },
 
   reset: async () => {
