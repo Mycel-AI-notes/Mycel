@@ -22,6 +22,7 @@ pub mod embedder;
 pub mod indexer;
 pub mod keyring;
 pub mod openrouter;
+pub mod related;
 pub mod search;
 pub mod store;
 

@@ -3,12 +3,20 @@ import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
+import { useAiStore } from '@/stores/ai';
 import { clsx } from 'clsx';
-import { ExternalLink as ExtLinkIcon, FileText, Folder, Link as LinkIcon } from 'lucide-react';
+import {
+  ExternalLink as ExtLinkIcon,
+  FileText,
+  Folder,
+  Link as LinkIcon,
+  Sparkles,
+} from 'lucide-react';
 import { DisconnectedSpore } from '@/components/brand/Spore';
 import { TagSearch } from '@/components/search/TagSearch';
 import { scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
+import { displayName, isEncryptedPath } from '@/lib/note-name';
 
 interface Backlink {
   path: string;
@@ -17,13 +25,32 @@ interface Backlink {
   folder: string;
 }
 
+interface RelatedHit {
+  note_path: string;
+  distance: number;
+}
+
 export function RightPanel() {
   const { rightPanelTab, setRightPanelTab } = useUIStore();
   const { activeTabPath, noteCache, openNote, vaultVersion } = useVaultStore();
+  const aiStatus = useAiStore((s) => s.status);
+  const aiIndex = useAiStore((s) => s.indexStatus);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
+  const [related, setRelated] = useState<RelatedHit[]>([]);
   const [tagQuery, setTagQuery] = useState<string | null>(null);
 
   const note = activeTabPath ? noteCache.get(activeTabPath) : null;
+
+  // Related is only meaningful when AI is on, indexed, and we're looking
+  // at a plaintext note (encrypted notes are never embedded). Gating
+  // here keeps the panel from briefly showing "no related notes" for
+  // setups where the feature simply doesn't apply.
+  const relatedEligible =
+    !!aiStatus?.enabled &&
+    !!aiStatus?.has_key &&
+    (aiIndex?.chunks_indexed ?? 0) > 0 &&
+    !!activeTabPath &&
+    !isEncryptedPath(activeTabPath);
 
   const tabs = ['outline', 'backlinks', 'tags'] as const;
 
@@ -42,6 +69,34 @@ export function RightPanel() {
       cancelled = true;
     };
   }, [activeTabPath, rightPanelTab, vaultVersion]);
+
+  // Related neighbors. Refetch on note switch and when the backlinks
+  // tab opens. We deliberately don't subscribe to `vaultVersion`: the
+  // auto-indexer runs 5s after a save, so the chunks fresh enough to
+  // shift neighbor rankings aren't even in the DB yet on save. The
+  // related list will refresh next time the user switches notes and
+  // comes back.
+  useEffect(() => {
+    if (!relatedEligible || rightPanelTab !== 'backlinks') {
+      setRelated([]);
+      return;
+    }
+    let cancelled = false;
+    invoke<RelatedHit[]>('ai_find_related', {
+      args: { path: activeTabPath, k: 5 },
+    })
+      .then((res) => {
+        if (!cancelled) setRelated(res);
+      })
+      .catch(() => {
+        // Silent: the panel is a nicety; an error toast on every note
+        // switch would be obnoxious.
+        if (!cancelled) setRelated([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabPath, rightPanelTab, relatedEligible]);
 
   const mergedTags = note
     ? Array.from(
@@ -223,6 +278,13 @@ export function RightPanel() {
                 </div>
               </section>
             )}
+
+            {relatedEligible && related.length > 0 && (
+              <RelatedSection
+                hits={related}
+                onOpen={(path) => openNote(path)}
+              />
+            )}
           </div>
         )}
 
@@ -251,5 +313,65 @@ export function RightPanel() {
 
       {tagQuery && <TagSearch tag={tagQuery} onClose={() => setTagQuery(null)} />}
     </aside>
+  );
+}
+
+/// Related notes section. Computes a per-row "confidence bar" by
+/// normalizing the cosine distances to the range observed in the current
+/// list — so the best neighbor always pegs the bar and the rest are
+/// shown relative to it. Absolute distances would yield bars that all
+/// look the same (real-world embedding distances tend to cluster in a
+/// narrow band).
+function RelatedSection({
+  hits,
+  onOpen,
+}: {
+  hits: RelatedHit[];
+  onOpen: (path: string) => void;
+}) {
+  const min = hits.reduce((a, b) => Math.min(a, b.distance), hits[0].distance);
+  const max = hits.reduce((a, b) => Math.max(a, b.distance), hits[0].distance);
+  const range = Math.max(max - min, 1e-6);
+
+  const widthFor = (d: number) => {
+    // Best (smallest distance) → 100%, worst → 35%. Floor keeps every
+    // row's bar visible enough to read; without it the bottom hits
+    // collapse to zero-width and look like nothing matched.
+    const norm = 1 - (d - min) / range;
+    return 35 + norm * 65;
+  };
+
+  return (
+    <section>
+      <h4 className="text-[10px] uppercase tracking-wider text-text-muted mb-1.5 flex items-center gap-1">
+        <Sparkles size={9} className="text-accent" />
+        Related ({hits.length})
+      </h4>
+      <div className="space-y-1.5">
+        {hits.map((h) => (
+          <button
+            key={h.note_path}
+            onClick={() => onOpen(h.note_path)}
+            className="w-full text-left group"
+            title={h.note_path}
+          >
+            <div className="flex items-center gap-1.5 text-text-secondary group-hover:text-text-primary">
+              <FileText size={11} className="shrink-0 text-text-muted" />
+              <span className="text-xs font-medium truncate flex-1">
+                {displayName(h.note_path)}
+              </span>
+            </div>
+            <div className="pl-4 mt-0.5">
+              <div className="h-1 rounded-full bg-surface-0 overflow-hidden">
+                <div
+                  className="h-full bg-accent/70"
+                  style={{ width: `${widthFor(h.distance)}%` }}
+                />
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
