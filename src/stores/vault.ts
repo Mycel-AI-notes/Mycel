@@ -10,6 +10,7 @@ import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
 import { useCryptoStore } from './crypto';
 import { useGardenStore } from './garden';
+import { useAiStore } from './ai';
 
 interface VaultState {
   vaultRoot: string | null;
@@ -117,6 +118,10 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     // populate before the user clicks anything.
     useGardenStore.getState().reset();
     void useGardenStore.getState().refreshAll();
+
+    // Drop the previous vault's AI status. Next time the Settings dialog
+    // opens, it'll pull fresh status for this vault.
+    useAiStore.getState().reset();
   },
 
   closeVault: () => {
@@ -133,6 +138,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     useSyncStore.getState().reset();
     useCryptoStore.getState().reset_for_new_vault();
     useGardenStore.getState().reset();
+    useAiStore.getState().reset();
   },
 
   refreshTree: async () => {

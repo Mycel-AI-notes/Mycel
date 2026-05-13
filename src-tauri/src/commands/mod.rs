@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod attachments;
 pub mod crypto;
 pub mod database;

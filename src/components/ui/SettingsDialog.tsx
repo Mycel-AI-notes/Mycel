@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
 import type { FeatureFlags } from '@/stores/ui';
+import { AISettings } from '@/components/settings/AISettings';
 
 interface FeatureRow {
   key: keyof FeatureFlags;
@@ -31,7 +32,7 @@ export function SettingsDialog() {
       onClick={close}
     >
       <div
-        className="w-full max-w-md mx-4 bg-surface-1 border border-border rounded-lg shadow-2xl overflow-hidden"
+        className="w-full max-w-md mx-4 bg-surface-1 border border-border rounded-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-0">
@@ -45,7 +46,7 @@ export function SettingsDialog() {
           </button>
         </header>
 
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto">
           <h3 className="text-xs uppercase tracking-wider text-text-muted mb-2">
             Features
           </h3>
@@ -66,6 +67,11 @@ export function SettingsDialog() {
               </li>
             ))}
           </ul>
+
+          <h3 className="text-xs uppercase tracking-wider text-text-muted mt-6 mb-3">
+            AI
+          </h3>
+          <AISettings />
         </div>
 
         <footer className="px-5 py-2 border-t border-border bg-surface-0 text-[11px] text-text-muted">

@@ -42,6 +42,17 @@ age = { version = "0.11", default-features = false, features = ["armor"] }
 rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 base64 = "0.22"
+# HTTP client for OpenRouter. rustls + system trust roots: we get a pure-Rust
+# TLS stack (no OpenSSL conflict with git2's vendored copy) while still
+# trusting the same CAs the user's OS/browser already trusts. Plain
+# `rustls-tls` ships an empty root store on some platforms, which surfaced
+# as `UnknownIssuer` on the very first live call.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json", "gzip"] }
+# Local AI index lives in `.mycel/ai/index.db`. MVP-1 only uses the
+# `ai_usage` table; the sqlite-vec virtual table is wired in MVP-2.
+rusqlite = { version = "0.31", features = ["bundled", "chrono"] }
+async-trait = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+mockito = "1"
