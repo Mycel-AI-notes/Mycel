@@ -16,7 +16,10 @@
 #![allow(dead_code)]
 
 pub mod budget;
+pub mod chunker;
 pub mod config;
+pub mod embedder;
+pub mod indexer;
 pub mod keyring;
 pub mod openrouter;
 pub mod store;
@@ -32,4 +35,8 @@ use store::AiStore;
 pub struct AiState {
     pub config: Arc<Mutex<AiConfig>>,
     pub store: Arc<AiStore>,
+    /// Held while a bulk reindex (or any other potentially long-running
+    /// AI write) is in flight. Single-note `index_note` calls also take
+    /// this so the file watcher can't race a manual full reindex.
+    pub indexing: Arc<Mutex<()>>,
 }

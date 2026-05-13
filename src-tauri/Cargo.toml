@@ -49,8 +49,12 @@ base64 = "0.22"
 # as `UnknownIssuer` on the very first live call.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json", "gzip"] }
 # Local AI index lives in `.mycel/ai/index.db`. MVP-1 only uses the
-# `ai_usage` table; the sqlite-vec virtual table is wired in MVP-2.
-rusqlite = { version = "0.31", features = ["bundled", "chrono"] }
+# `ai_usage` table; MVP-2 adds `chunks` plus a `chunks_vec` virtual
+# table (sqlite-vec) for embeddings.
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "load_extension"] }
+# sqlite-vec ships as a SQLite loadable extension; we register it via
+# `sqlite3_auto_extension` once at startup so every Connection picks it up.
+sqlite-vec = "0.1"
 async-trait = "0.1"
 
 [dev-dependencies]
