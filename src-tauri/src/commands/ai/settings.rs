@@ -16,6 +16,14 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+/// Like `err`, but uses anyhow's alternate Display ({:#}) to walk the full
+/// `context()` chain. We use this on network paths where the top-level
+/// message ("OpenRouter request failed") is useless without the underlying
+/// cause (TLS error, DNS, HTTP 401, …).
+fn err_chain(e: anyhow::Error) -> String {
+    format!("{:#}", e)
+}
+
 async fn vault_root(state: &State<'_, AppState>) -> Result<PathBuf, String> {
     let guard = state.vault.lock().await;
     guard
@@ -148,7 +156,7 @@ pub async fn ai_test_key(state: State<'_, AppState>) -> Result<TestKeyResult, St
     let resp = client
         .embed(&key, &model, &["ping".to_string()])
         .await
-        .map_err(err)?;
+        .map_err(err_chain)?;
 
     // Record actual tokens reported by the response. Cost is unknown at this
     // layer (OpenRouter doesn't return USD), so we charge a flat penny — the
