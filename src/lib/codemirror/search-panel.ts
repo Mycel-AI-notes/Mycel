@@ -251,5 +251,14 @@ export function mycelSearchPanel(view: EditorView): Panel {
       }
       if (update.docChanged || update.selectionSet) updateCount();
     },
+    destroy() {
+      // However the panel was closed, hand focus back to the editor — the
+      // panel's own inputs/buttons held focus, and once their DOM is removed
+      // focus falls to <body>, where CodeMirror's keymap never sees the next
+      // Cmd/Ctrl+F. Deferred so it runs after the close update settles.
+      requestAnimationFrame(() => {
+        if (!view.hasFocus) view.focus();
+      });
+    },
   };
 }
