@@ -1787,11 +1787,6 @@ body {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
-.mycel-search-field--invalid,
-.mycel-search-field--invalid:focus-within {
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 18%, transparent);
-}
 .mycel-search-icon {
   display: flex;
   flex-shrink: 0;

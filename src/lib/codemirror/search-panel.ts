@@ -1,4 +1,5 @@
 import type { EditorView, Panel, ViewUpdate } from '@codemirror/view';
+import { runScopeHandlers } from '@codemirror/view';
 import {
   SearchQuery,
   getSearchQuery,
@@ -47,12 +48,8 @@ export function mycelSearchPanel(view: EditorView): Panel {
   const dom = document.createElement('div');
   dom.className = 'mycel-search';
   dom.setAttribute('role', 'search');
-  // Keep keystrokes inside the panel from leaking into the editor.
-  dom.addEventListener('keydown', (e) => e.stopPropagation());
 
   let caseSensitive = false;
-  let regexp = false;
-  let wholeWord = false;
 
   // ── Search row ───────────────────────────────────────────────────────
   const searchField = document.createElement('div');
@@ -64,6 +61,9 @@ export function mycelSearchPanel(view: EditorView): Panel {
   searchInput.className = 'mycel-search-input';
   searchInput.placeholder = 'Find in note';
   searchInput.setAttribute('aria-label', 'Find in note');
+  // CodeMirror's `openSearchPanel` looks for `[main-field]` to refocus the
+  // panel when it is already open — without it a second Cmd/Ctrl+F is a no-op.
+  searchInput.setAttribute('main-field', 'true');
 
   const countEl = document.createElement('span');
   countEl.className = 'mycel-search-count';
@@ -74,16 +74,6 @@ export function mycelSearchPanel(view: EditorView): Panel {
     className: 'mycel-search-btn--toggle mycel-search-btn--text',
     title: 'Match case',
     text: 'Aa',
-  });
-  const wordBtn = mkButton({
-    className: 'mycel-search-btn--toggle mycel-search-btn--text',
-    title: 'Match whole word',
-    text: 'W',
-  });
-  const regexBtn = mkButton({
-    className: 'mycel-search-btn--toggle mycel-search-btn--text',
-    title: 'Use regular expression',
-    text: '.*',
   });
 
   const divider = document.createElement('span');
@@ -100,17 +90,7 @@ export function mycelSearchPanel(view: EditorView): Panel {
 
   const searchRow = document.createElement('div');
   searchRow.className = 'mycel-search-row';
-  searchRow.append(
-    searchField,
-    caseBtn,
-    wordBtn,
-    regexBtn,
-    divider,
-    prevBtn,
-    nextBtn,
-    expandBtn,
-    closeBtn,
-  );
+  searchRow.append(searchField, caseBtn, divider, prevBtn, nextBtn, expandBtn, closeBtn);
 
   // ── Replace row ──────────────────────────────────────────────────────
   const replaceField = document.createElement('div');
@@ -142,8 +122,6 @@ export function mycelSearchPanel(view: EditorView): Panel {
     new SearchQuery({
       search: searchInput.value,
       caseSensitive,
-      regexp,
-      wholeWord,
       replace: replaceInput.value,
     });
 
@@ -154,19 +132,11 @@ export function mycelSearchPanel(view: EditorView): Panel {
 
   const updateCount = () => {
     const query = getSearchQuery(view.state);
-    if (!searchInput.value) {
+    if (!searchInput.value || !query.valid) {
       countEl.textContent = '';
       countEl.classList.remove('mycel-search-count--none');
-      searchField.classList.remove('mycel-search-field--invalid');
       return;
     }
-    if (!query.valid) {
-      countEl.textContent = regexp ? 'bad regex' : '0';
-      countEl.classList.add('mycel-search-count--none');
-      searchField.classList.add('mycel-search-field--invalid');
-      return;
-    }
-    searchField.classList.remove('mycel-search-field--invalid');
     let total = 0;
     let active = 0;
     const sel = view.state.selection.main;
@@ -182,46 +152,35 @@ export function mycelSearchPanel(view: EditorView): Panel {
         res = cursor.next();
       }
     } catch {
-      /* malformed query — counter just shows 0 */
+      /* malformed query — counter just shows nothing */
     }
     countEl.textContent = total ? `${active || '–'}/${total}` : 'no results';
     countEl.classList.toggle('mycel-search-count--none', total === 0);
   };
 
-  const toggle = (btn: HTMLButtonElement, get: () => boolean, set: (v: boolean) => void) => {
-    btn.addEventListener('click', () => {
-      set(!get());
-      btn.classList.toggle('is-active', get());
-      commit();
-      searchInput.focus();
-    });
-  };
-  toggle(caseBtn, () => caseSensitive, (v) => (caseSensitive = v));
-  toggle(wordBtn, () => wholeWord, (v) => (wholeWord = v));
-  toggle(regexBtn, () => regexp, (v) => (regexp = v));
+  caseBtn.addEventListener('click', () => {
+    caseSensitive = !caseSensitive;
+    caseBtn.classList.toggle('is-active', caseSensitive);
+    commit();
+    searchInput.focus();
+  });
 
   searchInput.addEventListener('input', commit);
   replaceInput.addEventListener('input', commit);
 
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+  // Let CodeMirror's scoped key bindings (Escape to close, Mod-f to refocus)
+  // run while focus is inside the panel, then fall back to our own Enter
+  // handling for find / replace.
+  dom.addEventListener('keydown', (e) => {
+    if (runScopeHandlers(view, e, 'search-panel')) {
+      e.preventDefault();
+    } else if (e.key === 'Enter' && e.target === searchInput) {
       e.preventDefault();
       if (e.shiftKey) findPrevious(view);
       else findNext(view);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeSearchPanel(view);
-      view.focus();
-    }
-  });
-  replaceInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && e.target === replaceInput) {
       e.preventDefault();
       replaceNext(view);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeSearchPanel(view);
-      view.focus();
     }
   });
 
@@ -262,11 +221,7 @@ export function mycelSearchPanel(view: EditorView): Panel {
         searchInput.value = existing.search;
         replaceInput.value = existing.replace;
         caseSensitive = existing.caseSensitive;
-        regexp = existing.regexp;
-        wholeWord = existing.wholeWord;
         caseBtn.classList.toggle('is-active', caseSensitive);
-        wordBtn.classList.toggle('is-active', wholeWord);
-        regexBtn.classList.toggle('is-active', regexp);
       } else {
         const sel = view.state.selection.main;
         if (
@@ -281,6 +236,19 @@ export function mycelSearchPanel(view: EditorView): Panel {
       searchInput.select();
     },
     update(update: ViewUpdate) {
+      // Keep the inputs in sync when the query is changed from outside the
+      // panel (e.g. CodeMirror reseeding it from the selection on reopen).
+      for (const tr of update.transactions) {
+        for (const effect of tr.effects) {
+          if (effect.is(setSearchQuery)) {
+            const q = effect.value;
+            if (q.search !== searchInput.value) searchInput.value = q.search;
+            if (q.replace !== replaceInput.value) replaceInput.value = q.replace;
+            caseSensitive = q.caseSensitive;
+            caseBtn.classList.toggle('is-active', caseSensitive);
+          }
+        }
+      }
       if (update.docChanged || update.selectionSet) updateCount();
     },
   };
