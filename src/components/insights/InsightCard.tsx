@@ -13,6 +13,7 @@ import { useVaultStore } from '@/stores/vault';
 import type { Insight, InsightAction, InsightKind } from '@/stores/insights';
 import { useInsightsStore } from '@/stores/insights';
 import { appendToEditor } from '@/lib/editor-registry';
+import { ResolveDuplicateDialog } from './ResolveDuplicateDialog';
 
 const KIND_META: Record<InsightKind, { label: string; icon: typeof LinkIcon }> = {
   missing_wikilink:    { label: 'Missing wikilink',    icon: LinkIcon },
@@ -37,6 +38,7 @@ function actionLabel(a: InsightAction): string {
     case 'insert_wikilink':           return 'Insert link';
     case 'create_note_from_template': return 'Create note';
     case 'open_external':             return 'Open link';
+    case 'resolve_duplicate':         return 'Resolve duplicate';
   }
 }
 
@@ -51,6 +53,8 @@ export function InsightCard({ insight }: Props) {
   const act = useInsightsStore((s) => s.act);
   const openNote = useVaultStore((s) => s.openNote);
   const [showWhy, setShowWhy] = useState(false);
+  // Paths for the duplicate-resolution dialog, or null when it's closed.
+  const [dupPaths, setDupPaths] = useState<string[] | null>(null);
 
   const runAction = async (a: InsightAction) => {
     switch (a.type) {
@@ -83,6 +87,11 @@ export function InsightCard({ insight }: Props) {
         if (inserted) await act(insight.id);
         break;
       }
+      case 'resolve_duplicate':
+        // Opens the picker dialog. The insight is only marked acted once a
+        // note is actually deleted — see the dialog's onResolved below.
+        setDupPaths(a.note_paths);
+        break;
       case 'create_note_from_template':
         // Still surface-only — the template engine lands in a later phase.
         console.info('create_note_from_template not implemented yet');
@@ -202,6 +211,17 @@ export function InsightCard({ insight }: Props) {
             </button>
           ))}
         </div>
+      )}
+
+      {dupPaths && (
+        <ResolveDuplicateDialog
+          paths={dupPaths}
+          onClose={() => setDupPaths(null)}
+          onResolved={() => {
+            setDupPaths(null);
+            void act(insight.id);
+          }}
+        />
       )}
     </div>
   );

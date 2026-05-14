@@ -24,7 +24,8 @@ export type InsightAction =
   | { type: 'open_side_by_side'; note_paths: string[] }
   | { type: 'insert_wikilink'; source: string; target: string }
   | { type: 'create_note_from_template'; template_id: string; suggested_path: string }
-  | { type: 'open_external'; url: string };
+  | { type: 'open_external'; url: string }
+  | { type: 'resolve_duplicate'; note_paths: string[] };
 
 export interface ExternalRef {
   url: string;

@@ -25,6 +25,11 @@ use crate::core::ai::related::find_related;
 /// Neighbours fetched per note before pair-filtering.
 const K: usize = 6;
 
+/// Similarity at or above this means the pair reads as the *same* note, not
+/// merely a related one — the card then offers "Resolve duplicate" (keep one,
+/// delete the other) instead of "Insert link".
+const DUPLICATE_SIMILARITY: f32 = 0.95;
+
 /// Map a `chunks_vec` distance to a 0.0-1.0 similarity score. The index
 /// stores normalised embeddings, so the distance lands in roughly [0, 2]
 /// (identical text ≈ 0). We treat 0 → 1.0 and 2 → 0.0, clamped. The
@@ -82,28 +87,58 @@ impl Detector for SimilarNotesDetector {
             }
             let note_paths = vec![a.clone(), b.clone()];
             let id = stable_id(InsightKind::MissingWikilink.as_key(), &note_paths, &[]);
+
+            // Above the duplicate cutoff the two notes read as the same page,
+            // so "insert a link between them" is the wrong suggestion — offer
+            // a keep-one/delete-the-other resolution instead.
+            let (title, body, actions) = if confidence >= DUPLICATE_SIMILARITY {
+                (
+                    format!("Possible duplicate: {} ↔ {}", base_name(&a), base_name(&b)),
+                    format!(
+                        "These two notes look almost identical. Keep one and \
+                         remove the other?\n\n- [[{}]]\n- [[{}]]",
+                        base_name(&a),
+                        base_name(&b),
+                    ),
+                    vec![
+                        InsightAction::OpenSideBySide {
+                            note_paths: note_paths.clone(),
+                        },
+                        InsightAction::ResolveDuplicate {
+                            note_paths: note_paths.clone(),
+                        },
+                    ],
+                )
+            } else {
+                (
+                    format!("{} ↔ {}", base_name(&a), base_name(&b)),
+                    format!(
+                        "These two notes look closely related but aren't \
+                         linked. Consider connecting them with a [[wikilink]].\
+                         \n\n- [[{}]]\n- [[{}]]",
+                        base_name(&a),
+                        base_name(&b),
+                    ),
+                    vec![
+                        InsightAction::OpenSideBySide {
+                            note_paths: note_paths.clone(),
+                        },
+                        InsightAction::InsertWikilink {
+                            source: a.clone(),
+                            target: base_name(&b),
+                        },
+                    ],
+                )
+            };
+
             out.push(Insight {
                 id,
                 kind: InsightKind::MissingWikilink,
                 confidence,
-                title: format!("{} ↔ {}", base_name(&a), base_name(&b)),
-                body: format!(
-                    "These two notes look closely related but aren't linked. \
-                     Consider connecting them with a [[wikilink]].\n\n\
-                     - [[{}]]\n- [[{}]]",
-                    base_name(&a),
-                    base_name(&b),
-                ),
+                title,
+                body,
                 note_paths: note_paths.clone(),
-                actions: vec![
-                    InsightAction::OpenSideBySide {
-                        note_paths: note_paths.clone(),
-                    },
-                    InsightAction::InsertWikilink {
-                        source: a.clone(),
-                        target: base_name(&b),
-                    },
-                ],
+                actions,
                 external_refs: vec![],
                 generated_at: now,
             });
@@ -249,6 +284,40 @@ mod tests {
         assert_eq!(paths, vec!["a.md".to_string(), "b.md".to_string()]);
         assert_eq!(got[0].kind, InsightKind::MissingWikilink);
         assert!(got[0].confidence > 0.5, "identical notes → high confidence");
+    }
+
+    #[tokio::test]
+    async fn identical_notes_offer_resolve_duplicate() {
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = InsightsSettings::default();
+        // Identical content → similarity 1.0, above DUPLICATE_SIMILARITY,
+        // so the card must offer "Resolve duplicate", not "Insert link".
+        seed(
+            dir.path(),
+            &store,
+            &[
+                ("a.md", "feature store architecture and tradeoffs"),
+                ("b.md", "feature store architecture and tradeoffs"),
+            ],
+        )
+        .await;
+
+        let got = SimilarNotesDetector
+            .run(&ctx(&store, dir.path(), &settings))
+            .await
+            .unwrap();
+        assert_eq!(got.len(), 1);
+        let has_resolve = got[0]
+            .actions
+            .iter()
+            .any(|a| matches!(a, InsightAction::ResolveDuplicate { .. }));
+        let has_insert = got[0]
+            .actions
+            .iter()
+            .any(|a| matches!(a, InsightAction::InsertWikilink { .. }));
+        assert!(has_resolve, "duplicate pair must offer ResolveDuplicate");
+        assert!(!has_insert, "duplicate pair must not offer InsertWikilink");
     }
 
     #[tokio::test]

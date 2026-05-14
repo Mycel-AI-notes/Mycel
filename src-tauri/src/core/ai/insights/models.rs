@@ -97,6 +97,12 @@ pub enum InsightAction {
     OpenExternal {
         url: String,
     },
+    /// The two notes look like duplicates. The UI opens a picker: the user
+    /// chooses which path to keep and the other is deleted. Destructive, so
+    /// the UI must confirm the choice explicitly before calling `note_delete`.
+    ResolveDuplicate {
+        note_paths: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
