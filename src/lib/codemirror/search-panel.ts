@@ -18,7 +18,7 @@ import {
  */
 
 const SVG = (inner: string) =>
-  `<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 
 const icons = {
   search: SVG('<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>'),
