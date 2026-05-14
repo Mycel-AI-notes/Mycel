@@ -285,6 +285,13 @@ function FileTreeNode({
         e.preventDefault();
         return;
       }
+      // A modifier-held press is the user building a multi-selection, not
+      // starting a move — cancel any drag the browser tries to begin from
+      // it so the click/selection gesture isn't swallowed.
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        return;
+      }
       // Dragging a row that's part of a multi-selection moves the whole
       // selection; dragging anything else moves just that row. Multiple
       // paths are newline-joined in the drag payload.
@@ -358,13 +365,21 @@ function FileTreeNode({
           isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={(e) => {
-          setFocusedPath(entry.path);
-          // Cmd/Ctrl-click toggles multi-selection without opening the note.
+        onMouseDown={(e) => {
+          // Handle Cmd/Ctrl-click selection on mousedown, not click: a
+          // draggable row can start a drag before `click` ever fires, which
+          // would silently drop the selection toggle.
+          if (e.button !== 0) return;
           if (e.metaKey || e.ctrlKey) {
+            setFocusedPath(entry.path);
             toggleSelect(entry.path);
-            return;
           }
+        }}
+        onClick={(e) => {
+          // Modifier-clicks are handled in onMouseDown — ignore here so the
+          // selection isn't toggled twice.
+          if (e.metaKey || e.ctrlKey) return;
+          setFocusedPath(entry.path);
           selectOnly(entry.path);
           handleClick();
         }}
