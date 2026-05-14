@@ -7,6 +7,7 @@
 //! See `README.md` in this directory for "how to add a detector".
 
 pub mod detector;
+pub mod detectors;
 #[cfg(debug_assertions)]
 pub mod mock_detector;
 pub mod models;
@@ -34,11 +35,13 @@ pub use settings::{InsightsSettings, LimitSettings, ScheduleSettings};
 /// Phase 1. Debug builds get a single mock so developers can see the
 /// pipeline produce a card without having to wait until Phase 2 ships.
 pub fn default_detectors() -> Vec<Box<dyn Detector>> {
-    #[allow(unused_mut)]
-    let mut detectors: Vec<Box<dyn Detector>> = Vec::new();
-    // Mock is off by default in settings (see `MockDetector::enabled_by_default`)
-    // so even in debug builds nothing happens until a developer flips it on.
+    let mut list: Vec<Box<dyn Detector>> = Vec::new();
+    // Phase 2: the first real detector. Rides on the MVP-2 embedding index;
+    // does nothing until the vault has been indexed.
+    list.push(Box::new(detectors::similar_notes::SimilarNotesDetector));
+    // Mock is off by default (see `MockDetector::enabled_by_default`) so even
+    // in debug builds nothing happens until a developer flips it on.
     #[cfg(debug_assertions)]
-    detectors.push(Box::new(mock_detector::MockDetector));
-    detectors
+    list.push(Box::new(mock_detector::MockDetector));
+    list
 }

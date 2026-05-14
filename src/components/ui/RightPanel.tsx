@@ -18,8 +18,6 @@ import { TagSearch } from '@/components/search/TagSearch';
 import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
 import { displayName, isEncryptedPath } from '@/lib/note-name';
-import { InsightsPanel } from '@/components/insights/InsightsPanel';
-import { useInsightsStore } from '@/stores/insights';
 
 interface Backlink {
   path: string;
@@ -55,28 +53,7 @@ export function RightPanel() {
     !!activeTabPath &&
     !isEncryptedPath(activeTabPath);
 
-  // Insights tab is only present when the engine is enabled — that's the
-  // "silently degrades" rule. We pull the flag from the insights store
-  // (which the Settings page populates on mount) and from a one-shot fetch
-  // here so the tab appears in fresh sessions too.
-  const insightsStatus = useInsightsStore((s) => s.status);
-  const loadInsightsStatus = useInsightsStore((s) => s.loadStatus);
-  useEffect(() => {
-    void loadInsightsStatus();
-  }, [loadInsightsStatus]);
-  const insightsEnabled = !!insightsStatus?.settings.enabled;
-
-  const tabs = insightsEnabled
-    ? (['outline', 'backlinks', 'tags', 'insights'] as const)
-    : (['outline', 'backlinks', 'tags'] as const);
-
-  // If the user toggles Insights off while the tab is active, fall back to
-  // backlinks so the panel never renders a hidden tab's content.
-  useEffect(() => {
-    if (!insightsEnabled && rightPanelTab === 'insights') {
-      setRightPanelTab('backlinks');
-    }
-  }, [insightsEnabled, rightPanelTab, setRightPanelTab]);
+  const tabs = ['outline', 'backlinks', 'tags'] as const;
 
   // Re-fetch backlinks on tab open, on note switch, and after any save in the
   // vault (vaultVersion bumps). Edits-in-progress don't trigger it — backlinks
@@ -333,9 +310,7 @@ export function RightPanel() {
           </div>
         )}
 
-        {rightPanelTab === 'insights' && insightsEnabled && <InsightsPanel />}
-
-        {!note && rightPanelTab !== 'backlinks' && rightPanelTab !== 'insights' && (
+        {!note && rightPanelTab !== 'backlinks' && (
           <p className="text-text-muted text-xs">Open a note to see details</p>
         )}
       </div>

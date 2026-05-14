@@ -6,6 +6,7 @@ import { reparseBody } from '@/lib/markdown-parse';
 import { displayName } from '@/lib/note-name';
 import { replaceEditorContent } from '@/lib/editor-registry';
 import { gardenTabPath, gardenTabTitle } from '@/lib/garden-tab';
+import { INSIGHTS_TAB_PATH, INSIGHTS_TAB_TITLE } from '@/lib/insights-tab';
 import { useRecentVaults } from './recentVaults';
 import { useSyncStore } from './sync';
 import { useCryptoStore } from './crypto';
@@ -39,6 +40,9 @@ interface VaultState {
    *  semantics as notes — single click is a preview tab that the next
    *  preview replaces; double-click pins. */
   openGardenTab: (view: GardenView, options?: { preview?: boolean }) => void;
+  /** Open the Insights inbox as a full-page tab. Single view, same
+   *  preview/pin semantics as Garden tabs. */
+  openInsightsTab: (options?: { preview?: boolean }) => void;
   /** Open an attachment (image) inside the tab strip. Image paths live
    *  in the vault file tree alongside notes and reuse the same preview/
    *  pin semantics, so the user can flip between an image and a note
@@ -299,6 +303,50 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const preview = options?.preview ?? false;
     const path = gardenTabPath(view);
     const title = gardenTabTitle(view);
+    const { openTabs } = get();
+    const alreadyOpen = openTabs.find((t) => t.path === path);
+
+    if (alreadyOpen) {
+      if (alreadyOpen.isPreview && !preview) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t) =>
+            t.path === path ? { ...t, isPreview: false } : t,
+          ),
+        }));
+      }
+    } else if (preview) {
+      const existingIdx = openTabs.findIndex((t) => t.isPreview);
+      if (existingIdx >= 0) {
+        set((s) => ({
+          openTabs: s.openTabs.map((t, i) =>
+            i === existingIdx
+              ? { path, title, isDirty: false, isPreview: true }
+              : t,
+          ),
+        }));
+      } else {
+        set((s) => ({
+          openTabs: [
+            ...s.openTabs,
+            { path, title, isDirty: false, isPreview: true },
+          ],
+        }));
+      }
+    } else {
+      set((s) => ({
+        openTabs: [
+          ...s.openTabs,
+          { path, title, isDirty: false, isPreview: false },
+        ],
+      }));
+    }
+    set({ activeTabPath: path });
+  },
+
+  openInsightsTab: (options) => {
+    const preview = options?.preview ?? false;
+    const path = INSIGHTS_TAB_PATH;
+    const title = INSIGHTS_TAB_TITLE;
     const { openTabs } = get();
     const alreadyOpen = openTabs.find((t) => t.path === path);
 
