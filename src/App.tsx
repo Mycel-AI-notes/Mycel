@@ -51,11 +51,24 @@ const isMac =
   typeof navigator !== 'undefined' &&
   /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
+/** Pick a not-yet-taken `Untitled.md` / `Untitled N.md` name in the vault root. */
+function uniqueRootNotePath(tree: { is_dir: boolean; name: string }[]): string {
+  const taken = new Set(
+    tree.filter((e) => !e.is_dir).map((e) => e.name.toLowerCase()),
+  );
+  if (!taken.has('untitled.md')) return 'Untitled.md';
+  for (let i = 1; i < 1000; i += 1) {
+    const name = `Untitled ${i}.md`;
+    if (!taken.has(name.toLowerCase())) return name;
+  }
+  return `Untitled ${Date.now()}.md`;
+}
+
 export default function App() {
   useTheme();
   useAutoLock();
 
-  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab, createNote } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const gardenEnabled = useUIStore((s) => s.features.garden);
   const openSettings = useUIStore((s) => s.openSettings);
@@ -95,7 +108,18 @@ export default function App() {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      if (e.key === 'o' || e.key === 'O') {
+      if (e.key === 'n' || e.key === 'N') {
+        // Cmd+N — create a new note in the vault root and open it.
+        // Cmd+Shift+N is the global quick-note shortcut, handled elsewhere.
+        if (e.shiftKey) return;
+        e.preventDefault();
+        if (vaultRoot) {
+          const path = uniqueRootNotePath(useVaultStore.getState().fileTree);
+          createNote(path).catch((err) =>
+            console.error('Failed to create note:', err),
+          );
+        }
+      } else if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         if (vaultRoot) setQuickSwitcherOpen(true);
       } else if (e.key === 'g' || e.key === 'G') {
@@ -131,7 +155,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled, activeTabPath, pinTab]);
+  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled, activeTabPath, pinTab, createNote]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
