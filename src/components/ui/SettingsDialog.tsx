@@ -3,6 +3,7 @@ import { Sparkles, SlidersHorizontal, X } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
 import type { FeatureFlags } from '@/stores/ui';
 import { AISettings } from '@/components/settings/AISettings';
+import { InsightsSettings } from '@/components/settings/InsightsSettings';
 
 interface FeatureRow {
   key: keyof FeatureFlags;
@@ -19,11 +20,12 @@ const FEATURE_ROWS: FeatureRow[] = [
   },
 ];
 
-type Tab = 'features' | 'ai';
+type Tab = 'features' | 'ai' | 'insights';
 
 const TABS: { id: Tab; label: string; icon: typeof Sparkles }[] = [
   { id: 'features', label: 'Features', icon: SlidersHorizontal },
   { id: 'ai', label: 'AI', icon: Sparkles },
+  { id: 'insights', label: 'Insights', icon: Sparkles },
 ];
 
 export function SettingsDialog() {
@@ -116,6 +118,8 @@ export function SettingsDialog() {
             )}
 
             {tab === 'ai' && <AISettings />}
+
+            {tab === 'insights' && <InsightsSettings />}
           </div>
         </div>
 
