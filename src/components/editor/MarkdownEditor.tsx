@@ -11,6 +11,7 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { mycelSearchPanel } from '@/lib/codemirror/search-panel';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
@@ -97,40 +98,26 @@ const mycelEditorTheme = (dark: boolean) =>
         textDecoration: 'none',
         fontWeight: '600',
       },
-      '.cm-panels': {
-        backgroundColor: 'var(--color-surface-0)',
-        color: 'var(--color-text-secondary)',
+      // The search panel itself is a custom floating card — see
+      // `lib/codemirror/search-panel.ts` and the `.mycel-search*` rules in
+      // `index.css`. Panels float over the content rather than push it down.
+      '.cm-panels': { backgroundColor: 'transparent', color: 'var(--color-text-secondary)' },
+      '.cm-panels.cm-panels-top': {
+        position: 'absolute',
+        top: '10px',
+        right: '16px',
+        left: 'auto',
+        zIndex: '12',
+        borderBottom: 'none',
       },
-      '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--color-border)' },
-      '.cm-panel.cm-search': { padding: '6px 8px', fontFamily: "'Inter', system-ui, sans-serif" },
-      '.cm-panel.cm-search input, .cm-panel.cm-search button, .cm-panel.cm-search label': {
-        fontSize: '12px',
+      '.cm-searchMatch': {
+        backgroundColor: 'var(--color-semantic-glow)',
+        borderRadius: '2px',
       },
-      '.cm-panel.cm-search input[type=text]': {
-        backgroundColor: 'var(--color-surface-2)',
-        border: '1px solid var(--color-border)',
-        borderRadius: '4px',
-        color: 'var(--color-text-primary)',
-        padding: '2px 6px',
-      },
-      '.cm-panel.cm-search button': {
-        backgroundColor: 'var(--color-surface-2)',
-        border: '1px solid var(--color-border)',
-        borderRadius: '4px',
-        color: 'var(--color-text-secondary)',
-        cursor: 'pointer',
-      },
-      '.cm-panel.cm-search button:hover': {
-        backgroundColor: 'var(--color-surface-hover)',
-        color: 'var(--color-text-primary)',
-      },
-      '.cm-panel.cm-search [name=close]': {
-        color: 'var(--color-text-muted)',
-        cursor: 'pointer',
-      },
-      '.cm-searchMatch': { backgroundColor: 'var(--color-semantic-glow)' },
       '.cm-searchMatch.cm-searchMatch-selected': {
-        backgroundColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--color-accent) 38%, transparent)',
+        outline: '1px solid color-mix(in srgb, var(--color-accent) 60%, transparent)',
+        borderRadius: '2px',
       },
       '.cm-selectionMatch': {
         backgroundColor: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
@@ -209,7 +196,7 @@ export function MarkdownEditor({ path }: Props) {
         highlightActiveLineGutter(),
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         saveKeymap,
-        search({ top: true }),
+        search({ top: true, createPanel: mycelSearchPanel }),
         highlightSelectionMatches(),
         markdown({
           base: markdownLanguage,
