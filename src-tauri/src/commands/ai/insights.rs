@@ -3,8 +3,6 @@
 //! Same error convention as the rest of the AI surface: return `String` so
 //! the frontend's `invoke` rejection has a single readable line.
 
-use std::path::PathBuf;
-
 use serde::Serialize;
 use tauri::State;
 
@@ -14,19 +12,7 @@ use crate::core::ai::insights::models::{
 use crate::core::ai::insights::{settings as isettings, store as istore, InsightsSettings};
 use crate::AppState;
 
-use super::settings::ensure_ai_state;
-
-fn err(e: impl std::fmt::Display) -> String {
-    e.to_string()
-}
-
-async fn vault_root(state: &State<'_, AppState>) -> Result<PathBuf, String> {
-    let guard = state.vault.lock().await;
-    guard
-        .as_ref()
-        .map(|v| v.root.clone())
-        .ok_or_else(|| "No vault open".to_string())
-}
+use super::{ensure_ai_state, err, vault_root};
 
 #[tauri::command]
 pub async fn insights_list(

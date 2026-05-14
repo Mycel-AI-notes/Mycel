@@ -1,10 +1,10 @@
 //! Mycel AI: local semantic layer over the vault.
 //!
-//! MVP-1 is read-only — we never write to `.md` files. Everything lives under
-//! `.mycel/ai/`:
+//! Everything lives under `.mycel/ai/`:
 //!   - `config.json`     user-tunable knobs (enabled flag, budget, model)
-//!   - `insights.json`   Phase 1 — daily inbox settings, schedule, limits
-//!   - `index.db`        SQLite. `ai_usage` plus the four `insights_*` tables.
+//!   - `insights.json`   Insights Phase 1 — daily inbox settings, schedule
+//!   - `index.db`        SQLite. `ai_usage`, the `chunks` / `chunks_vec`
+//!                       embedding tables, and the four `insights_*` tables.
 //!
 //! The OpenRouter API key lives in the OS keyring (same pattern as the sync
 //! PAT), never in a file.
@@ -16,10 +16,16 @@
 #![allow(dead_code)]
 
 pub mod budget;
+pub mod chunker;
 pub mod config;
+pub mod edges;
+pub mod embedder;
+pub mod indexer;
 pub mod insights;
 pub mod keyring;
 pub mod openrouter;
+pub mod related;
+pub mod search;
 pub mod store;
 
 use std::sync::Arc;
@@ -34,6 +40,10 @@ use store::AiStore;
 pub struct AiState {
     pub config: Arc<Mutex<AiConfig>>,
     pub store: Arc<AiStore>,
+    /// Held while a bulk reindex (or any other potentially long-running
+    /// AI write) is in flight. Single-note `index_note` calls also take
+    /// this so the file watcher can't race a manual full reindex.
+    pub indexing: Arc<Mutex<()>>,
     /// Phase 1 Insights engine. Materialized alongside the SQLite store —
     /// the per-minute tick is already running by the time any UI command
     /// arrives, so "Run now" and the scheduled run share one engine.

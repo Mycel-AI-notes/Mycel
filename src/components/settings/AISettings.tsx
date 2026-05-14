@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { useAiStore } from '@/stores/ai';
 
 /// AI settings card. Lives inside the existing SettingsDialog.
@@ -18,6 +25,11 @@ export function AISettings() {
   const setKey = useAiStore((s) => s.setKey);
   const clearKey = useAiStore((s) => s.clearKey);
   const testKey = useAiStore((s) => s.testKey);
+  const indexStatus = useAiStore((s) => s.indexStatus);
+  const indexing = useAiStore((s) => s.indexing);
+  const indexProgress = useAiStore((s) => s.indexProgress);
+  const lastBulkSummary = useAiStore((s) => s.lastBulkSummary);
+  const reindexAll = useAiStore((s) => s.reindexAll);
 
   const [keyInput, setKeyInput] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -208,6 +220,79 @@ export function AISettings() {
           Embedding requests pause when the budget is hit; resets at local
           midnight. Model: {status.embedding_model}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-text-secondary">Index</label>
+          <button
+            type="button"
+            onClick={() => void reindexAll()}
+            disabled={!status.enabled || !status.has_key || indexing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-surface-1 text-xs text-text-primary hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              !status.enabled
+                ? 'Enable AI first'
+                : !status.has_key
+                ? 'Save an API key first'
+                : 'Walk the vault and embed any new or changed chunks'
+            }
+          >
+            {indexing ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <RefreshCw size={12} />
+            )}
+            {indexing ? 'Indexing…' : 'Reindex now'}
+          </button>
+        </div>
+
+        {indexStatus && (
+          <div className="text-[11px] text-text-muted">
+            {indexStatus.chunks_indexed.toLocaleString()} chunks across{' '}
+            {indexStatus.notes_indexed.toLocaleString()} notes
+          </div>
+        )}
+
+        {indexing && indexProgress && (
+          <div className="flex flex-col gap-1 mt-0.5">
+            <div className="h-1.5 rounded-full bg-surface-0 overflow-hidden">
+              <div
+                className="h-full bg-accent transition-[width] duration-150"
+                style={{
+                  width: `${indexProgress.total > 0 ? (indexProgress.done / indexProgress.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-text-muted tabular-nums">
+              <span className="truncate" title={indexProgress.note_path}>
+                {indexProgress.note_path}
+              </span>
+              <span>
+                {indexProgress.done} / {indexProgress.total}
+              </span>
+            </div>
+            {indexProgress.error && (
+              <div className="text-[11px] text-error">
+                {indexProgress.error}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!indexing && lastBulkSummary && (
+          <div className="text-[11px] text-text-muted">
+            Last run: {lastBulkSummary.notes_ok} indexed,{' '}
+            {lastBulkSummary.chunks_embedded} chunks embedded,{' '}
+            {lastBulkSummary.chunks_kept} kept
+            {lastBulkSummary.notes_failed > 0 && (
+              <span className="text-error">
+                {' '}
+                · {lastBulkSummary.notes_failed} failed
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {lastError && !testResult && (
