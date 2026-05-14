@@ -23,6 +23,8 @@ import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
 import { SettingsDialog } from '@/components/ui/SettingsDialog';
 import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
+import { isInsightsTabPath } from '@/lib/insights-tab';
+import { InsightsView } from '@/components/insights/InsightsView';
 import { isAttachmentPath } from '@/lib/note-name';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
@@ -287,9 +289,13 @@ export default function App() {
           <EditorTabs />
           {activeGardenView ? (
             <GardenView view={activeGardenView} />
+          ) : isInsightsTabPath(activeTabPath) ? (
+            <InsightsView />
           ) : activeTabPath && isAttachmentPath(activeTabPath) ? (
             <ImageViewer key={activeTabPath} path={activeTabPath} />
-          ) : activeTabPath && !isGardenTabPath(activeTabPath) ? (
+          ) : activeTabPath &&
+            !isGardenTabPath(activeTabPath) &&
+            !isInsightsTabPath(activeTabPath) ? (
             <MarkdownEditor key={activeTabPath} path={activeTabPath} />
           ) : (
             <EmptyEditor />

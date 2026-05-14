@@ -166,6 +166,13 @@ pub fn run() {
             commands::ai::edges::ai_edges_status,
             commands::ai::edges::ai_recompute_edges,
             commands::ai::edges::ai_list_semantic_edges,
+            commands::ai::insights::insights_list,
+            commands::ai::insights::insights_run_now,
+            commands::ai::insights::insights_dismiss,
+            commands::ai::insights::insights_act,
+            commands::ai::insights::insights_settings_get,
+            commands::ai::insights::insights_settings_set,
+            commands::ai::insights::insights_telemetry_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

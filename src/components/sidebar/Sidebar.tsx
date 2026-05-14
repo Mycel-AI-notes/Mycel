@@ -9,6 +9,7 @@ import {
 import { SyncStatusBadge } from '@/components/sync/SyncStatusBadge';
 import { SyncPanel } from '@/components/sync/SyncPanel';
 import { GardenSidebar } from '@/components/garden/GardenSidebar';
+import { InsightsSidebar } from '@/components/insights/InsightsSidebar';
 
 export function Sidebar() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
@@ -69,6 +70,7 @@ export function Sidebar() {
     >
       <div className="flex flex-col min-h-0 flex-1">
         {gardenEnabled && <GardenSidebar />}
+        <InsightsSidebar />
         <div className="flex-1 min-h-0 overflow-hidden">
           <FileTree />
         </div>

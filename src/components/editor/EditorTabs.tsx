@@ -7,6 +7,7 @@ import {
   Hourglass,
   Lightbulb,
   RefreshCw,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -14,8 +15,12 @@ import { useVaultStore } from '@/stores/vault';
 import { PulseSpore } from '@/components/brand/Spore';
 import { isEncryptedPath } from '@/lib/note-name';
 import { parseGardenTabPath } from '@/lib/garden-tab';
+import { isInsightsTabPath } from '@/lib/insights-tab';
 
-function gardenTabIcon(path: string): LucideIcon | null {
+/// Icon for a synthetic (non-note) tab — Garden views and the Insights
+/// inbox. Returns null for ordinary note paths.
+function syntheticTabIcon(path: string): LucideIcon | null {
+  if (isInsightsTabPath(path)) return Sparkles;
   const view = parseGardenTabPath(path);
   if (!view) return null;
   switch (view.kind) {
@@ -37,7 +42,7 @@ export function EditorTabs() {
   return (
     <div className="flex items-center border-b border-border bg-surface-0 overflow-x-auto shrink-0">
       {openTabs.map((tab) => {
-        const GardenIcon = gardenTabIcon(tab.path);
+        const SyntheticIcon = syntheticTabIcon(tab.path);
         return (
         <button
           key={tab.path}
@@ -52,8 +57,8 @@ export function EditorTabs() {
             tab.isPreview && 'italic',
           )}
         >
-          {GardenIcon && (
-            <GardenIcon
+          {SyntheticIcon && (
+            <SyntheticIcon
               size={12}
               className="shrink-0 text-accent"
               aria-hidden="true"
