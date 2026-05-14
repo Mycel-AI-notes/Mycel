@@ -105,14 +105,14 @@ export function InsightsSettings() {
           label="Max cards per day"
           value={draft.limits.max_per_day}
           min={1}
-          max={100}
+          max={1000}
           onChange={(v) => patch((s) => (s.limits.max_per_day = v))}
         />
         <NumberRow
           label="Max cards per type"
           value={draft.limits.max_per_kind}
           min={1}
-          max={20}
+          max={500}
           onChange={(v) => patch((s) => (s.limits.max_per_kind = v))}
         />
         <NumberRow
