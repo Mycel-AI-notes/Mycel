@@ -29,7 +29,10 @@ use super::detector::{Detector, DetectorContext};
 use super::models::{Insight, InsightKind, RunSummary};
 use super::settings::InsightsSettings;
 use super::store as istore;
+use crate::core::ai::config::AiConfig;
+use crate::core::ai::embedder::OpenRouterEmbedder;
 use crate::core::ai::store::AiStore;
+use crate::core::ai::{indexer, keyring};
 
 /// Owns the detector registry and the runtime knobs the tokio loop needs.
 /// Cloning is cheap (`Arc`s all the way down) so the Tauri command layer can
@@ -41,6 +44,12 @@ pub struct InsightsEngine {
     pub store: Arc<AiStore>,
     pub settings: Arc<Mutex<InsightsSettings>>,
     pub detectors: Arc<Vec<Box<dyn Detector>>>,
+    /// Shared with `AiState` — the embedding config (model, daily budget) the
+    /// pre-run index refresh needs.
+    pub config: Arc<Mutex<AiConfig>>,
+    /// Shared with `AiState::indexing` — held while the pre-run reindex walks
+    /// the vault so it can't race the file-watcher's single-note indexer.
+    pub indexing: Arc<Mutex<()>>,
     /// Date string (`YYYY-MM-DD` in local time) of the last completed run.
     /// Lets the per-minute tick early-out without touching SQL.
     pub last_run_date: Arc<Mutex<Option<String>>>,
@@ -52,12 +61,16 @@ impl InsightsEngine {
         store: Arc<AiStore>,
         settings: InsightsSettings,
         detectors: Vec<Box<dyn Detector>>,
+        config: Arc<Mutex<AiConfig>>,
+        indexing: Arc<Mutex<()>>,
     ) -> Self {
         Self {
             vault_root,
             store,
             settings: Arc::new(Mutex::new(settings)),
             detectors: Arc::new(detectors),
+            config,
+            indexing,
             last_run_date: Arc::new(Mutex::new(None)),
         }
     }
@@ -124,9 +137,53 @@ impl InsightsEngine {
         Ok(())
     }
 
+    /// Bring the embedding index up to date before detectors read it.
+    ///
+    /// The insights scheduler doesn't own the index, but a stale index makes
+    /// the similar-notes detector miss recently-edited notes. `bulk_reindex`
+    /// is the incremental updater — it walks the vault but the indexer skips
+    /// unchanged chunks by hash, so steady-state this is cheap.
+    ///
+    /// Best-effort: if AI is off, no key is saved, or the reindex errors, we
+    /// log and carry on with whatever is already indexed — a stale index is
+    /// better than no insights run.
+    async fn refresh_index(&self) {
+        let cfg = self.config.lock().await.clone();
+        if !cfg.enabled {
+            return;
+        }
+        let key = match keyring::get_key(&self.vault_root) {
+            Ok(Some(k)) => k,
+            Ok(None) => return,
+            Err(e) => {
+                eprintln!("insights: keyring read failed before reindex: {e}");
+                return;
+            }
+        };
+        // Serialize with the file-watcher's single-note indexer and any
+        // manual "Reindex now" — same lock `commands::ai::index` takes.
+        let _guard = self.indexing.lock().await;
+        let embedder = OpenRouterEmbedder::new(key, cfg.embedding_model.clone());
+        if let Err(e) = indexer::bulk_reindex(
+            &self.store,
+            &embedder,
+            &self.vault_root,
+            cfg.daily_budget_usd,
+            &cfg.embedding_model,
+            |_p: indexer::BulkProgress| {},
+        )
+        .await
+        {
+            eprintln!("insights: pre-run reindex failed: {:#}", e);
+        }
+    }
+
     /// Run the pipeline end-to-end and return a summary. Used directly by
     /// `insights_run_now`; the scheduler tick just throws the summary away.
     pub async fn run_once(&self, settings: &InsightsSettings) -> Result<RunSummary> {
+        // Freshen the embedding index first so detectors see recent edits.
+        self.refresh_index().await;
+
         let now = chrono::Utc::now().timestamp();
         let run_id = istore::start_run(&self.store, now)?;
         let mut errors: Vec<String> = Vec::new();

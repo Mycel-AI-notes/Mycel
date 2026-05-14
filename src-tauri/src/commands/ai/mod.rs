@@ -62,18 +62,26 @@ pub(crate) async fn ensure_ai_state(
     // each `CREATE TABLE IF NOT EXISTS` is a no-op once they exist.
     insights_mod::store::ensure_insights_schema(&store).map_err(err)?;
 
+    // `config` and `indexing` are shared with the insights engine so its
+    // pre-run index refresh can read the embedding config and serialize
+    // against the file-watcher's indexer.
+    let config = Arc::new(Mutex::new(cfg));
+    let indexing = Arc::new(Mutex::new(()));
+
     let insights_settings = insights_mod::settings::load(&root).map_err(err)?;
     let engine = InsightsEngine::new(
         root.clone(),
         store.clone(),
         insights_settings,
         insights_mod::default_detectors(),
+        config.clone(),
+        indexing.clone(),
     );
 
     let new_state = Arc::new(AiState {
-        config: Arc::new(Mutex::new(cfg)),
+        config,
         store,
-        indexing: Arc::new(Mutex::new(())),
+        indexing,
         insights: engine.clone(),
     });
     *guard = Some(new_state.clone());
