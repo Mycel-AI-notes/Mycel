@@ -128,36 +128,31 @@ export function InsightsSettings() {
         <legend className="text-xs uppercase tracking-wider text-text-muted mb-1">
           Similar notes
         </legend>
-        <label className="flex items-center justify-between gap-3 text-xs text-text-secondary">
-          <span className="flex-1">
-            Minimum similarity
-            <span className="block text-[11px] text-text-muted">
-              Higher = stricter, fewer “these two notes are related” cards.
-            </span>
-          </span>
-          <span className="flex items-center gap-2 shrink-0">
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={draft.similar_notes_min_similarity}
-              onChange={(e) =>
-                patch(
-                  (s) =>
-                    (s.similar_notes_min_similarity = parseInt(
-                      e.target.value,
-                      10,
-                    )),
-                )
-              }
-              className="w-28 accent-accent"
-            />
-            <span className="w-10 text-right tabular-nums text-text-primary">
-              {draft.similar_notes_min_similarity}%
-            </span>
-          </span>
-        </label>
+        <PercentRow
+          label="Minimum similarity"
+          hint="Higher = stricter, fewer “these two notes are related” cards."
+          value={draft.similar_notes_min_similarity}
+          onChange={(v) => patch((s) => (s.similar_notes_min_similarity = v))}
+        />
+        <PercentRow
+          label="Duplicate threshold"
+          hint="At or above this, a pair is treated as a duplicate — the card offers “Resolve duplicate” instead of “Insert link”."
+          value={draft.similar_notes_duplicate_similarity}
+          onChange={(v) =>
+            patch((s) => (s.similar_notes_duplicate_similarity = v))
+          }
+        />
+        <NumberRow
+          label="Minimum note length (words)"
+          value={draft.similar_notes_min_words}
+          min={0}
+          max={1000}
+          onChange={(v) => patch((s) => (s.similar_notes_min_words = v))}
+        />
+        <p className="text-[11px] text-text-muted">
+          Notes shorter than this are ignored — short stubs produce noisy
+          matches.
+        </p>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2" disabled={!draft.enabled}>
@@ -233,6 +228,38 @@ function NumberRow({ label, value, min, max, onChange }: NumberRowProps) {
         }}
         className="w-20 px-2 py-1 rounded-md border border-border bg-surface-0 text-sm text-text-primary focus:outline-none focus:border-accent"
       />
+    </label>
+  );
+}
+
+interface PercentRowProps {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (v: number) => void;
+}
+
+function PercentRow({ label, hint, value, onChange }: PercentRowProps) {
+  return (
+    <label className="flex items-center justify-between gap-3 text-xs text-text-secondary">
+      <span className="flex-1">
+        {label}
+        <span className="block text-[11px] text-text-muted">{hint}</span>
+      </span>
+      <span className="flex items-center gap-2 shrink-0">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value, 10))}
+          className="w-28 accent-accent"
+        />
+        <span className="w-10 text-right tabular-nums text-text-primary">
+          {value}%
+        </span>
+      </span>
     </label>
   );
 }

@@ -63,6 +63,10 @@ export interface InsightsSettings {
   detectors: Record<string, boolean>;
   /// Minimum semantic similarity (0-100%) for the similar-notes detector.
   similar_notes_min_similarity: number;
+  /// At or above this similarity (0-100%) a pair is treated as a duplicate.
+  similar_notes_duplicate_similarity: number;
+  /// Notes shorter than this many words are ignored by the detector.
+  similar_notes_min_words: number;
 }
 
 export interface InsightsStatus {

@@ -25,11 +25,6 @@ use crate::core::ai::related::find_related;
 /// Neighbours fetched per note before pair-filtering.
 const K: usize = 6;
 
-/// Similarity at or above this means the pair reads as the *same* note, not
-/// merely a related one — the card then offers "Resolve duplicate" (keep one,
-/// delete the other) instead of "Insert link".
-const DUPLICATE_SIMILARITY: f32 = 0.95;
-
 /// Map a `chunks_vec` distance to a 0.0-1.0 similarity score. The index
 /// stores normalised embeddings, so the distance lands in roughly [0, 2]
 /// (identical text ≈ 0). We treat 0 → 1.0 and 2 → 0.0, clamped. The
@@ -47,22 +42,33 @@ impl Detector for SimilarNotesDetector {
     }
 
     async fn run(&self, ctx: &DetectorContext<'_>) -> anyhow::Result<Vec<Insight>> {
-        let notes = list_indexed_notes(ctx)?;
-        if notes.len() < 2 {
+        // Only notes with enough indexed text take part. Short stubs (just a
+        // title and a line or two) produce noisy, unreliable matches — we
+        // skip any pair that touches one by filtering them out up front.
+        let substantial =
+            substantial_notes(ctx, ctx.settings.similar_notes_min_words as usize)?;
+        if substantial.len() < 2 {
             return Ok(Vec::new());
         }
 
-        // User threshold as a 0.0-1.0 fraction. Clamp the stored percentage
-        // so a corrupt settings file can't make the detector reject (or
-        // accept) everything in a way the UI never showed.
+        // Thresholds as 0.0-1.0 fractions. Clamp the stored percentages so a
+        // corrupt settings file can't make the detector reject (or accept)
+        // everything in a way the UI never showed.
         let min_similarity =
             (ctx.settings.similar_notes_min_similarity.min(100) as f32) / 100.0;
+        let duplicate_similarity =
+            (ctx.settings.similar_notes_duplicate_similarity.min(100) as f32) / 100.0;
 
         // Canonical pair -> best (highest) similarity seen.
         let mut pairs: HashMap<(String, String), f32> = HashMap::new();
-        for note in &notes {
+        for note in &substantial {
             let hits = find_related(&ctx.store, note, K)?;
             for hit in hits {
+                // `find_related` searches the whole vector table, so a hit
+                // can still be a short note — drop those here too.
+                if !substantial.contains(&hit.note_path) {
+                    continue;
+                }
                 let sim = similarity(hit.distance);
                 if sim < min_similarity {
                     continue;
@@ -91,7 +97,7 @@ impl Detector for SimilarNotesDetector {
             // Above the duplicate cutoff the two notes read as the same page,
             // so "insert a link between them" is the wrong suggestion — offer
             // a keep-one/delete-the-other resolution instead.
-            let (title, body, actions) = if confidence >= DUPLICATE_SIMILARITY {
+            let (title, body, actions) = if confidence >= duplicate_similarity {
                 (
                     format!("Possible duplicate: {} ↔ {}", base_name(&a), base_name(&b)),
                     format!(
@@ -147,15 +153,32 @@ impl Detector for SimilarNotesDetector {
     }
 }
 
-/// Distinct note paths that have at least one row in `chunks`.
-fn list_indexed_notes(ctx: &DetectorContext<'_>) -> anyhow::Result<Vec<String>> {
+/// Indexed notes whose total chunk text is at least `min_words` words.
+///
+/// Word counts come from the `chunks.text` column rather than re-reading
+/// files — the text is already there from indexing, and it's the same text
+/// the embeddings were built from, so the count matches what was matched on.
+fn substantial_notes(
+    ctx: &DetectorContext<'_>,
+    min_words: usize,
+) -> anyhow::Result<std::collections::HashSet<String>> {
     ctx.store.with_conn(|c| {
-        let mut stmt = c.prepare("SELECT DISTINCT note_path FROM chunks ORDER BY note_path")?;
+        let mut stmt = c.prepare("SELECT note_path, text FROM chunks")?;
         let rows = stmt
-            .query_map([], |r| r.get::<_, String>(0))?
-            .filter_map(|r| r.ok())
-            .collect::<Vec<_>>();
-        Ok(rows)
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok());
+
+        let mut words: HashMap<String, usize> = HashMap::new();
+        for (path, text) in rows {
+            *words.entry(path).or_insert(0) += text.split_whitespace().count();
+        }
+        Ok(words
+            .into_iter()
+            .filter(|(_, w)| *w >= min_words)
+            .map(|(p, _)| p)
+            .collect())
     })
 }
 
@@ -241,11 +264,21 @@ mod tests {
         }
     }
 
+    /// Default settings, but with the word-count filter disabled — most
+    /// tests use short stub notes and care about the matching logic, not
+    /// the length gate (which has its own dedicated test).
+    fn test_settings() -> InsightsSettings {
+        InsightsSettings {
+            similar_notes_min_words: 0,
+            ..InsightsSettings::default()
+        }
+    }
+
     #[tokio::test]
     async fn empty_when_nothing_indexed() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
-        let settings = InsightsSettings::default();
+        let settings = test_settings();
         let got = SimilarNotesDetector
             .run(&ctx(&store, dir.path(), &settings))
             .await
@@ -257,7 +290,7 @@ mod tests {
     async fn flags_identical_unlinked_notes() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
-        let settings = InsightsSettings::default();
+        let settings = test_settings();
         // Two identical, unlinked notes. The stub embedder maps equal text
         // to equal vectors, so the pair lands at distance 0 → high
         // confidence. (We don't seed an "unrelated" third note here: the
@@ -290,7 +323,7 @@ mod tests {
     async fn identical_notes_offer_resolve_duplicate() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
-        let settings = InsightsSettings::default();
+        let settings = test_settings();
         // Identical content → similarity 1.0, above DUPLICATE_SIMILARITY,
         // so the card must offer "Resolve duplicate", not "Insert link".
         seed(
@@ -321,10 +354,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn skips_notes_below_min_words() {
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        // Two identical but very short notes (well under 100 words).
+        seed(
+            dir.path(),
+            &store,
+            &[
+                ("a.md", "feature store architecture"),
+                ("b.md", "feature store architecture"),
+            ],
+        )
+        .await;
+
+        // Default settings keep the 100-word gate → the stubs are skipped.
+        let strict = InsightsSettings::default();
+        let got = SimilarNotesDetector
+            .run(&ctx(&store, dir.path(), &strict))
+            .await
+            .unwrap();
+        assert!(got.is_empty(), "short notes must be skipped by the word gate");
+
+        // Drop the gate and the very same pair surfaces.
+        let lenient = test_settings();
+        let got = SimilarNotesDetector
+            .run(&ctx(&store, dir.path(), &lenient))
+            .await
+            .unwrap();
+        assert_eq!(got.len(), 1, "with the gate off the pair is found again");
+    }
+
+    #[tokio::test]
     async fn skips_pairs_already_linked() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
-        let settings = InsightsSettings::default();
+        let settings = test_settings();
         seed(
             dir.path(),
             &store,
@@ -346,7 +411,7 @@ mod tests {
     async fn stable_id_survives_path_order() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
-        let settings = InsightsSettings::default();
+        let settings = test_settings();
         seed(
             dir.path(),
             &store,

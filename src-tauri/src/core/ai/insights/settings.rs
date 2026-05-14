@@ -42,10 +42,28 @@ pub struct InsightsSettings {
     /// detector to surface a note pair. Higher = stricter / fewer cards.
     #[serde(default = "default_min_similarity")]
     pub similar_notes_min_similarity: u32,
+    /// At or above this similarity (0-100%) a pair is treated as a
+    /// *duplicate* — the card offers "Resolve duplicate" instead of
+    /// "Insert link".
+    #[serde(default = "default_duplicate_similarity")]
+    pub similar_notes_duplicate_similarity: u32,
+    /// Notes shorter than this many words are ignored by `similar_notes`
+    /// entirely. Short stubs (a title and a line or two) produce noisy,
+    /// unreliable matches, so we skip any pair that touches one.
+    #[serde(default = "default_min_words")]
+    pub similar_notes_min_words: u32,
 }
 
 fn default_min_similarity() -> u32 {
     70
+}
+
+fn default_duplicate_similarity() -> u32 {
+    95
+}
+
+fn default_min_words() -> u32 {
+    100
 }
 
 impl Default for InsightsSettings {
@@ -63,6 +81,8 @@ impl Default for InsightsSettings {
             },
             detectors: BTreeMap::new(),
             similar_notes_min_similarity: default_min_similarity(),
+            similar_notes_duplicate_similarity: default_duplicate_similarity(),
+            similar_notes_min_words: default_min_words(),
         }
     }
 }
