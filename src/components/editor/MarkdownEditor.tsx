@@ -10,6 +10,7 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
@@ -100,6 +101,33 @@ const mycelEditorTheme = (dark: boolean) =>
         backgroundColor: 'var(--color-surface-0)',
         color: 'var(--color-text-secondary)',
       },
+      '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--color-border)' },
+      '.cm-panel.cm-search': { padding: '6px 8px', fontFamily: "'Inter', system-ui, sans-serif" },
+      '.cm-panel.cm-search input, .cm-panel.cm-search button, .cm-panel.cm-search label': {
+        fontSize: '12px',
+      },
+      '.cm-panel.cm-search input[type=text]': {
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '4px',
+        color: 'var(--color-text-primary)',
+        padding: '2px 6px',
+      },
+      '.cm-panel.cm-search button': {
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '4px',
+        color: 'var(--color-text-secondary)',
+        cursor: 'pointer',
+      },
+      '.cm-panel.cm-search button:hover': {
+        backgroundColor: 'var(--color-surface-hover)',
+        color: 'var(--color-text-primary)',
+      },
+      '.cm-panel.cm-search [name=close]': {
+        color: 'var(--color-text-muted)',
+        cursor: 'pointer',
+      },
       '.cm-searchMatch': { backgroundColor: 'var(--color-semantic-glow)' },
       '.cm-searchMatch.cm-searchMatch-selected': {
         backgroundColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
@@ -179,8 +207,10 @@ export function MarkdownEditor({ path }: Props) {
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         saveKeymap,
+        search({ top: true }),
+        highlightSelectionMatches(),
         markdown({
           base: markdownLanguage,
           codeLanguages: languages,
