@@ -34,10 +34,18 @@ pub struct InsightsSettings {
     pub enabled: bool,
     pub schedule: ScheduleSettings,
     pub limits: LimitSettings,
-    /// detector_name -> enabled. Empty in Phase 1 because no real detectors
-    /// ship. Phase 2+ populates this and the Settings panel lists each.
+    /// detector_name -> enabled. Empty by default; a detector not listed
+    /// here falls back to its `enabled_by_default()`.
     #[serde(default)]
     pub detectors: BTreeMap<String, bool>,
+    /// Minimum semantic similarity (0-100%) for the `similar_notes`
+    /// detector to surface a note pair. Higher = stricter / fewer cards.
+    #[serde(default = "default_min_similarity")]
+    pub similar_notes_min_similarity: u32,
+}
+
+fn default_min_similarity() -> u32 {
+    70
 }
 
 impl Default for InsightsSettings {
@@ -54,6 +62,7 @@ impl Default for InsightsSettings {
                 default_cooldown_days: 14,
             },
             detectors: BTreeMap::new(),
+            similar_notes_min_similarity: default_min_similarity(),
         }
     }
 }

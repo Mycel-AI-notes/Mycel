@@ -60,6 +60,8 @@ export interface InsightsSettings {
   schedule: ScheduleSettings;
   limits: LimitSettings;
   detectors: Record<string, boolean>;
+  /// Minimum semantic similarity (0-100%) for the similar-notes detector.
+  similar_notes_min_similarity: number;
 }
 
 export interface InsightsStatus {

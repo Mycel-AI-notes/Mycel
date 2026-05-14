@@ -126,11 +126,47 @@ export function InsightsSettings() {
 
       <fieldset className="flex flex-col gap-2" disabled={!draft.enabled}>
         <legend className="text-xs uppercase tracking-wider text-text-muted mb-1">
+          Similar notes
+        </legend>
+        <label className="flex items-center justify-between gap-3 text-xs text-text-secondary">
+          <span className="flex-1">
+            Minimum similarity
+            <span className="block text-[11px] text-text-muted">
+              Higher = stricter, fewer “these two notes are related” cards.
+            </span>
+          </span>
+          <span className="flex items-center gap-2 shrink-0">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={draft.similar_notes_min_similarity}
+              onChange={(e) =>
+                patch(
+                  (s) =>
+                    (s.similar_notes_min_similarity = parseInt(
+                      e.target.value,
+                      10,
+                    )),
+                )
+              }
+              className="w-28 accent-accent"
+            />
+            <span className="w-10 text-right tabular-nums text-text-primary">
+              {draft.similar_notes_min_similarity}%
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2" disabled={!draft.enabled}>
+        <legend className="text-xs uppercase tracking-wider text-text-muted mb-1">
           Detectors
         </legend>
         {Object.keys(draft.detectors).length === 0 ? (
           <div className="text-[11px] text-text-muted">
-            No detectors yet. Phase 2 ships the first ones.
+            Detectors run automatically. Toggles appear here once you mute one.
           </div>
         ) : (
           <ul className="flex flex-col gap-1.5">

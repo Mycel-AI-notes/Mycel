@@ -12,6 +12,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
 import type { Insight, InsightAction, InsightKind } from '@/stores/insights';
 import { useInsightsStore } from '@/stores/insights';
+import { appendToEditor } from '@/lib/editor-registry';
 
 const KIND_META: Record<InsightKind, { label: string; icon: typeof LinkIcon }> = {
   missing_wikilink:    { label: 'Missing wikilink',    icon: LinkIcon },
@@ -52,16 +53,16 @@ export function InsightCard({ insight }: Props) {
   const [showWhy, setShowWhy] = useState(false);
 
   const runAction = async (a: InsightAction) => {
-    // Phase 1: every action that mutates the vault (insert_wikilink,
-    // create_note_from_template) only marks the insight as acted — the
-    // actual write happens in Phase 4+. Read-only actions execute now.
     switch (a.type) {
+      // Navigation actions just open notes/links. They are NOT "resolving"
+      // the insight, so they must not mark it acted — opening a note to
+      // look at it shouldn't make the card vanish from the inbox.
       case 'open_note':
         await openNote(a.note_path).catch(console.error);
         break;
       case 'open_side_by_side':
-        // No real split-view in MVP-1; open them in sequence so both land in
-        // the tab strip and the user can flip between them.
+        // No real split-view yet; open them in sequence so both land in the
+        // tab strip and the user can flip between them.
         for (const p of a.note_paths) {
           await openNote(p).catch(console.error);
         }
@@ -74,13 +75,41 @@ export function InsightCard({ insight }: Props) {
           console.error('Failed to open url', e);
         }
         break;
-      case 'insert_wikilink':
+
+      // Resolving actions: they change the vault, so they DO mark the
+      // insight acted and remove the card.
+      case 'insert_wikilink': {
+        const inserted = await insertWikilink(a.source, a.target);
+        if (inserted) await act(insight.id);
+        break;
+      }
       case 'create_note_from_template':
-        // Phase 1: surface only. Phase 4+ wires the write path.
-        console.info('Action not yet implemented in Phase 1:', a.type);
+        // Still surface-only — the template engine lands in a later phase.
+        console.info('create_note_from_template not implemented yet');
         break;
     }
-    await act(insight.id);
+  };
+
+  /// Open the source note and append `[[target]]` to it. Returns true once
+  /// the link landed. The editor mounts asynchronously after `openNote`, so
+  /// we retry `appendToEditor` for a short window before giving up.
+  const insertWikilink = async (
+    source: string,
+    target: string,
+  ): Promise<boolean> => {
+    try {
+      await openNote(source);
+    } catch (e) {
+      console.error('Failed to open note for wikilink insert', e);
+      return false;
+    }
+    const link = `[[${target}]]`;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      if (appendToEditor(source, link)) return true;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    console.error('Editor for', source, 'never mounted — wikilink not inserted');
+    return false;
   };
 
   return (

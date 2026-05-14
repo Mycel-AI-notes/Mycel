@@ -55,6 +55,28 @@ export function insertAtCursor(path: string, text: string): boolean {
   return true;
 }
 
+/** Append `text` at the end of `path`'s editor doc, separated by a newline
+ *  if the doc doesn't already end with one. Unlike `insertAtCursor` this
+ *  doesn't depend on where the caret happens to be — used by the Insights
+ *  inbox's "Insert link" action, where the target note was just opened and
+ *  the caret is wherever the editor placed it. Returns true if a view was
+ *  found. */
+export function appendToEditor(path: string, text: string): boolean {
+  const view = views.get(path);
+  if (!view) return false;
+  const end = view.state.doc.length;
+  const endsWithNl =
+    end > 0 && view.state.doc.sliceString(end - 1, end) === '\n';
+  const insert = (end > 0 && !endsWithNl ? '\n' : '') + text;
+  view.dispatch({
+    changes: { from: end, insert },
+    selection: { anchor: end + insert.length },
+    scrollIntoView: true,
+  });
+  view.focus();
+  return true;
+}
+
 /** Replace the editor doc entirely. Used when the on-disk content was
  *  changed by sync (or by the conflict-resolution "Reload" action) and we
  *  need to push the new text into the live CodeMirror view without

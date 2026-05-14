@@ -8,7 +8,8 @@
 //! Algorithm (O(notes · k), not O(notes²)):
 //!   1. List every indexed note.
 //!   2. For each, kNN against the whole vector table (reuses `find_related`).
-//!   3. Keep neighbour pairs whose distance is under `MAX_DISTANCE`.
+//!   3. Convert each neighbour's distance to a 0-100% similarity and keep
+//!      pairs at or above the user's `similar_notes_min_similarity` knob.
 //!   4. Canonicalise pairs (sorted) so (a,b) and (b,a) collapse.
 //!   5. Drop pairs already connected by a wikilink in either direction.
 //!   6. Emit one `MissingWikilink` insight per surviving pair.
@@ -21,15 +22,16 @@ use crate::core::ai::insights::detector::{stable_id, Detector, DetectorContext};
 use crate::core::ai::insights::models::{Insight, InsightAction, InsightKind};
 use crate::core::ai::related::find_related;
 
-/// Neighbour distance cutoff. `chunks_vec` returns smaller-is-closer
-/// distances; two identical notes land near 0. 0.5 keeps the detector to
-/// "strongly similar" pairs — loosen it if the inbox feels too quiet, tighten
-/// it if pairs feel unrelated. Deliberately a plain const: the per-detector
-/// tuning surface is Phase 3+ work, not Phase 2.
-const MAX_DISTANCE: f32 = 0.5;
-
 /// Neighbours fetched per note before pair-filtering.
 const K: usize = 6;
+
+/// Map a `chunks_vec` distance to a 0.0-1.0 similarity score. The index
+/// stores normalised embeddings, so the distance lands in roughly [0, 2]
+/// (identical text ≈ 0). We treat 0 → 1.0 and 2 → 0.0, clamped. The
+/// user-facing threshold is a percentage of this.
+fn similarity(distance: f32) -> f32 {
+    (1.0 - distance / 2.0).clamp(0.0, 1.0)
+}
 
 pub struct SimilarNotesDetector;
 
@@ -45,36 +47,41 @@ impl Detector for SimilarNotesDetector {
             return Ok(Vec::new());
         }
 
-        // Canonical pair -> best (smallest) distance seen.
+        // User threshold as a 0.0-1.0 fraction. Clamp the stored percentage
+        // so a corrupt settings file can't make the detector reject (or
+        // accept) everything in a way the UI never showed.
+        let min_similarity =
+            (ctx.settings.similar_notes_min_similarity.min(100) as f32) / 100.0;
+
+        // Canonical pair -> best (highest) similarity seen.
         let mut pairs: HashMap<(String, String), f32> = HashMap::new();
         for note in &notes {
             let hits = find_related(&ctx.store, note, K)?;
             for hit in hits {
-                if hit.distance > MAX_DISTANCE {
+                let sim = similarity(hit.distance);
+                if sim < min_similarity {
                     continue;
                 }
                 let key = canonical_pair(note, &hit.note_path);
                 pairs
                     .entry(key)
-                    .and_modify(|d| {
-                        if hit.distance < *d {
-                            *d = hit.distance;
+                    .and_modify(|s| {
+                        if sim > *s {
+                            *s = sim;
                         }
                     })
-                    .or_insert(hit.distance);
+                    .or_insert(sim);
             }
         }
 
         let now = chrono::Utc::now().timestamp();
         let mut out = Vec::new();
-        for ((a, b), distance) in pairs {
+        for ((a, b), confidence) in pairs {
             if already_linked(ctx, &a, &b) {
                 continue;
             }
             let note_paths = vec![a.clone(), b.clone()];
             let id = stable_id(InsightKind::MissingWikilink.as_key(), &note_paths, &[]);
-            // Map distance → confidence: 0 distance = 1.0, MAX_DISTANCE = 0.0.
-            let confidence = (1.0 - distance / MAX_DISTANCE).clamp(0.0, 1.0);
             out.push(Insight {
                 id,
                 kind: InsightKind::MissingWikilink,
@@ -162,6 +169,7 @@ mod tests {
     use super::*;
     use crate::core::ai::embedder::testing::StubEmbedder;
     use crate::core::ai::indexer;
+    use crate::core::ai::insights::settings::InsightsSettings;
     use crate::core::ai::store::{AiStore, EMBED_DIM};
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -184,10 +192,15 @@ mod tests {
         }
     }
 
-    fn ctx<'a>(store: &Arc<AiStore>, root: &'a std::path::Path) -> DetectorContext<'a> {
+    fn ctx<'a>(
+        store: &Arc<AiStore>,
+        root: &'a std::path::Path,
+        settings: &'a InsightsSettings,
+    ) -> DetectorContext<'a> {
         DetectorContext {
             store: store.clone(),
             vault_root: root,
+            settings,
             has_llm: false,
             has_web: false,
         }
@@ -197,8 +210,9 @@ mod tests {
     async fn empty_when_nothing_indexed() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = InsightsSettings::default();
         let got = SimilarNotesDetector
-            .run(&ctx(&store, dir.path()))
+            .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
         assert!(got.is_empty());
@@ -208,6 +222,7 @@ mod tests {
     async fn flags_identical_unlinked_notes() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = InsightsSettings::default();
         // Two identical, unlinked notes. The stub embedder maps equal text
         // to equal vectors, so the pair lands at distance 0 → high
         // confidence. (We don't seed an "unrelated" third note here: the
@@ -224,7 +239,7 @@ mod tests {
         .await;
 
         let got = SimilarNotesDetector
-            .run(&ctx(&store, dir.path()))
+            .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
 
@@ -240,6 +255,7 @@ mod tests {
     async fn skips_pairs_already_linked() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = InsightsSettings::default();
         seed(
             dir.path(),
             &store,
@@ -251,7 +267,7 @@ mod tests {
         .await;
 
         let got = SimilarNotesDetector
-            .run(&ctx(&store, dir.path()))
+            .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
         assert!(got.is_empty(), "a.md already links to b.md");
@@ -261,6 +277,7 @@ mod tests {
     async fn stable_id_survives_path_order() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = InsightsSettings::default();
         seed(
             dir.path(),
             &store,
@@ -272,11 +289,11 @@ mod tests {
         .await;
 
         let first = SimilarNotesDetector
-            .run(&ctx(&store, dir.path()))
+            .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
         let second = SimilarNotesDetector
-            .run(&ctx(&store, dir.path()))
+            .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
         assert_eq!(first.len(), 1);

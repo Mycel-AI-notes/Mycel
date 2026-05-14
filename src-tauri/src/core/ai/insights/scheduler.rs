@@ -136,8 +136,9 @@ impl InsightsEngine {
         let ctx = DetectorContext {
             store: self.store.clone(),
             vault_root: &self.vault_root,
-            // Phase 2+ wires real flags. For Phase 1 we only ship detectors
-            // that don't need LLM/web, so default-false is harmless.
+            settings,
+            // Phase 3+ wires real flags. The detectors shipped so far don't
+            // need live LLM/web access, so default-false is harmless.
             has_llm: false,
             has_web: false,
         };

@@ -14,16 +14,19 @@ use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 
 use super::models::Insight;
+use super::settings::InsightsSettings;
 use crate::core::ai::store::AiStore;
 
 /// What a detector gets to read.
 ///
-/// MVP-1 only has `AiStore` and the vault root on disk. As later phases add a
-/// graph index, activity log, and snapshot store, they slot in here without
-/// touching detector code that doesn't need them.
+/// As later phases add a graph index, activity log, and snapshot store, they
+/// slot in here without touching detector code that doesn't need them.
 pub struct DetectorContext<'a> {
     pub store: Arc<AiStore>,
     pub vault_root: &'a Path,
+    /// The live engine settings — detectors read their own tuning knobs
+    /// from here (e.g. `similar_notes_min_similarity`).
+    pub settings: &'a InsightsSettings,
     /// Whether an OpenRouter key is configured and the master toggle is on.
     /// Detectors that `requires_llm()` are skipped when this is false.
     pub has_llm: bool,
