@@ -215,23 +215,17 @@ export function mycelSearchPanel(view: EditorView): Panel {
     dom,
     top: true,
     mount() {
-      // Seed from an existing query, or the current single-line selection.
-      const existing = getSearchQuery(view.state);
-      if (existing.search) {
-        searchInput.value = existing.search;
-        replaceInput.value = existing.replace;
-        caseSensitive = existing.caseSensitive;
-        caseBtn.classList.toggle('is-active', caseSensitive);
-      } else {
-        const sel = view.state.selection.main;
-        if (
-          !sel.empty &&
-          view.state.doc.lineAt(sel.from).number === view.state.doc.lineAt(sel.to).number
-        ) {
-          searchInput.value = view.state.sliceDoc(sel.from, sel.to);
-        }
-      }
-      if (searchInput.value) commit();
+      // `openSearchPanel` has already dispatched the query (seeded from the
+      // previous search or the current selection) *before* this panel is
+      // created, so here we only reflect that state in the UI. We must not
+      // dispatch from `mount()` — it runs inside CodeMirror's update cycle,
+      // where `view.dispatch` throws.
+      const q = getSearchQuery(view.state);
+      searchInput.value = q.search;
+      replaceInput.value = q.replace;
+      caseSensitive = q.caseSensitive;
+      caseBtn.classList.toggle('is-active', caseSensitive);
+      updateCount();
       searchInput.focus();
       searchInput.select();
     },
