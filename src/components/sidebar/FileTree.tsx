@@ -42,6 +42,36 @@ function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
 }
 
+function findEntry(tree: FileEntry[], path: string): FileEntry | null {
+  for (const e of tree) {
+    if (e.path === path) return e;
+    if (e.children) {
+      const found = findEntry(e.children, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Filenames directly inside `folder` ('' = vault root). */
+function childNames(tree: FileEntry[], folder: string): Set<string> {
+  const entries = folder === '' ? tree : findEntry(tree, folder)?.children ?? [];
+  return new Set(entries.map((e) => e.name));
+}
+
+/** Pick a name not already in `taken`, appending " copy" (then " copy N"). */
+function uniqueDestName(taken: Set<string>, name: string): string {
+  if (!taken.has(name)) return name;
+  const m = name.match(/^(.*?)((?:\.md\.age|\.md|\.[^.]+)?)$/);
+  const stem = m ? m[1] : name;
+  const ext = m ? m[2] : '';
+  for (let i = 1; i < 1000; i += 1) {
+    const candidate = i === 1 ? `${stem} copy${ext}` : `${stem} copy ${i}${ext}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${stem} copy ${Date.now()}${ext}`;
+}
+
 // Flatten visible (expanded) entries in display order so keyboard nav can
 // move "up/down one row" without re-walking the tree at every keypress.
 function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
@@ -76,6 +106,10 @@ interface NodeProps {
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
+  selected: Set<string>;
+  toggleSelect: (path: string) => void;
+  selectOnly: (path: string) => void;
+  clearSelection: () => void;
 }
 
 function FileTreeNode({
@@ -98,6 +132,10 @@ function FileTreeNode({
   renameRequest,
   clearRenameRequest,
   onRowKeyDown,
+  selected,
+  toggleSelect,
+  selectOnly,
+  clearSelection,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -109,6 +147,7 @@ function FileTreeNode({
   const isTabbable = tabbablePath === entry.path;
 
   const isActive = activeTabPath === entry.path;
+  const isSelected = selected.has(entry.path);
   const isKB = !!entry.is_knowledge_base;
   const isKbDir = !!entry.is_kb_dir;
   const isQuickRoot = !!entry.is_quick_notes;
@@ -246,11 +285,17 @@ function FileTreeNode({
         e.preventDefault();
         return;
       }
-      e.dataTransfer.setData(DRAG_MIME, entry.path);
-      e.dataTransfer.setData('text/plain', entry.path);
+      // Dragging a row that's part of a multi-selection moves the whole
+      // selection; dragging anything else moves just that row. Multiple
+      // paths are newline-joined in the drag payload.
+      const paths =
+        isSelected && selected.size > 1 ? Array.from(selected) : [entry.path];
+      const payload = paths.join('\n');
+      e.dataTransfer.setData(DRAG_MIME, payload);
+      e.dataTransfer.setData('text/plain', payload);
       e.dataTransfer.effectAllowed = 'move';
     },
-    [entry.path, isLocked, renaming],
+    [entry.path, isLocked, renaming, isSelected, selected],
   );
 
   const handleDragOver = useCallback(
@@ -276,17 +321,21 @@ function FileTreeNode({
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-      const src =
+      const raw =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
-      if (!src) return;
-      if (src === entry.path) return;
-      if (entry.path.startsWith(src + '/')) return; // cannot move into own descendant
-      if (parentOf(src) === entry.path) return; // already inside
-      const name = src.split('/').pop()!;
-      renameNote(src, joinPath(entry.path, name));
+      if (!raw) return;
+      const sources = raw.split('\n').filter(Boolean);
+      for (const src of sources) {
+        if (src === entry.path) continue;
+        if (entry.path.startsWith(src + '/')) continue; // can't move into own descendant
+        if (parentOf(src) === entry.path) continue; // already inside
+        const name = src.split('/').pop()!;
+        renameNote(src, joinPath(entry.path, name));
+      }
+      clearSelection();
       setExpanded((s) => new Set(s).add(entry.path));
     },
-    [entry, renameNote, setExpanded],
+    [entry, renameNote, setExpanded, clearSelection],
   );
 
   return (
@@ -304,12 +353,19 @@ function FileTreeNode({
           'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
-          isFocused && !isActive && 'bg-surface-hover',
+          isFocused && !isActive && !isSelected && 'bg-surface-hover',
+          isSelected && !isActive && 'bg-accent/15 text-accent',
           isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => {
+        onClick={(e) => {
           setFocusedPath(entry.path);
+          // Cmd/Ctrl-click toggles multi-selection without opening the note.
+          if (e.metaKey || e.ctrlKey) {
+            toggleSelect(entry.path);
+            return;
+          }
+          selectOnly(entry.path);
           handleClick();
         }}
         onDoubleClick={handleDoubleClick}
@@ -531,6 +587,10 @@ function FileTreeNode({
               renameRequest={renameRequest}
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
+              selected={selected}
+              toggleSelect={toggleSelect}
+              selectOnly={selectOnly}
+              clearSelection={clearSelection}
             />
           ))}
         </div>
@@ -546,7 +606,7 @@ interface KbMenuState {
 }
 
 export function FileTree() {
-  const { fileTree, vaultRoot, createNote, createFolder, renameNote, activeTabPath } =
+  const { fileTree, vaultRoot, createNote, createFolder, renameNote, copyNote, activeTabPath } =
     useVaultStore();
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
@@ -556,10 +616,51 @@ export function FileTree() {
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
   const [renameRequest, setRenameRequest] = useState<string | null>(null);
+  // Multi-selection (Cmd/Ctrl-click) and the copy/paste clipboard. The
+  // clipboard holds vault-relative paths captured at Cmd+C time.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [clipboard, setClipboard] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
 
   const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
+
+  const toggleSelect = useCallback((path: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const selectOnly = useCallback((path: string) => {
+    setSelected(new Set([path]));
+  }, []);
+
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // Paste every clipboard entry into `targetFolder` ('' = vault root),
+  // picking a collision-free " copy" name for each.
+  const handlePaste = useCallback(
+    async (targetFolder: string) => {
+      if (clipboard.length === 0) return;
+      for (const src of clipboard) {
+        // Re-read the tree each iteration so names from earlier pastes in
+        // this same batch are taken into account.
+        const taken = childNames(useVaultStore.getState().fileTree, targetFolder);
+        const srcName = src.split('/').pop()!;
+        const destName = uniqueDestName(taken, srcName);
+        try {
+          await copyNote(src, joinPath(targetFolder, destName));
+        } catch (err) {
+          console.error('Copy failed:', err);
+        }
+      }
+      if (targetFolder) setExpanded((s) => new Set(s).add(targetFolder));
+    },
+    [clipboard, copyNote],
+  );
 
   // The tree exposes exactly one Tab stop using the roving tabindex pattern.
   // If the user has explicitly focused a row, that's the tab stop; otherwise
@@ -581,6 +682,22 @@ export function FileTree() {
         setFocusedPath(path);
         setAutoFocusPath(path);
       };
+
+      // Cmd/Ctrl+C — copy the current selection (or the focused row) to the
+      // clipboard. Cmd/Ctrl+V — paste into the focused folder (or the
+      // focused file's parent folder).
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        const paths = selected.size > 0 ? Array.from(selected) : [entry.path];
+        setClipboard(paths);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        const target = entry.is_dir ? entry.path : parentOf(entry.path);
+        void handlePaste(target);
+        return;
+      }
 
       switch (e.key) {
         case 'ArrowDown': {
@@ -654,7 +771,7 @@ export function FileTree() {
         }
       }
     },
-    [fileTree, expanded],
+    [fileTree, expanded, selected, handlePaste],
   );
 
   const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
@@ -749,14 +866,17 @@ export function FileTree() {
     (e: ReactDragEvent) => {
       e.preventDefault();
       setRootDragOver(false);
-      const src =
+      const raw =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
-      if (!src) return;
-      if (parentOf(src) === '') return; // already at vault root
-      const name = src.split('/').pop()!;
-      renameNote(src, name);
+      if (!raw) return;
+      for (const src of raw.split('\n').filter(Boolean)) {
+        if (parentOf(src) === '') continue; // already at vault root
+        const name = src.split('/').pop()!;
+        renameNote(src, name);
+      }
+      clearSelection();
     },
-    [renameNote],
+    [renameNote, clearSelection],
   );
 
   if (!vaultRoot) return null;
@@ -832,6 +952,10 @@ export function FileTree() {
             renameRequest={renameRequest}
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
+            selected={selected}
+            toggleSelect={toggleSelect}
+            selectOnly={selectOnly}
+            clearSelection={clearSelection}
           />
         ))}
         {fileTree.length === 0 && !creating && (

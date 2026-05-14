@@ -271,3 +271,49 @@ pub async fn note_rename(old_path: String, new_path: String, state: State<'_, Ap
     std::fs::rename(&old_abs, &new_abs).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_copy(
+    src_path: String,
+    dest_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if is_protected(&src_path) {
+        return Err("This folder is managed by Mycel and cannot be copied".into());
+    }
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    let src_abs = vault_root.join(&src_path);
+    let dest_abs = vault_root.join(&dest_path);
+    if dest_abs.exists() {
+        return Err("Destination already exists".into());
+    }
+    if let Some(parent) = dest_abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    if src_abs.is_dir() {
+        copy_dir_recursive(&src_abs, &dest_abs).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::copy(&src_abs, &dest_abs).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

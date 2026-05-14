@@ -57,6 +57,10 @@ interface VaultState {
   updateNoteLive: (path: string, content: string) => void;
   createNote: (path: string) => Promise<void>;
   createFolder: (path: string) => Promise<void>;
+  /** Copy a note or folder (recursively) to a new path, then refresh the tree.
+   *  `destPath` is expected to be collision-free — the caller picks a unique
+   *  name; the backend refuses to overwrite an existing path. */
+  copyNote: (srcPath: string, destPath: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
   /** Update open tabs / noteCache after a file was renamed on disk by some
@@ -665,6 +669,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   createFolder: async (path) => {
     await invoke('folder_create', { path });
+    await get().refreshTree();
+  },
+
+  copyNote: async (srcPath, destPath) => {
+    await invoke('note_copy', { srcPath, destPath });
     await get().refreshTree();
   },
 
