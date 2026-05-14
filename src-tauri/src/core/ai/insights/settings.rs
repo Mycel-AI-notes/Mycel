@@ -59,13 +59,6 @@ impl Default for InsightsSettings {
 }
 
 impl InsightsSettings {
-    pub fn detector_enabled(&self, name: &str) -> bool {
-        // Default to "on" so a freshly-shipped detector starts producing
-        // insights without the user having to flip a switch — Settings is
-        // there for muting noisy ones, not as a gate.
-        self.detectors.get(name).copied().unwrap_or(true)
-    }
-
     /// Returns `(hour, minute)` parsed from `schedule.time`. Falls back to
     /// 07:00 if the stored value is malformed — the engine treats schedule
     /// as best-effort, never as a place to crash.
@@ -148,9 +141,4 @@ mod tests {
         assert_eq!(s.schedule_hm(), (7, 0));
     }
 
-    #[test]
-    fn detector_enabled_defaults_to_true() {
-        let s = InsightsSettings::default();
-        assert!(s.detector_enabled("anything"));
-    }
 }

@@ -143,7 +143,16 @@ impl InsightsEngine {
         };
 
         for d in self.detectors.iter() {
-            if !settings.detector_enabled(d.name()) {
+            // A detector runs if the user explicitly enabled it in settings,
+            // or — when it's not in the settings dict yet — if it ships
+            // enabled by default. Without the `enabled_by_default` fallback a
+            // brand-new detector (or the debug mock) would run the moment it
+            // exists, which is not what `enabled_by_default() == false` means.
+            let enabled = match settings.detectors.get(d.name()) {
+                Some(&v) => v,
+                None => d.enabled_by_default(),
+            };
+            if !enabled {
                 continue;
             }
             if d.requires_llm() && !ctx.has_llm {

@@ -133,6 +133,22 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_runs_started ON insights_runs(started_at);
         "#,
     )?;
+
+    // Migration for vaults whose `insights` table predates the
+    // `detector_name` column (created by an early build of this branch).
+    // `CREATE TABLE IF NOT EXISTS` above leaves an existing table untouched,
+    // so we add the column explicitly and swallow the "duplicate column"
+    // error that fires when it's already there.
+    if let Err(e) = conn.execute(
+        "ALTER TABLE insights ADD COLUMN detector_name TEXT NOT NULL DEFAULT ''",
+        [],
+    ) {
+        let msg = e.to_string();
+        if !msg.contains("duplicate column name") {
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 
