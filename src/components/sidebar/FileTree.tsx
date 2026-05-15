@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import {
   ChevronRight,
@@ -22,6 +22,7 @@ import type { FileEntry } from '@/types';
 import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
+import { useCustomOrder, orderTree } from '@/stores/customOrder';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
@@ -56,8 +57,11 @@ function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
   return out;
 }
 
+type DropZone = 'above' | 'into' | 'below';
+
 interface NodeProps {
   entry: FileEntry;
+  siblings: FileEntry[];
   depth: number;
   expanded: Set<string>;
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -80,6 +84,7 @@ interface NodeProps {
 
 function FileTreeNode({
   entry,
+  siblings,
   depth,
   expanded,
   setExpanded,
@@ -101,7 +106,7 @@ function FileTreeNode({
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [dropZone, setDropZone] = useState<DropZone | null>(null);
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -253,48 +258,104 @@ function FileTreeNode({
     [entry.path, isLocked, renaming],
   );
 
+  const computeDropZone = useCallback(
+    (e: ReactDragEvent): DropZone => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const h = rect.height || 1;
+      if (entry.is_dir) {
+        if (y < h * 0.25) return 'above';
+        if (y > h * 0.75) return 'below';
+        return 'into';
+      }
+      return y < h * 0.5 ? 'above' : 'below';
+    },
+    [entry.is_dir],
+  );
+
   const handleDragOver = useCallback(
     (e: ReactDragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
-      setIsDragOver(true);
+      setDropZone(computeDropZone(e));
     },
-    [],
+    [computeDropZone],
   );
 
   const handleDragLeave = useCallback((e: ReactDragEvent) => {
     // Avoid flicker when the pointer moves into a child element.
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    setIsDragOver(false);
+    setDropZone(null);
   }, []);
 
   const handleDrop = useCallback(
     (e: ReactDragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setIsDragOver(false);
+      const zone = computeDropZone(e);
+      setDropZone(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
-      // When the drop target is a file, treat its parent folder as the
-      // destination so dropping inside a subfolder doesn't escape to root.
-      const targetDir = entry.is_dir ? entry.path : parentOf(entry.path);
       if (src === entry.path) return;
+
+      const isInto = zone === 'into' && entry.is_dir;
+      const targetDir = isInto ? entry.path : parentOf(entry.path);
+
+      // Cannot move a folder into itself or any of its descendants.
       if (targetDir === src) return;
-      if (targetDir.startsWith(src + '/')) return; // cannot move into own descendant
-      if (parentOf(src) === targetDir) return; // already inside
-      const name = src.split('/').pop()!;
-      renameNote(src, joinPath(targetDir, name));
-      if (entry.is_dir) {
+      if (targetDir.startsWith(src + '/')) return;
+
+      const srcName = src.split('/').pop()!;
+      const targetPath = joinPath(targetDir, srcName);
+      const fromParent = parentOf(src);
+      const sameParent = fromParent === targetDir;
+
+      // Build the new ordered child-name list for the destination folder.
+      const targetChildren = isInto ? (entry.children ?? []) : siblings;
+      const baseNames = targetChildren
+        .map((c) => c.name)
+        .filter((n) => n !== srcName);
+      let newOrder: string[];
+      if (isInto) {
+        newOrder = [...baseNames, srcName];
+      } else {
+        const idx = baseNames.indexOf(entry.name);
+        const insertAt = idx === -1
+          ? baseNames.length
+          : zone === 'above'
+            ? idx
+            : idx + 1;
+        newOrder = [
+          ...baseNames.slice(0, insertAt),
+          srcName,
+          ...baseNames.slice(insertAt),
+        ];
+      }
+
+      const { setOrder, renamePath } = useCustomOrder.getState();
+      if (!sameParent) {
+        renameNote(src, targetPath);
+        renamePath(src, targetPath);
+      }
+      setOrder(targetDir, newOrder);
+
+      if (isInto) {
         setExpanded((s) => new Set(s).add(entry.path));
       }
     },
-    [entry, renameNote, setExpanded],
+    [entry, siblings, renameNote, setExpanded, computeDropZone],
   );
 
   return (
-    <div>
+    <div className="relative">
+      {dropZone === 'above' && (
+        <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 bg-accent rounded-full" />
+      )}
+      {dropZone === 'below' && (
+        <div className="pointer-events-none absolute left-2 right-2 bottom-0 h-0.5 bg-accent rounded-full" />
+      )}
       <div
         ref={rowRef}
         draggable={!renaming && !isLocked}
@@ -309,7 +370,7 @@ function FileTreeNode({
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
           isFocused && !isActive && 'bg-surface-hover',
-          isDragOver && 'bg-accent/15 ring-1 ring-accent/40',
+          dropZone === 'into' && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
@@ -517,6 +578,7 @@ function FileTreeNode({
             <FileTreeNode
               key={child.path}
               entry={child}
+              siblings={entry.children ?? []}
               depth={depth + 1}
               expanded={expanded}
               setExpanded={setExpanded}
@@ -552,6 +614,11 @@ interface KbMenuState {
 export function FileTree() {
   const { fileTree, vaultRoot, createNote, createFolder, renameNote, activeTabPath } =
     useVaultStore();
+  const orderMap = useCustomOrder((s) => s.orderMap);
+  const orderedTree = useMemo(
+    () => orderTree(fileTree, '', orderMap),
+    [fileTree, orderMap],
+  );
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -570,14 +637,14 @@ export function FileTree() {
   // fall back to the first visible row so Tab into the tree always lands
   // somewhere.
   const tabbablePath = (() => {
-    const flat = flattenVisible(fileTree, expanded);
+    const flat = flattenVisible(orderedTree, expanded);
     if (focusedPath && flat.some((e) => e.path === focusedPath)) return focusedPath;
     return flat[0]?.path ?? null;
   })();
 
   const onRowKeyDown = useCallback(
     (e: React.KeyboardEvent, entry: FileEntry) => {
-      const flat = flattenVisible(fileTree, expanded);
+      const flat = flattenVisible(orderedTree, expanded);
       const idx = flat.findIndex((x) => x.path === entry.path);
       if (idx < 0) return;
 
@@ -658,7 +725,7 @@ export function FileTree() {
         }
       }
     },
-    [fileTree, expanded],
+    [orderedTree, expanded],
   );
 
   const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
@@ -759,6 +826,7 @@ export function FileTree() {
       if (parentOf(src) === '') return; // already at vault root
       const name = src.split('/').pop()!;
       renameNote(src, name);
+      useCustomOrder.getState().renamePath(src, name);
     },
     [renameNote],
   );
@@ -814,10 +882,11 @@ export function FileTree() {
             />
           </div>
         )}
-        {fileTree.map((entry) => (
+        {orderedTree.map((entry) => (
           <FileTreeNode
             key={entry.path}
             entry={entry}
+            siblings={orderedTree}
             depth={0}
             expanded={expanded}
             setExpanded={setExpanded}
@@ -838,7 +907,7 @@ export function FileTree() {
             onRowKeyDown={onRowKeyDown}
           />
         ))}
-        {fileTree.length === 0 && !creating && (
+        {orderedTree.length === 0 && !creating && (
           <p className="text-text-muted text-xs px-3 py-4">No notes yet. Click + to create one.</p>
         )}
       </div>
