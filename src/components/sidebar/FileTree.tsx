@@ -255,13 +255,12 @@ function FileTreeNode({
 
   const handleDragOver = useCallback(
     (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       setIsDragOver(true);
     },
-    [entry.is_dir],
+    [],
   );
 
   const handleDragLeave = useCallback((e: ReactDragEvent) => {
@@ -272,19 +271,24 @@ function FileTreeNode({
 
   const handleDrop = useCallback(
     (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
+      // When the drop target is a file, treat its parent folder as the
+      // destination so dropping inside a subfolder doesn't escape to root.
+      const targetDir = entry.is_dir ? entry.path : parentOf(entry.path);
       if (src === entry.path) return;
-      if (entry.path.startsWith(src + '/')) return; // cannot move into own descendant
-      if (parentOf(src) === entry.path) return; // already inside
+      if (targetDir === src) return;
+      if (targetDir.startsWith(src + '/')) return; // cannot move into own descendant
+      if (parentOf(src) === targetDir) return; // already inside
       const name = src.split('/').pop()!;
-      renameNote(src, joinPath(entry.path, name));
-      setExpanded((s) => new Set(s).add(entry.path));
+      renameNote(src, joinPath(targetDir, name));
+      if (entry.is_dir) {
+        setExpanded((s) => new Set(s).add(entry.path));
+      }
     },
     [entry, renameNote, setExpanded],
   );
@@ -305,7 +309,7 @@ function FileTreeNode({
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
           isFocused && !isActive && 'bg-surface-hover',
-          isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
+          isDragOver && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
