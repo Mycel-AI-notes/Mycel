@@ -247,15 +247,19 @@ function FileTreeNode({
 
   const handleDragStart = useCallback(
     (e: ReactDragEvent) => {
-      if (isLocked || renaming) {
+      if (renaming) {
         e.preventDefault();
         return;
       }
+      // Protected roots (KB / Quick) can still be dragged so the user can
+      // reorder them among root entries, but `handleDrop` refuses any move
+      // that would change their parent — the backend rejects renames of
+      // these paths anyway.
       e.dataTransfer.setData(DRAG_MIME, entry.path);
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
     },
-    [entry.path, isLocked, renaming],
+    [entry.path, renaming],
   );
 
   const computeDropZone = useCallback(
@@ -264,8 +268,10 @@ function FileTreeNode({
       const y = e.clientY - rect.top;
       const h = rect.height || 1;
       if (entry.is_dir) {
-        if (y < h * 0.25) return 'above';
-        if (y > h * 0.75) return 'below';
+        // Narrow above/below bands so the bulk of the row commits to "into",
+        // which is the common intent when targeting a folder.
+        if (y < h * 0.2) return 'above';
+        if (y > h * 0.8) return 'below';
         return 'into';
       }
       return y < h * 0.5 ? 'above' : 'below';
@@ -306,6 +312,13 @@ function FileTreeNode({
       // Cannot move a folder into itself or any of its descendants.
       if (targetDir === src) return;
       if (targetDir.startsWith(src + '/')) return;
+      // Protected roots (KB / Quick) cannot be moved into another folder.
+      if (
+        (src === KNOWLEDGE_BASE_DIR || src === QUICK_NOTES_DIR) &&
+        targetDir !== ''
+      ) {
+        return;
+      }
 
       const srcName = src.split('/').pop()!;
       const targetPath = joinPath(targetDir, srcName);
@@ -359,7 +372,7 @@ function FileTreeNode({
         )}
         <div
           ref={rowRef}
-          draggable={!renaming && !isLocked}
+          draggable={!renaming}
           tabIndex={isTabbable ? 0 : -1}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
@@ -556,7 +569,37 @@ function FileTreeNode({
       </div>
 
       {entry.is_dir && isOpen && (
-        <div>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const src =
+              e.dataTransfer.getData(DRAG_MIME) ||
+              e.dataTransfer.getData('text/plain');
+            if (!src || src === entry.path) return;
+            if (entry.path.startsWith(src + '/')) return;
+            if (parentOf(src) === entry.path) return; // already inside
+            if (
+              (src === KNOWLEDGE_BASE_DIR || src === QUICK_NOTES_DIR) &&
+              entry.path !== ''
+            ) {
+              return;
+            }
+            const srcName = src.split('/').pop()!;
+            const baseNames = (entry.children ?? [])
+              .map((c) => c.name)
+              .filter((n) => n !== srcName);
+            const { setOrder, renamePath } = useCustomOrder.getState();
+            renameNote(src, joinPath(entry.path, srcName));
+            renamePath(src, joinPath(entry.path, srcName));
+            setOrder(entry.path, [...baseNames, srcName]);
+          }}
+        >
           {creating && creating.parent === entry.path && (
             <div
               className="py-0.5"
