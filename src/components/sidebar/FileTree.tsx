@@ -78,6 +78,8 @@ interface NodeProps {
   autoFocusPath: string | null;
   setFocusedPath: (p: string | null) => void;
   setAutoFocusPath: (p: string | null) => void;
+  draggingPath: string | null;
+  setDraggingPath: (p: string | null) => void;
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
@@ -102,6 +104,8 @@ function FileTreeNode({
   autoFocusPath,
   setFocusedPath,
   setAutoFocusPath,
+  draggingPath,
+  setDraggingPath,
   renameRequest,
   clearRenameRequest,
   onRowKeyDown,
@@ -109,7 +113,7 @@ function FileTreeNode({
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const isDragging = draggingPath === entry.path;
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -261,14 +265,14 @@ function FileTreeNode({
       e.dataTransfer.setData(DRAG_MIME, entry.path);
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
-      setIsDragging(true);
+      setDraggingPath(entry.path);
     },
-    [entry.path, renaming],
+    [entry.path, renaming, setDraggingPath],
   );
 
   const handleDragEnd = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+    setDraggingPath(null);
+  }, [setDraggingPath]);
 
   const computeDropZone = useCallback(
     (e: ReactDragEvent): DropZone => {
@@ -376,6 +380,7 @@ function FileTreeNode({
       });
       setFocusedPath(targetPath);
       setAutoFocusPath(targetPath);
+      setDraggingPath(null);
     },
     [
       entry,
@@ -384,6 +389,7 @@ function FileTreeNode({
       setExpanded,
       setFocusedPath,
       setAutoFocusPath,
+      setDraggingPath,
       computeDropZone,
     ],
   );
@@ -631,6 +637,7 @@ function FileTreeNode({
             setExpanded((s) => new Set(s).add(entry.path));
             setFocusedPath(targetPath);
             setAutoFocusPath(targetPath);
+            setDraggingPath(null);
           }}
         >
           {creating && creating.parent === entry.path && (
@@ -673,6 +680,8 @@ function FileTreeNode({
               autoFocusPath={autoFocusPath}
               setFocusedPath={setFocusedPath}
               setAutoFocusPath={setAutoFocusPath}
+              draggingPath={draggingPath}
+              setDraggingPath={setDraggingPath}
               renameRequest={renameRequest}
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
@@ -706,10 +715,19 @@ export function FileTree() {
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
   const [renameRequest, setRenameRequest] = useState<string | null>(null);
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
 
   const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
+
+  // Safety net: whenever the tree changes (after a rename/move/refresh) any
+  // stale drag-source highlight gets cleared. dragend doesn't fire reliably
+  // when the source DOM node unmounts mid-drag, so without this the source
+  // styling could stick across drags and build up like a string of lights.
+  useEffect(() => {
+    setDraggingPath(null);
+  }, [fileTree]);
 
   // The tree exposes exactly one Tab stop using the roving tabindex pattern.
   // If the user has explicitly focused a row, that's the tab stop; otherwise
@@ -906,6 +924,7 @@ export function FileTree() {
       const name = src.split('/').pop()!;
       renameNote(src, name);
       useCustomOrder.getState().renamePath(src, name);
+      setDraggingPath(null);
     },
     [renameNote],
   );
@@ -982,6 +1001,8 @@ export function FileTree() {
             autoFocusPath={autoFocusPath}
             setFocusedPath={setFocusedPath}
             setAutoFocusPath={setAutoFocusPath}
+            draggingPath={draggingPath}
+            setDraggingPath={setDraggingPath}
             renameRequest={renameRequest}
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
