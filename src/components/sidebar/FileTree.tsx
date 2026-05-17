@@ -77,6 +77,7 @@ interface NodeProps {
   tabbablePath: string | null;
   autoFocusPath: string | null;
   setFocusedPath: (p: string | null) => void;
+  setAutoFocusPath: (p: string | null) => void;
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
@@ -100,6 +101,7 @@ function FileTreeNode({
   tabbablePath,
   autoFocusPath,
   setFocusedPath,
+  setAutoFocusPath,
   renameRequest,
   clearRenameRequest,
   onRowKeyDown,
@@ -107,6 +109,7 @@ function FileTreeNode({
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -258,9 +261,14 @@ function FileTreeNode({
       e.dataTransfer.setData(DRAG_MIME, entry.path);
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
+      setIsDragging(true);
     },
     [entry.path, renaming],
   );
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
   const computeDropZone = useCallback(
     (e: ReactDragEvent): DropZone => {
@@ -354,11 +362,30 @@ function FileTreeNode({
       }
       setOrder(targetDir, newOrder);
 
-      if (isInto) {
-        setExpanded((s) => new Set(s).add(entry.path));
-      }
+      // Expand every ancestor of the destination so the moved entry stays
+      // visible, and move focus onto it as a visual confirmation that the
+      // move happened.
+      setExpanded((s) => {
+        const next = new Set(s);
+        if (isInto) next.add(entry.path);
+        const parts = targetPath.split('/');
+        for (let i = 1; i < parts.length; i += 1) {
+          next.add(parts.slice(0, i).join('/'));
+        }
+        return next;
+      });
+      setFocusedPath(targetPath);
+      setAutoFocusPath(targetPath);
     },
-    [entry, siblings, renameNote, setExpanded, computeDropZone],
+    [
+      entry,
+      siblings,
+      renameNote,
+      setExpanded,
+      setFocusedPath,
+      setAutoFocusPath,
+      computeDropZone,
+    ],
   );
 
   return (
@@ -375,6 +402,7 @@ function FileTreeNode({
           draggable={!renaming}
           tabIndex={isTabbable ? 0 : -1}
           onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -385,6 +413,7 @@ function FileTreeNode({
             !isActive && 'text-text-secondary',
             isFocused && !isActive && 'bg-surface-hover',
             dropZone === 'into' && 'bg-accent/15 ring-1 ring-accent/40',
+            isDragging && 'opacity-60 ring-1 ring-accent/60 bg-accent/10',
           )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
@@ -591,13 +620,17 @@ function FileTreeNode({
               return;
             }
             const srcName = src.split('/').pop()!;
+            const targetPath = joinPath(entry.path, srcName);
             const baseNames = (entry.children ?? [])
               .map((c) => c.name)
               .filter((n) => n !== srcName);
             const { setOrder, renamePath } = useCustomOrder.getState();
-            renameNote(src, joinPath(entry.path, srcName));
-            renamePath(src, joinPath(entry.path, srcName));
+            renameNote(src, targetPath);
+            renamePath(src, targetPath);
             setOrder(entry.path, [...baseNames, srcName]);
+            setExpanded((s) => new Set(s).add(entry.path));
+            setFocusedPath(targetPath);
+            setAutoFocusPath(targetPath);
           }}
         >
           {creating && creating.parent === entry.path && (
@@ -639,6 +672,7 @@ function FileTreeNode({
               tabbablePath={tabbablePath}
               autoFocusPath={autoFocusPath}
               setFocusedPath={setFocusedPath}
+              setAutoFocusPath={setAutoFocusPath}
               renameRequest={renameRequest}
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
@@ -947,6 +981,7 @@ export function FileTree() {
             tabbablePath={tabbablePath}
             autoFocusPath={autoFocusPath}
             setFocusedPath={setFocusedPath}
+            setAutoFocusPath={setAutoFocusPath}
             renameRequest={renameRequest}
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
