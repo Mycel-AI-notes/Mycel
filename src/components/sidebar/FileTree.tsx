@@ -349,29 +349,30 @@ function FileTreeNode({
   );
 
   return (
-    <div className="relative">
-      {dropZone === 'above' && (
-        <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 bg-accent rounded-full" />
-      )}
-      {dropZone === 'below' && (
-        <div className="pointer-events-none absolute left-2 right-2 bottom-0 h-0.5 bg-accent rounded-full" />
-      )}
-      <div
-        ref={rowRef}
-        draggable={!renaming && !isLocked}
-        tabIndex={isTabbable ? 0 : -1}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={clsx(
-          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
-          'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
-          isActive && 'bg-accent/12 text-accent',
-          !isActive && 'text-text-secondary',
-          isFocused && !isActive && 'bg-surface-hover',
-          dropZone === 'into' && 'bg-accent/15 ring-1 ring-accent/40',
+    <div>
+      <div className="relative">
+        {dropZone === 'above' && (
+          <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 bg-accent rounded-full z-10" />
         )}
+        {dropZone === 'below' && (
+          <div className="pointer-events-none absolute left-2 right-2 bottom-0 h-0.5 bg-accent rounded-full z-10" />
+        )}
+        <div
+          ref={rowRef}
+          draggable={!renaming && !isLocked}
+          tabIndex={isTabbable ? 0 : -1}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={clsx(
+            'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+            'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
+            isActive && 'bg-accent/12 text-accent',
+            !isActive && 'text-text-secondary',
+            isFocused && !isActive && 'bg-surface-hover',
+            dropZone === 'into' && 'bg-accent/15 ring-1 ring-accent/40',
+          )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
           setFocusedPath(entry.path);
@@ -551,6 +552,7 @@ function FileTreeNode({
             </button>
           </span>
         )}
+        </div>
       </div>
 
       {entry.is_dir && isOpen && (
