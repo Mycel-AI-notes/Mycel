@@ -1,4 +1,12 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+  createContext,
+  useContext,
+} from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import {
   ChevronRight,
@@ -22,10 +30,18 @@ import type { FileEntry } from '@/types';
 import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
+import { toast } from '@/stores/toast';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
 const DRAG_MIME = 'application/x-mycel-path';
+// Multiple dragged paths are packed newline-separated into the transfer.
+const DRAG_SEP = '\n';
+// How long a collapsed folder must be hovered mid-drag before it springs open.
+const SPRING_MS = 650;
+// Auto-scroll trigger band (px) and speed (px/frame) near the list edges.
+const AUTOSCROLL_EDGE = 40;
+const AUTOSCROLL_SPEED = 12;
 
 type CreatingType = 'note' | 'folder';
 interface CreatingState {
@@ -42,6 +58,69 @@ function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
 }
 
+function isProtectedPath(path: string): boolean {
+  return path === KNOWLEDGE_BASE_DIR || path === QUICK_NOTES_DIR;
+}
+
+// Dropping onto a file targets its containing folder (Finder/VS Code style),
+// so files are never a dead drop zone.
+function targetDirOf(entry: FileEntry): string {
+  return entry.is_dir ? entry.path : parentOf(entry.path);
+}
+
+// A move is only valid if it actually relocates the item somewhere new and
+// doesn't fold a folder into its own subtree.
+function canDrop(src: string, dstDir: string): boolean {
+  if (!src) return false;
+  if (src === dstDir) return false; // onto itself
+  if (dstDir === src) return false;
+  if (dstDir.startsWith(src + '/')) return false; // into own descendant
+  if (parentOf(src) === dstDir) return false; // already there
+  return true;
+}
+
+function findEntry(tree: FileEntry[], path: string): FileEntry | null {
+  for (const e of tree) {
+    if (e.path === path) return e;
+    if (e.children) {
+      const found = findEntry(e.children, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function nameExistsIn(tree: FileEntry[], dir: string, name: string): boolean {
+  const list = dir === '' ? tree : findEntry(tree, dir)?.children ?? [];
+  return list.some((c) => c.name === name);
+}
+
+function readTransfer(e: ReactDragEvent): string[] {
+  const raw =
+    e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
+  return raw ? raw.split(DRAG_SEP).filter(Boolean) : [];
+}
+
+// Build a compact drag ghost so the cursor carries a small chip instead of the
+// browser's default snapshot of the full row (with its hover buttons).
+function makeDragImage(srcs: string[], entry: FileEntry): HTMLElement {
+  const el = document.createElement('div');
+  el.textContent =
+    srcs.length > 1
+      ? `${srcs.length} items`
+      : entry.is_dir
+        ? entry.name
+        : stripNoteExt(entry.name);
+  el.className =
+    'px-2.5 py-1 rounded-md text-xs font-medium bg-accent text-white shadow-lg';
+  el.style.position = 'fixed';
+  el.style.top = '-1000px';
+  el.style.left = '0';
+  el.style.pointerEvents = 'none';
+  document.body.appendChild(el);
+  return el;
+}
+
 // Flatten visible (expanded) entries in display order so keyboard nav can
 // move "up/down one row" without re-walking the tree at every keypress.
 function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
@@ -54,6 +133,26 @@ function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
   };
   walk(tree);
   return out;
+}
+
+interface TreeDndValue {
+  dragSrcs: string[];
+  dropTarget: string | null; // folder path being targeted; '' = root
+  cutPaths: Set<string>;
+  selected: Set<string>;
+  beginDrag: (e: ReactDragEvent, entry: FileEntry) => void;
+  overRow: (e: ReactDragEvent, entry: FileEntry) => void;
+  dropRow: (e: ReactDragEvent, entry: FileEntry) => void;
+  endDrag: () => void;
+  selectRow: (e: React.MouseEvent, entry: FileEntry) => boolean;
+}
+
+const TreeDndContext = createContext<TreeDndValue | null>(null);
+
+function useTreeDnd(): TreeDndValue {
+  const v = useContext(TreeDndContext);
+  if (!v) throw new Error('TreeDndContext missing');
+  return v;
 }
 
 interface NodeProps {
@@ -101,7 +200,7 @@ function FileTreeNode({
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
+  const dnd = useTreeDnd();
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -115,6 +214,14 @@ function FileTreeNode({
   const isLocked = isKB || isQuickRoot;
   const isOpen = entry.is_dir && expanded.has(entry.path);
   const isEnc = !!entry.is_encrypted;
+
+  const isBeingDragged = dnd.dragSrcs.includes(entry.path);
+  const isCut = dnd.cutPaths.has(entry.path);
+  // Single selection rides the existing active/focus styling; only show the
+  // dedicated selection highlight once the user is actually multi-selecting.
+  const isMultiSelected = dnd.selected.has(entry.path) && dnd.selected.size > 1;
+  const isDropTarget =
+    entry.is_dir && dnd.dropTarget !== null && dnd.dropTarget === entry.path;
 
   const toggleExpand = useCallback(() => {
     setExpanded((s) => {
@@ -227,7 +334,7 @@ function FileTreeNode({
     }
   }, [autoFocusPath, entry.path, renaming]);
 
-  const commitRename = useCallback(() => {
+  const commitRename = useCallback(async () => {
     const trimmed = renameValue.trim();
     const original = entry.is_dir ? entry.name : stripNoteExt(entry.name);
     if (trimmed && trimmed !== original) {
@@ -235,59 +342,14 @@ function FileTreeNode({
       const ext = entry.is_dir ? '' : isEnc ? '.md.age' : '.md';
       const base = stripNoteExt(trimmed);
       const newPath = joinPath(dir, `${base}${ext}`);
-      renameNote(entry.path, newPath);
+      try {
+        await renameNote(entry.path, newPath);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      }
     }
     setRenaming(false);
   }, [renameValue, entry, renameNote, isEnc]);
-
-  const handleDragStart = useCallback(
-    (e: ReactDragEvent) => {
-      if (isLocked || renaming) {
-        e.preventDefault();
-        return;
-      }
-      e.dataTransfer.setData(DRAG_MIME, entry.path);
-      e.dataTransfer.setData('text/plain', entry.path);
-      e.dataTransfer.effectAllowed = 'move';
-    },
-    [entry.path, isLocked, renaming],
-  );
-
-  const handleDragOver = useCallback(
-    (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      setIsDragOver(true);
-    },
-    [entry.is_dir],
-  );
-
-  const handleDragLeave = useCallback((e: ReactDragEvent) => {
-    // Avoid flicker when the pointer moves into a child element.
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-      const src =
-        e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
-      if (!src) return;
-      if (src === entry.path) return;
-      if (entry.path.startsWith(src + '/')) return; // cannot move into own descendant
-      if (parentOf(src) === entry.path) return; // already inside
-      const name = src.split('/').pop()!;
-      renameNote(src, joinPath(entry.path, name));
-      setExpanded((s) => new Set(s).add(entry.path));
-    },
-    [entry, renameNote, setExpanded],
-  );
 
   return (
     <div>
@@ -295,20 +357,25 @@ function FileTreeNode({
         ref={rowRef}
         draggable={!renaming && !isLocked}
         tabIndex={isTabbable ? 0 : -1}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragStart={(e) => dnd.beginDrag(e, entry)}
+        onDragOver={(e) => dnd.overRow(e, entry)}
+        onDrop={(e) => dnd.dropRow(e, entry)}
+        onDragEnd={dnd.endDrag}
         className={clsx(
           'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
           'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
           isFocused && !isActive && 'bg-surface-hover',
-          isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
+          isMultiSelected && 'bg-accent/15',
+          isDropTarget && 'bg-accent/15 ring-1 ring-accent/40',
+          isBeingDragged && 'opacity-50',
+          isCut && 'opacity-60 italic',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => {
+        onClick={(e) => {
+          // Modifier-clicks manage multi-selection and must not open the note.
+          if (dnd.selectRow(e, entry)) return;
           setFocusedPath(entry.path);
           handleClick();
         }}
@@ -551,7 +618,6 @@ export function FileTree() {
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [rootDragOver, setRootDragOver] = useState(false);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -559,7 +625,214 @@ export function FileTree() {
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
 
+  // --- Drag / selection / clipboard state -------------------------------
+  const [dragSrcs, setDragSrcs] = useState<string[]>([]);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [cutPaths, setCutPaths] = useState<Set<string>>(new Set());
+  const [selAnchor, setSelAnchor] = useState<string | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragYRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  // Set true by a row's dragover so the container handler knows a row already
+  // claimed the drop target this event (and shouldn't reset it to root).
+  const claimedRef = useRef(false);
+  // Spring-loaded folder: which folder is pending auto-expand and its timer.
+  const springRef = useRef<{ path: string | null; timer: number | null }>({
+    path: null,
+    timer: null,
+  });
+
   const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
+
+  const stopAutoScroll = useCallback(() => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    dragYRef.current = null;
+  }, []);
+
+  const startAutoScroll = useCallback(() => {
+    if (rafRef.current != null) return;
+    const step = () => {
+      const el = scrollRef.current;
+      const y = dragYRef.current;
+      if (el && y != null) {
+        const r = el.getBoundingClientRect();
+        if (y < r.top + AUTOSCROLL_EDGE) el.scrollTop -= AUTOSCROLL_SPEED;
+        else if (y > r.bottom - AUTOSCROLL_EDGE) el.scrollTop += AUTOSCROLL_SPEED;
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+  }, []);
+
+  const clearSpring = useCallback(() => {
+    if (springRef.current.timer != null) clearTimeout(springRef.current.timer);
+    springRef.current = { path: null, timer: null };
+  }, []);
+
+  // Arm (or re-arm) the spring timer for the folder under the cursor. Hovering
+  // a collapsed folder mid-drag expands it so the user can dive deeper without
+  // dropping first.
+  const scheduleSpring = useCallback(
+    (path: string | null) => {
+      if (springRef.current.path === path) return;
+      if (springRef.current.timer != null) clearTimeout(springRef.current.timer);
+      if (!path) {
+        springRef.current = { path: null, timer: null };
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        setExpanded((s) => (s.has(path) ? s : new Set(s).add(path)));
+        springRef.current = { path: null, timer: null };
+      }, SPRING_MS);
+      springRef.current = { path, timer };
+    },
+    [],
+  );
+
+  // Perform the actual move(s). Filters invalid targets, refuses name
+  // collisions (no silent clobber), and surfaces backend errors as toasts.
+  const moveInto = useCallback(
+    async (srcs: string[], dstDir: string) => {
+      const candidates = srcs.filter((s) => canDrop(s, dstDir));
+      if (candidates.length === 0) return;
+
+      const collisions = candidates.filter((s) =>
+        nameExistsIn(fileTree, dstDir, s.split('/').pop()!),
+      );
+      const proceed = candidates.filter((s) => !collisions.includes(s));
+      if (collisions.length > 0) {
+        const names = collisions.map((c) => c.split('/').pop()).join(', ');
+        const where = dstDir === '' ? 'the vault root' : `"${dstDir.split('/').pop()}"`;
+        toast.error(`Already exists in ${where}: ${names}`);
+      }
+      if (proceed.length === 0) return;
+
+      try {
+        for (const s of proceed) {
+          const name = s.split('/').pop()!;
+          await renameNote(s, joinPath(dstDir, name));
+        }
+        if (dstDir) setExpanded((s) => new Set(s).add(dstDir));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [fileTree, renameNote],
+  );
+
+  const endDrag = useCallback(() => {
+    setDragSrcs([]);
+    setDropTarget(null);
+    claimedRef.current = false;
+    stopAutoScroll();
+    clearSpring();
+  }, [stopAutoScroll, clearSpring]);
+
+  const beginDrag = useCallback(
+    (e: ReactDragEvent, entry: FileEntry) => {
+      if (isProtectedPath(entry.path)) {
+        e.preventDefault();
+        return;
+      }
+      // Dragging a row that's part of a multi-selection moves the whole set;
+      // dragging anything else narrows the selection to just that row.
+      let srcs: string[];
+      if (selected.has(entry.path) && selected.size > 1) {
+        srcs = [...selected].filter((p) => !isProtectedPath(p));
+      } else {
+        srcs = [entry.path];
+        setSelected(new Set([entry.path]));
+        setSelAnchor(entry.path);
+      }
+      setDragSrcs(srcs);
+      const packed = srcs.join(DRAG_SEP);
+      e.dataTransfer.setData(DRAG_MIME, packed);
+      e.dataTransfer.setData('text/plain', packed);
+      e.dataTransfer.effectAllowed = 'move';
+      const ghost = makeDragImage(srcs, entry);
+      e.dataTransfer.setDragImage(ghost, 12, 12);
+      setTimeout(() => ghost.remove(), 0);
+      startAutoScroll();
+    },
+    [selected, startAutoScroll],
+  );
+
+  const overRow = useCallback(
+    (e: ReactDragEvent, entry: FileEntry) => {
+      if (dragSrcs.length === 0) return;
+      e.preventDefault();
+      claimedRef.current = true;
+      const dir = targetDirOf(entry);
+      const ok = dragSrcs.some((s) => canDrop(s, dir));
+      e.dataTransfer.dropEffect = ok ? 'move' : 'none';
+      setDropTarget(ok ? dir : null);
+      // Spring open the collapsed folder directly under the cursor.
+      scheduleSpring(entry.is_dir ? entry.path : null);
+    },
+    [dragSrcs, scheduleSpring],
+  );
+
+  const dropRow = useCallback(
+    (e: ReactDragEvent, entry: FileEntry) => {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSpring();
+      const srcs = dragSrcs.length ? dragSrcs : readTransfer(e);
+      void moveInto(srcs, targetDirOf(entry));
+      endDrag();
+    },
+    [dragSrcs, moveInto, endDrag, clearSpring],
+  );
+
+  const selectRow = useCallback(
+    (e: React.MouseEvent, entry: FileEntry): boolean => {
+      const meta = e.metaKey || e.ctrlKey;
+      const shift = e.shiftKey;
+      if (meta) {
+        setSelected((prev) => {
+          const n = new Set(prev);
+          if (n.has(entry.path)) n.delete(entry.path);
+          else n.add(entry.path);
+          return n;
+        });
+        setSelAnchor(entry.path);
+        return true;
+      }
+      if (shift && selAnchor) {
+        const flat = flattenVisible(fileTree, expanded).map((x) => x.path);
+        const a = flat.indexOf(selAnchor);
+        const b = flat.indexOf(entry.path);
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          setSelected(new Set(flat.slice(lo, hi + 1)));
+          return true;
+        }
+      }
+      // Plain click collapses any multi-selection back to this single row.
+      setSelected(new Set([entry.path]));
+      setSelAnchor(entry.path);
+      return false;
+    },
+    [fileTree, expanded, selAnchor],
+  );
+
+  const dnd = useMemo<TreeDndValue>(
+    () => ({
+      dragSrcs,
+      dropTarget,
+      cutPaths,
+      selected,
+      beginDrag,
+      overRow,
+      dropRow,
+      endDrag,
+      selectRow,
+    }),
+    [dragSrcs, dropTarget, cutPaths, selected, beginDrag, overRow, dropRow, endDrag, selectRow],
+  );
 
   // The tree exposes exactly one Tab stop using the roving tabindex pattern.
   // If the user has explicitly focused a row, that's the tab stop; otherwise
@@ -573,6 +846,34 @@ export function FileTree() {
 
   const onRowKeyDown = useCallback(
     (e: React.KeyboardEvent, entry: FileEntry) => {
+      const meta = e.metaKey || e.ctrlKey;
+
+      // Clipboard-style move via keyboard, mirroring drag-and-drop.
+      if (meta && (e.key === 'x' || e.key === 'X')) {
+        e.preventDefault();
+        const paths =
+          selected.has(entry.path) && selected.size > 0 ? [...selected] : [entry.path];
+        setCutPaths(new Set(paths.filter((p) => !isProtectedPath(p))));
+        return;
+      }
+      if (meta && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        if (cutPaths.size > 0) {
+          const srcs = [...cutPaths];
+          setCutPaths(new Set());
+          void moveInto(srcs, targetDirOf(entry));
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (cutPaths.size > 0 || selected.size > 0) {
+          e.preventDefault();
+          setCutPaths(new Set());
+          setSelected(new Set());
+        }
+        return;
+      }
+
       const flat = flattenVisible(fileTree, expanded);
       const idx = flat.findIndex((x) => x.path === entry.path);
       if (idx < 0) return;
@@ -654,7 +955,7 @@ export function FileTree() {
         }
       }
     },
-    [fileTree, expanded],
+    [fileTree, expanded, selected, cutPaths, moveInto],
   );
 
   const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
@@ -664,6 +965,23 @@ export function FileTree() {
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
+
+  // Stop any running auto-scroll loop if the tree unmounts mid-drag.
+  useEffect(() => stopAutoScroll, [stopAutoScroll]);
+
+  // Prune selection/clipboard entries that no longer exist after a refresh
+  // (moved, deleted, or renamed) so stale highlights don't linger.
+  useEffect(() => {
+    const exists = (p: string) => findEntry(fileTree, p) != null;
+    setSelected((prev) => {
+      const next = new Set([...prev].filter(exists));
+      return next.size === prev.size ? prev : next;
+    });
+    setCutPaths((prev) => {
+      const next = new Set([...prev].filter(exists));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [fileTree]);
 
   // Expand top-level folders on first load so the tree isn't completely collapsed.
   useEffect(() => {
@@ -734,119 +1052,137 @@ export function FileTree() {
     setNewName('');
   }, []);
 
-  const handleRootDragOver = useCallback((e: ReactDragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setRootDragOver(true);
-  }, []);
+  // Container-level drag handling covers the empty space below the rows (drop
+  // to vault root) and keeps the auto-scroll cursor position fresh even while
+  // the pointer is over a row (rows don't stop propagation).
+  const handleContainerDragOver = useCallback(
+    (e: ReactDragEvent) => {
+      if (dragSrcs.length === 0) return;
+      e.preventDefault();
+      dragYRef.current = e.clientY;
+      if (claimedRef.current) {
+        // A row already resolved the target for this event.
+        claimedRef.current = false;
+        return;
+      }
+      // Empty area → vault root.
+      const ok = dragSrcs.some((s) => canDrop(s, ''));
+      e.dataTransfer.dropEffect = ok ? 'move' : 'none';
+      setDropTarget(ok ? '' : null);
+      scheduleSpring(null);
+    },
+    [dragSrcs, scheduleSpring],
+  );
 
-  const handleRootDragLeave = useCallback((e: ReactDragEvent) => {
+  const handleContainerDragLeave = useCallback((e: ReactDragEvent) => {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    setRootDragOver(false);
+    setDropTarget(null);
+    claimedRef.current = false;
   }, []);
 
-  const handleRootDrop = useCallback(
+  const handleContainerDrop = useCallback(
     (e: ReactDragEvent) => {
       e.preventDefault();
-      setRootDragOver(false);
-      const src =
-        e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
-      if (!src) return;
-      if (parentOf(src) === '') return; // already at vault root
-      const name = src.split('/').pop()!;
-      renameNote(src, name);
+      const srcs = dragSrcs.length ? dragSrcs : readTransfer(e);
+      void moveInto(srcs, '');
+      endDrag();
     },
-    [renameNote],
+    [dragSrcs, moveInto, endDrag],
   );
 
   if (!vaultRoot) return null;
 
+  const rootIsTarget = dropTarget === '';
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Files
-        </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => startCreate('note', '')}
-            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
-            title="New note"
-          >
-            <FilePlus size={14} />
-          </button>
-          <button
-            onClick={() => startCreate('folder', '')}
-            className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
-            title="New folder"
-          >
-            <FolderPlus size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={clsx(
-          'flex-1 overflow-y-auto py-1 transition-colors',
-          rootDragOver && 'bg-accent/5',
-        )}
-        onDragOver={handleRootDragOver}
-        onDragLeave={handleRootDragLeave}
-        onDrop={handleRootDrop}
-      >
-        {creating && creating.parent === '' && (
-          <div className="py-0.5" style={{ paddingLeft: '24px', paddingRight: '8px' }}>
-            <input
-              ref={inputRef}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onBlur={commitCreate}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitCreate();
-                if (e.key === 'Escape') cancelCreate();
-              }}
-              placeholder={creating.type === 'note' ? 'Note name…' : 'Folder name…'}
-              className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none"
-            />
+    <TreeDndContext.Provider value={dnd}>
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Files
+          </span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => startCreate('note', '')}
+              className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+              title="New note"
+            >
+              <FilePlus size={14} />
+            </button>
+            <button
+              onClick={() => startCreate('folder', '')}
+              className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary"
+              title="New folder"
+            >
+              <FolderPlus size={14} />
+            </button>
           </div>
-        )}
-        {fileTree.map((entry) => (
-          <FileTreeNode
-            key={entry.path}
-            entry={entry}
-            depth={0}
-            expanded={expanded}
-            setExpanded={setExpanded}
-            creating={creating}
-            newName={newName}
-            setNewName={setNewName}
-            startCreate={startCreate}
-            commitCreate={commitCreate}
-            cancelCreate={cancelCreate}
-            inputRef={inputRef}
-            openKbMenu={openKbMenu}
-            focusedPath={focusedPath}
-            tabbablePath={tabbablePath}
-            autoFocusPath={autoFocusPath}
-            setFocusedPath={setFocusedPath}
-            renameRequest={renameRequest}
-            clearRenameRequest={clearRenameRequest}
-            onRowKeyDown={onRowKeyDown}
+        </div>
+
+        <div
+          ref={scrollRef}
+          className={clsx(
+            'flex-1 overflow-y-auto py-1 transition-colors',
+            rootIsTarget && 'bg-accent/5 ring-1 ring-inset ring-accent/30',
+          )}
+          onDragOver={handleContainerDragOver}
+          onDragLeave={handleContainerDragLeave}
+          onDrop={handleContainerDrop}
+        >
+          {creating && creating.parent === '' && (
+            <div className="py-0.5" style={{ paddingLeft: '24px', paddingRight: '8px' }}>
+              <input
+                ref={inputRef}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onBlur={commitCreate}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitCreate();
+                  if (e.key === 'Escape') cancelCreate();
+                }}
+                placeholder={creating.type === 'note' ? 'Note name…' : 'Folder name…'}
+                className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none"
+              />
+            </div>
+          )}
+          {fileTree.map((entry) => (
+            <FileTreeNode
+              key={entry.path}
+              entry={entry}
+              depth={0}
+              expanded={expanded}
+              setExpanded={setExpanded}
+              creating={creating}
+              newName={newName}
+              setNewName={setNewName}
+              startCreate={startCreate}
+              commitCreate={commitCreate}
+              cancelCreate={cancelCreate}
+              inputRef={inputRef}
+              openKbMenu={openKbMenu}
+              focusedPath={focusedPath}
+              tabbablePath={tabbablePath}
+              autoFocusPath={autoFocusPath}
+              setFocusedPath={setFocusedPath}
+              renameRequest={renameRequest}
+              clearRenameRequest={clearRenameRequest}
+              onRowKeyDown={onRowKeyDown}
+            />
+          ))}
+          {fileTree.length === 0 && !creating && (
+            <p className="text-text-muted text-xs px-3 py-4">No notes yet. Click + to create one.</p>
+          )}
+        </div>
+
+        {kbMenu && (
+          <KbContextMenu
+            x={kbMenu.x}
+            y={kbMenu.y}
+            entry={kbMenu.entry}
+            onClose={() => setKbMenu(null)}
           />
-        ))}
-        {fileTree.length === 0 && !creating && (
-          <p className="text-text-muted text-xs px-3 py-4">No notes yet. Click + to create one.</p>
         )}
       </div>
-
-      {kbMenu && (
-        <KbContextMenu
-          x={kbMenu.x}
-          y={kbMenu.y}
-          entry={kbMenu.entry}
-          onClose={() => setKbMenu(null)}
-        />
-      )}
-    </div>
+    </TreeDndContext.Provider>
   );
 }

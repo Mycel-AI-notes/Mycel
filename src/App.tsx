@@ -22,6 +22,7 @@ import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
 import { SettingsDialog } from '@/components/ui/SettingsDialog';
+import { Toaster } from '@/components/ui/Toaster';
 import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { isInsightsTabPath } from '@/lib/insights-tab';
 import { InsightsView } from '@/components/insights/InsightsView';
@@ -338,6 +339,9 @@ export default function App() {
 
       {/* Settings dialog. Self-renders when open. */}
       <SettingsDialog />
+
+      {/* Transient notifications (move failures, name collisions, …). */}
+      <Toaster />
     </div>
   );
 }

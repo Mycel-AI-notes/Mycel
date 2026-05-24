@@ -265,6 +265,18 @@ pub async fn note_rename(old_path: String, new_path: String, state: State<'_, Ap
     };
     let old_abs = vault_root.join(&old_path);
     let new_abs = vault_root.join(&new_path);
+    // Refuse to clobber an existing destination. `fs::rename` would silently
+    // overwrite a file (data loss) or fail cryptically on a non-empty dir.
+    // The frontend checks first, but this guards against any other caller.
+    // A case-only rename on a case-insensitive filesystem (e.g. `foo` → `Foo`)
+    // resolves to the same inode, so allow it by comparing canonical paths.
+    if new_abs.exists() {
+        let same = std::fs::canonicalize(&old_abs).ok()
+            == std::fs::canonicalize(&new_abs).ok();
+        if !same {
+            return Err(format!("\"{new_path}\" already exists"));
+        }
+    }
     if let Some(parent) = new_abs.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
