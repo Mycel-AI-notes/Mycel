@@ -58,6 +58,10 @@ function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
 }
 
 type DropZone = 'above' | 'into' | 'below';
+interface DropTarget {
+  path: string;
+  zone: DropZone;
+}
 
 interface NodeProps {
   entry: FileEntry;
@@ -80,6 +84,8 @@ interface NodeProps {
   setAutoFocusPath: (p: string | null) => void;
   draggingPath: string | null;
   setDraggingPath: (p: string | null) => void;
+  dropTarget: DropTarget | null;
+  setDropTarget: (t: DropTarget | null) => void;
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
@@ -106,6 +112,8 @@ function FileTreeNode({
   setAutoFocusPath,
   draggingPath,
   setDraggingPath,
+  dropTarget,
+  setDropTarget,
   renameRequest,
   clearRenameRequest,
   onRowKeyDown,
@@ -113,6 +121,7 @@ function FileTreeNode({
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const isDragging = draggingPath === entry.path;
+  const dropZone = dropTarget?.path === entry.path ? dropTarget.zone : null;
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -296,14 +305,21 @@ function FileTreeNode({
 
   const handleDragOver = useCallback(
     (e: ReactDragEvent) => {
-      // Accept the drop (so onDrop fires) but paint no indicator — only the
-      // dragged row stays highlighted. Reject the source itself / descendants.
+      // Reject the source itself / its descendants — can't drop into those.
       if (isInvalidTarget) return;
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
+      // Single shared target: every dragover overwrites it, so there's never
+      // more than one highlighted row and nothing to "leak". No dragleave
+      // needed — moving onto another row replaces it, leaving the list resets
+      // it via the root container's dragover.
+      const zone = computeDropZone(e);
+      if (dropTarget?.path !== entry.path || dropTarget.zone !== zone) {
+        setDropTarget({ path: entry.path, zone });
+      }
     },
-    [isInvalidTarget],
+    [entry.path, computeDropZone, dropTarget, setDropTarget, isInvalidTarget],
   );
 
   const handleDrop = useCallback(
@@ -311,6 +327,7 @@ function FileTreeNode({
       e.preventDefault();
       e.stopPropagation();
       const zone = computeDropZone(e);
+      setDropTarget(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
@@ -388,13 +405,28 @@ function FileTreeNode({
       setFocusedPath,
       setAutoFocusPath,
       setDraggingPath,
+      setDropTarget,
       computeDropZone,
     ],
   );
 
+  const anyDragging = !!draggingPath;
+
   return (
     <div>
       <div className="relative">
+        {dropZone === 'above' && (
+          <div
+            className="pointer-events-none absolute right-2 top-0 h-0.5 bg-accent rounded-full z-10"
+            style={{ left: `${depth * 12 + 8}px` }}
+          />
+        )}
+        {dropZone === 'below' && (
+          <div
+            className="pointer-events-none absolute right-2 bottom-0 h-0.5 bg-accent rounded-full z-10"
+            style={{ left: `${depth * 12 + 8}px` }}
+          />
+        )}
         <div
           ref={rowRef}
           draggable={!renaming}
@@ -405,11 +437,15 @@ function FileTreeNode({
           onDrop={handleDrop}
           className={clsx(
             'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
-            'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
+            'focus-visible:ring-1 focus-visible:ring-accent/60',
+            // Suppress native :hover while dragging — on webkitgtk it keeps
+            // firing under the drag cursor and lights up every row passed over.
+            !anyDragging && 'hover:bg-surface-hover',
             isActive && 'bg-accent/12 text-accent',
             !isActive && 'text-text-secondary',
             isFocused && !isActive && 'bg-surface-hover',
-            isDragging && 'ring-1 ring-accent bg-accent/15',
+            dropZone === 'into' && 'bg-accent/20 ring-1 ring-accent',
+            isDragging && 'opacity-50 ring-1 ring-accent',
           )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
@@ -600,10 +636,15 @@ function FileTreeNode({
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
+            // Empty space inside an expanded folder = "drop into this folder".
+            if (dropTarget?.path !== entry.path || dropTarget.zone !== 'into') {
+              setDropTarget({ path: entry.path, zone: 'into' });
+            }
           }}
           onDrop={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            setDropTarget(null);
             const src =
               e.dataTransfer.getData(DRAG_MIME) ||
               e.dataTransfer.getData('text/plain');
@@ -673,6 +714,8 @@ function FileTreeNode({
               setAutoFocusPath={setAutoFocusPath}
               draggingPath={draggingPath}
               setDraggingPath={setDraggingPath}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
               renameRequest={renameRequest}
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
@@ -706,22 +749,25 @@ export function FileTree() {
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
   const [renameRequest, setRenameRequest] = useState<string | null>(null);
   const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
 
   const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
 
-  // Safety net: clear the drag-source highlight whenever the tree changes.
-  // dragend doesn't fire reliably when the source DOM node unmounts mid-drag,
-  // so without this the highlight could stick across drags.
+  // Safety net: clear all drag highlights whenever the tree changes. dragend
+  // doesn't fire reliably when the source DOM node unmounts mid-drag, so
+  // without this a highlight could stick across drags.
   useEffect(() => {
     setDraggingPath(null);
+    setDropTarget(null);
   }, [fileTree]);
 
-  // A single bubbling dragend resets the highlight, even when the drag is
+  // A single bubbling dragend resets every highlight, even when the drag is
   // cancelled (Esc) or dropped outside any row.
   const handleDragEndCapture = useCallback(() => {
     setDraggingPath(null);
+    setDropTarget(null);
   }, []);
 
   // The tree exposes exactly one Tab stop using the roving tabindex pattern.
@@ -900,6 +946,9 @@ export function FileTree() {
   const handleRootDragOver = useCallback((e: ReactDragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    // Cursor is over the empty list area, not any row → destination is the
+    // vault root, so clear the per-row target.
+    setDropTarget(null);
   }, []);
 
   const handleRootDrop = useCallback(
@@ -988,6 +1037,8 @@ export function FileTree() {
             setAutoFocusPath={setAutoFocusPath}
             draggingPath={draggingPath}
             setDraggingPath={setDraggingPath}
+            dropTarget={dropTarget}
+            setDropTarget={setDropTarget}
             renameRequest={renameRequest}
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
