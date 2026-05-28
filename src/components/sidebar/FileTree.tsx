@@ -56,6 +56,30 @@ function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
   return out;
 }
 
+// Return the children entries of the folder at `parent` ('' = vault root) in
+// their current display order. Used to compute the new sibling order after a
+// drag-to-reorder.
+function childrenOf(tree: FileEntry[], parent: string): FileEntry[] {
+  if (parent === '') return tree;
+  let found: FileEntry[] | undefined;
+  const walk = (entries: FileEntry[]) => {
+    for (const e of entries) {
+      if (found) return;
+      if (e.path === parent) {
+        found = e.children ?? [];
+        return;
+      }
+      if (e.children) walk(e.children);
+    }
+  };
+  walk(tree);
+  return found ?? [];
+}
+
+// Where a drag is hovering relative to a row: reorder before / after the
+// target, or drop *into* it (folders only).
+type DropPos = 'before' | 'inside' | 'after';
+
 interface NodeProps {
   entry: FileEntry;
   depth: number;
@@ -76,6 +100,9 @@ interface NodeProps {
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
+  onMoveEntry: (src: string, target: FileEntry, pos: DropPos) => void;
+  dropTarget: { path: string; pos: DropPos } | null;
+  setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
 }
 
 function FileTreeNode({
@@ -98,10 +125,15 @@ function FileTreeNode({
   renameRequest,
   clearRenameRequest,
   onRowKeyDown,
+  onMoveEntry,
+  dropTarget,
+  setDropTarget,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
+  // The hovered drop zone lives in a single parent-owned state so at most one
+  // row is ever highlighted; this row reads its own slice out of it.
+  const dropPos = dropTarget?.path === entry.path ? dropTarget.pos : null;
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -253,40 +285,65 @@ function FileTreeNode({
     [entry.path, isLocked, renaming],
   );
 
+  // Decide which of the three drop zones the pointer is in. Folders that can
+  // accept children expose a wide middle "inside" band with thin reorder
+  // edges; everything else (files and locked roots) splits in half into
+  // before/after so they can still be reordered among their siblings.
+  const computeDropPos = useCallback(
+    (e: ReactDragEvent): DropPos => {
+      const rect = rowRef.current?.getBoundingClientRect();
+      if (!rect || rect.height === 0) return entry.is_dir && !isLocked ? 'inside' : 'after';
+      const ratio = (e.clientY - rect.top) / rect.height;
+      if (entry.is_dir && !isLocked) {
+        if (ratio < 0.25) return 'before';
+        if (ratio > 0.75) return 'after';
+        return 'inside';
+      }
+      return ratio < 0.5 ? 'before' : 'after';
+    },
+    [entry.is_dir, isLocked],
+  );
+
+  // Every row accepts drops (preventDefault + stopPropagation) so a drop never
+  // bubbles up to the root container — that bubbling is what used to fling
+  // files out to the vault root when dropped onto a sibling.
   const handleDragOver = useCallback(
     (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
-      setIsDragOver(true);
+      const pos = computeDropPos(e);
+      // Only push to shared state when the hovered zone actually changes, so a
+      // continuous dragover doesn't re-render the whole tree on every pixel.
+      if (dropTarget?.path === entry.path && dropTarget?.pos === pos) return;
+      setDropTarget({ path: entry.path, pos });
     },
-    [entry.is_dir],
+    [computeDropPos, dropTarget, entry.path, setDropTarget],
   );
 
-  const handleDragLeave = useCallback((e: ReactDragEvent) => {
-    // Avoid flicker when the pointer moves into a child element.
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    setIsDragOver(false);
-  }, []);
+  const handleDragLeave = useCallback(
+    (e: ReactDragEvent) => {
+      // Avoid flicker when the pointer moves into a nested element of this row.
+      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+      // Only clear if we're the row currently marked — otherwise a later row's
+      // dragover may have already taken over the highlight.
+      if (dropTarget?.path === entry.path) setDropTarget(null);
+    },
+    [dropTarget, entry.path, setDropTarget],
+  );
 
   const handleDrop = useCallback(
     (e: ReactDragEvent) => {
-      if (!entry.is_dir) return;
       e.preventDefault();
       e.stopPropagation();
-      setIsDragOver(false);
+      const pos = computeDropPos(e);
+      setDropTarget(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
-      if (src === entry.path) return;
-      if (entry.path.startsWith(src + '/')) return; // cannot move into own descendant
-      if (parentOf(src) === entry.path) return; // already inside
-      const name = src.split('/').pop()!;
-      renameNote(src, joinPath(entry.path, name));
-      setExpanded((s) => new Set(s).add(entry.path));
+      onMoveEntry(src, entry, pos);
     },
-    [entry, renameNote, setExpanded],
+    [entry, computeDropPos, onMoveEntry, setDropTarget],
   );
 
   return (
@@ -300,12 +357,12 @@ function FileTreeNode({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={clsx(
-          'group flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+          'group relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
           'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
           isFocused && !isActive && 'bg-surface-hover',
-          isDragOver && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
+          dropPos === 'inside' && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
@@ -319,6 +376,12 @@ function FileTreeNode({
           onRowKeyDown(e, entry);
         }}
       >
+        {dropPos === 'before' && (
+          <div className="pointer-events-none absolute inset-x-1 -top-px h-0.5 rounded-full bg-accent" />
+        )}
+        {dropPos === 'after' && (
+          <div className="pointer-events-none absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-accent" />
+        )}
         {entry.is_dir ? (
           <>
             <span
@@ -531,6 +594,9 @@ function FileTreeNode({
               renameRequest={renameRequest}
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
+              onMoveEntry={onMoveEntry}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
             />
           ))}
         </div>
@@ -546,12 +612,20 @@ interface KbMenuState {
 }
 
 export function FileTree() {
-  const { fileTree, vaultRoot, createNote, createFolder, renameNote, activeTabPath } =
-    useVaultStore();
+  const {
+    fileTree,
+    vaultRoot,
+    createNote,
+    createFolder,
+    renameNote,
+    reorderSiblings,
+    activeTabPath,
+  } = useVaultStore();
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [dropTarget, setDropTarget] = useState<{ path: string; pos: DropPos } | null>(null);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -734,6 +808,45 @@ export function FileTree() {
     setNewName('');
   }, []);
 
+  // Unified drop handler shared by every row. `pos` says whether the dragged
+  // entry should land inside the target folder, or be reordered just before /
+  // after the target among its siblings. A cross-folder move is a rename; a
+  // same-folder drop is a pure reorder. Both can combine (move + place at a
+  // precise slot) when a before/after drop crosses folders.
+  const moveEntry = useCallback(
+    async (src: string, target: FileEntry, pos: DropPos) => {
+      if (!src || src === target.path) return;
+      const srcName = src.split('/').pop()!;
+      const destParent = pos === 'inside' ? target.path : parentOf(target.path);
+      // Never drop an entry into itself or one of its own descendants.
+      if (destParent === src || destParent.startsWith(src + '/')) return;
+
+      const moving = parentOf(src) !== destParent;
+      if (moving) {
+        await renameNote(src, joinPath(destParent, srcName));
+        if (pos === 'inside') {
+          setExpanded((s) => new Set(s).add(target.path));
+          return;
+        }
+      } else if (pos === 'inside') {
+        // Already inside this folder — nothing to do.
+        return;
+      }
+
+      // Reorder: rebuild the destination folder's child-name list with `src`
+      // placed relative to the target, then persist it.
+      const names = childrenOf(fileTree, destParent)
+        .map((c) => c.name)
+        .filter((n) => n !== srcName);
+      let at = names.indexOf(target.name);
+      if (at < 0) at = names.length;
+      if (pos === 'after') at += 1;
+      names.splice(at, 0, srcName);
+      await reorderSiblings(destParent, names);
+    },
+    [fileTree, renameNote, reorderSiblings, setExpanded],
+  );
+
   const handleRootDragOver = useCallback((e: ReactDragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -749,6 +862,7 @@ export function FileTree() {
     (e: ReactDragEvent) => {
       e.preventDefault();
       setRootDragOver(false);
+      setDropTarget(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
@@ -758,6 +872,13 @@ export function FileTree() {
     },
     [renameNote],
   );
+
+  // Safety net: whenever a drag finishes anywhere in the tree (drop, ESC, or
+  // dropped outside), wipe the highlight so no row stays lit.
+  const handleDragEnd = useCallback(() => {
+    setDropTarget(null);
+    setRootDragOver(false);
+  }, []);
 
   if (!vaultRoot) return null;
 
@@ -793,6 +914,7 @@ export function FileTree() {
         onDragOver={handleRootDragOver}
         onDragLeave={handleRootDragLeave}
         onDrop={handleRootDrop}
+        onDragEnd={handleDragEnd}
       >
         {creating && creating.parent === '' && (
           <div className="py-0.5" style={{ paddingLeft: '24px', paddingRight: '8px' }}>
@@ -832,6 +954,9 @@ export function FileTree() {
             renameRequest={renameRequest}
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
+            onMoveEntry={moveEntry}
+            dropTarget={dropTarget}
+            setDropTarget={setDropTarget}
           />
         ))}
         {fileTree.length === 0 && !creating && (

@@ -59,6 +59,10 @@ interface VaultState {
   createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
+  /** Persist the manual ordering of a folder's children (drag-to-reorder in
+   *  the file tree). `parent` is the vault-relative folder path (`''` for the
+   *  vault root); `names` is the full ordered list of child names. */
+  reorderSiblings: (parent: string, names: string[]) => Promise<void>;
   /** Update open tabs / noteCache after a file was renamed on disk by some
    *  other action (e.g. encrypt/decrypt, which writes `<name>.md.age` and
    *  removes `<name>.md`). The next save would otherwise target a stale
@@ -690,6 +694,11 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         activeTabPath: s.activeTabPath === oldPath ? newPath : s.activeTabPath,
       };
     });
+    await get().refreshTree();
+  },
+
+  reorderSiblings: async (parent, names) => {
+    await invoke('tree_reorder', { parent, names });
     await get().refreshTree();
   },
 
