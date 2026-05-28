@@ -103,7 +103,18 @@ function readTransfer(e: ReactDragEvent): string[] {
 
 // Build a compact drag ghost so the cursor carries a small chip instead of the
 // browser's default snapshot of the full row (with its hover buttons).
-function makeDragImage(srcs: string[], entry: FileEntry): HTMLElement {
+//
+// WebKit (which Tauri uses via WebKitGTK on Linux and WKWebView on macOS)
+// won't snapshot an element positioned off-screen — the classic `top:-1000px`
+// trick yields a blank/absent drag image there. So the chip is mounted *at the
+// cursor* and `setDragImage`'s hotspot offset keeps it under the pointer,
+// where the real drag image immediately paints over it (no visible flicker).
+function makeDragImage(
+  srcs: string[],
+  entry: FileEntry,
+  x: number,
+  y: number,
+): HTMLElement {
   const el = document.createElement('div');
   el.textContent =
     srcs.length > 1
@@ -114,8 +125,9 @@ function makeDragImage(srcs: string[], entry: FileEntry): HTMLElement {
   el.className =
     'px-2.5 py-1 rounded-md text-xs font-medium bg-accent text-white shadow-lg';
   el.style.position = 'fixed';
-  el.style.top = '-1000px';
-  el.style.left = '0';
+  el.style.top = `${y}px`;
+  el.style.left = `${x}px`;
+  el.style.zIndex = '9999';
   el.style.pointerEvents = 'none';
   document.body.appendChild(el);
   return el;
@@ -613,7 +625,7 @@ interface KbMenuState {
 }
 
 export function FileTree() {
-  const { fileTree, vaultRoot, createNote, createFolder, renameNote, activeTabPath } =
+  const { fileTree, vaultRoot, createNote, createFolder, moveNotes, activeTabPath } =
     useVaultStore();
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newName, setNewName] = useState('');
@@ -710,17 +722,20 @@ export function FileTree() {
       }
       if (proceed.length === 0) return;
 
-      try {
-        for (const s of proceed) {
-          const name = s.split('/').pop()!;
-          await renameNote(s, joinPath(dstDir, name));
-        }
-        if (dstDir) setExpanded((s) => new Set(s).add(dstDir));
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : String(err));
+      // Single batched move: every item is attempted (one failure doesn't
+      // strand the rest) and the tree is refreshed exactly once. Each failed
+      // item leaves its source untouched on disk; we surface them together.
+      const moves = proceed.map((s) => ({ from: s, to: joinPath(dstDir, s.split('/').pop()!) }));
+      const failures = await moveNotes(moves);
+      if (dstDir && failures.length < proceed.length) {
+        setExpanded((s) => new Set(s).add(dstDir));
+      }
+      if (failures.length > 0) {
+        const names = failures.map((f) => f.from.split('/').pop()).join(', ');
+        toast.error(`Couldn't move: ${names} (${failures[0].error})`);
       }
     },
-    [fileTree, renameNote],
+    [fileTree, moveNotes],
   );
 
   const endDrag = useCallback(() => {
@@ -752,7 +767,7 @@ export function FileTree() {
       e.dataTransfer.setData(DRAG_MIME, packed);
       e.dataTransfer.setData('text/plain', packed);
       e.dataTransfer.effectAllowed = 'move';
-      const ghost = makeDragImage(srcs, entry);
+      const ghost = makeDragImage(srcs, entry, e.clientX, e.clientY);
       e.dataTransfer.setDragImage(ghost, 12, 12);
       setTimeout(() => ghost.remove(), 0);
       startAutoScroll();

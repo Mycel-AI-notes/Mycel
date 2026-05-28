@@ -59,6 +59,16 @@ interface VaultState {
   createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
+  /** Move several notes/folders in one shot. Each item is attempted
+   *  independently (one failure doesn't abort the rest), cache/tabs are
+   *  remapped for every success, and the file tree is refreshed exactly
+   *  once at the end. Resolves to the list of items that failed so the
+   *  caller can surface them. Used by the file-tree drag-and-drop and
+   *  keyboard cut/paste so a multi-item move is a single refresh rather
+   *  than one per item. */
+  moveNotes: (
+    moves: { from: string; to: string }[],
+  ) => Promise<{ from: string; to: string; error: string }[]>;
   /** Update open tabs / noteCache after a file was renamed on disk by some
    *  other action (e.g. encrypt/decrypt, which writes `<name>.md.age` and
    *  removes `<name>.md`). The next save would otherwise target a stale
@@ -691,6 +701,38 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       };
     });
     await get().refreshTree();
+  },
+
+  moveNotes: async (moves) => {
+    const failures: { from: string; to: string; error: string }[] = [];
+    // Remap cache/tabs incrementally as each move succeeds, but defer the
+    // (relatively expensive) tree refresh until every move has been attempted
+    // so a five-item drag triggers one rebuild instead of five.
+    for (const { from, to } of moves) {
+      if (from === to) continue;
+      try {
+        await invoke('note_rename', { oldPath: from, newPath: to });
+      } catch (e) {
+        failures.push({ from, to, error: e instanceof Error ? e.message : String(e) });
+        continue;
+      }
+      const note = get().noteCache.get(from);
+      const newTitle = displayName(to);
+      set((s) => {
+        const next = new Map(s.noteCache);
+        next.delete(from);
+        if (note) next.set(to, { ...note, path: to });
+        return {
+          noteCache: next,
+          openTabs: s.openTabs.map((t) =>
+            t.path === from ? { ...t, path: to, title: newTitle } : t,
+          ),
+          activeTabPath: s.activeTabPath === from ? to : s.activeTabPath,
+        };
+      });
+    }
+    await get().refreshTree();
+    return failures;
   },
 
   relocateNote: async (oldPath, newPath) => {
