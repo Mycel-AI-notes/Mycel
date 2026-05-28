@@ -1,6 +1,8 @@
 use crate::core::crypto::{self, is_encrypted_path};
 use crate::core::parser::{parse_note, ParsedNote};
-use crate::core::vault::{KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR};
+use crate::core::vault::{
+    read_tree_order, write_tree_order, KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR,
+};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -8,6 +10,22 @@ use tauri::State;
 
 fn is_protected(rel_path: &str) -> bool {
     rel_path == KNOWLEDGE_BASE_DIR || rel_path == QUICK_NOTES_DIR
+}
+
+/// Vault-relative parent of `p` (`""` for a top-level entry).
+fn rel_parent(p: &str) -> String {
+    match p.rfind('/') {
+        Some(i) => p[..i].to_string(),
+        None => String::new(),
+    }
+}
+
+/// Last path segment (the entry's name) of `p`.
+fn rel_name(p: &str) -> String {
+    match p.rfind('/') {
+        Some(i) => p[i + 1..].to_string(),
+        None => p.to_string(),
+    }
 }
 
 /// Hex-encoded SHA-256 of the raw on-disk bytes. We hash the ciphertext for
@@ -268,6 +286,71 @@ pub async fn note_rename(old_path: String, new_path: String, state: State<'_, Ap
     if let Some(parent) = new_abs.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    let was_dir = old_abs.is_dir();
     std::fs::rename(&old_abs, &new_abs).map_err(|e| e.to_string())?;
+
+    // Keep the manual tree-order registry consistent with the move so the
+    // user's arrangement survives renames and relocations.
+    let mut order = read_tree_order(&vault_root);
+    let old_parent = rel_parent(&old_path);
+    let new_parent = rel_parent(&new_path);
+    let old_name = rel_name(&old_path);
+    let new_name = rel_name(&new_path);
+    if old_parent == new_parent {
+        // In-place rename: keep the entry's slot, just update its name.
+        if let Some(list) = order.get_mut(&old_parent) {
+            if let Some(pos) = list.iter().position(|n| n == &old_name) {
+                list[pos] = new_name.clone();
+            }
+        }
+    } else {
+        // Moved to a different folder: drop it from the old parent's order.
+        // The caller re-inserts it into the destination via `tree_reorder`
+        // when the drop position matters.
+        if let Some(list) = order.get_mut(&old_parent) {
+            list.retain(|n| n != &old_name);
+        }
+    }
+    // A moved/renamed directory carries its descendants' order keys with it:
+    // re-prefix every key under `old_path` to `new_path`.
+    if was_dir {
+        let keys: Vec<String> = order.keys().cloned().collect();
+        let prefix = format!("{old_path}/");
+        for k in keys {
+            if k == old_path {
+                if let Some(v) = order.remove(&k) {
+                    order.insert(new_path.clone(), v);
+                }
+            } else if let Some(rest) = k.strip_prefix(&prefix) {
+                if let Some(v) = order.remove(&k) {
+                    order.insert(format!("{new_path}/{rest}"), v);
+                }
+            }
+        }
+    }
+    let _ = write_tree_order(&vault_root, &order);
+    Ok(())
+}
+
+/// Persist the user's manual ordering of a folder's children. `parent` is the
+/// vault-relative folder path (`""` for the vault root); `names` is the full
+/// ordered list of child names as arranged by drag-and-drop. Names no longer
+/// present on disk are harmless — the tree scan ignores them.
+#[tauri::command]
+pub async fn tree_reorder(
+    parent: String,
+    names: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    let mut order = read_tree_order(&vault_root);
+    order.insert(parent, names);
+    write_tree_order(&vault_root, &order).map_err(|e| e.to_string())?;
     Ok(())
 }

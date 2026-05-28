@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,15 @@ pub const QUICK_NOTES_DIR: &str = "quick";
 /// Registry file under `.mycel/` that lists directories the user has
 /// promoted to Knowledge Bases. See `docs/specs/kb-directory.md`.
 pub const KB_DIRS_FILE: &str = "kb-dirs.json";
+
+/// Registry file under `.mycel/` that remembers the user's manual ordering
+/// of entries within a folder. Maps a vault-relative folder path (`""` for
+/// the vault root) to the ordered list of child *names* the user arranged by
+/// drag-and-drop. Entries not present in a list fall back to the default
+/// "directories first, then alphabetical" order, appended after the
+/// explicitly-ordered ones. Stale names (file deleted/moved) are simply
+/// ignored, so the file is self-healing.
+pub const TREE_ORDER_FILE: &str = "tree-order.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultConfig {
@@ -117,7 +126,8 @@ impl Vault {
         let kb_paths = read_kb_dirs(&self.root)
             .map(|c| c.dirs.into_iter().map(|e| e.path).collect::<HashSet<_>>())
             .unwrap_or_default();
-        read_dir_recursive(&self.root, &self.root, &kb_paths, false)
+        let order = read_tree_order(&self.root);
+        read_dir_recursive(&self.root, &self.root, &kb_paths, &order, false)
     }
 }
 
@@ -147,10 +157,32 @@ pub fn write_kb_dirs(root: &Path, config: &KbDirsConfig) -> Result<()> {
     Ok(())
 }
 
+/// Read the manual tree-order registry from `<root>/.mycel/tree-order.json`.
+/// Missing file or parse error → empty map (everything falls back to the
+/// default sort).
+pub fn read_tree_order(root: &Path) -> HashMap<String, Vec<String>> {
+    let path = root.join(".mycel").join(TREE_ORDER_FILE);
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// Persist the manual tree-order registry. Creates `.mycel/` if needed.
+pub fn write_tree_order(root: &Path, order: &HashMap<String, Vec<String>>) -> Result<()> {
+    let mycel_dir = root.join(".mycel");
+    std::fs::create_dir_all(&mycel_dir).context("Failed to create .mycel directory")?;
+    let path = mycel_dir.join(TREE_ORDER_FILE);
+    let json = serde_json::to_string_pretty(order)?;
+    std::fs::write(&path, json).context("Failed to write tree-order.json")?;
+    Ok(())
+}
+
 fn read_dir_recursive(
     dir: &Path,
     vault_root: &Path,
     kb_paths: &HashSet<String>,
+    order: &HashMap<String, Vec<String>>,
     inside_kb: bool,
 ) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
@@ -159,8 +191,31 @@ fn read_dir_recursive(
         .filter_map(|e| e.ok())
         .collect::<Vec<_>>();
 
-    // Sort: dirs first, then files, both alphabetically
+    // The manual order (if any) is keyed by this folder's vault-relative path,
+    // with "" standing for the vault root.
+    let dir_rel = dir
+        .strip_prefix(vault_root)
+        .unwrap_or(dir)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let custom = order.get(&dir_rel);
+
+    // Sort: honour the user's manual order first (explicitly-ordered entries
+    // keep their arranged positions); anything not in the list falls back to
+    // "dirs first, then alphabetical" and is appended after the ordered ones.
     read.sort_by(|a, b| {
+        if let Some(list) = custom {
+            let a_name = a.file_name().to_string_lossy().to_string();
+            let b_name = b.file_name().to_string_lossy().to_string();
+            let ai = list.iter().position(|n| n == &a_name);
+            let bi = list.iter().position(|n| n == &b_name);
+            match (ai, bi) {
+                (Some(x), Some(y)) => return x.cmp(&y),
+                (Some(_), None) => return std::cmp::Ordering::Less,
+                (None, Some(_)) => return std::cmp::Ordering::Greater,
+                (None, None) => {}
+            }
+        }
         let a_dir = a.path().is_dir();
         let b_dir = b.path().is_dir();
         if a_dir != b_dir {
@@ -201,7 +256,7 @@ fn read_dir_recursive(
             // one level down.
             let child_inside_kb = inside_kb || is_kb_dir;
             let mut children =
-                read_dir_recursive(&path, vault_root, kb_paths, child_inside_kb)?;
+                read_dir_recursive(&path, vault_root, kb_paths, order, child_inside_kb)?;
             let is_kb = rel_path == KNOWLEDGE_BASE_DIR;
             let is_quick = rel_path == QUICK_NOTES_DIR;
             // For KB-promoted directories, the `index.md` is the KB page
