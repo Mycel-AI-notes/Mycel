@@ -101,6 +101,8 @@ interface NodeProps {
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
   onMoveEntry: (src: string, target: FileEntry, pos: DropPos) => void;
+  dropTarget: { path: string; pos: DropPos } | null;
+  setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
 }
 
 function FileTreeNode({
@@ -124,10 +126,14 @@ function FileTreeNode({
   clearRenameRequest,
   onRowKeyDown,
   onMoveEntry,
+  dropTarget,
+  setDropTarget,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [dropPos, setDropPos] = useState<DropPos | null>(null);
+  // The hovered drop zone lives in a single parent-owned state so at most one
+  // row is ever highlighted; this row reads its own slice out of it.
+  const dropPos = dropTarget?.path === entry.path ? dropTarget.pos : null;
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
@@ -306,29 +312,38 @@ function FileTreeNode({
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
-      setDropPos(computeDropPos(e));
+      const pos = computeDropPos(e);
+      // Only push to shared state when the hovered zone actually changes, so a
+      // continuous dragover doesn't re-render the whole tree on every pixel.
+      if (dropTarget?.path === entry.path && dropTarget?.pos === pos) return;
+      setDropTarget({ path: entry.path, pos });
     },
-    [computeDropPos],
+    [computeDropPos, dropTarget, entry.path, setDropTarget],
   );
 
-  const handleDragLeave = useCallback((e: ReactDragEvent) => {
-    // Avoid flicker when the pointer moves into a child element.
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-    setDropPos(null);
-  }, []);
+  const handleDragLeave = useCallback(
+    (e: ReactDragEvent) => {
+      // Avoid flicker when the pointer moves into a nested element of this row.
+      if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+      // Only clear if we're the row currently marked — otherwise a later row's
+      // dragover may have already taken over the highlight.
+      if (dropTarget?.path === entry.path) setDropTarget(null);
+    },
+    [dropTarget, entry.path, setDropTarget],
+  );
 
   const handleDrop = useCallback(
     (e: ReactDragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       const pos = computeDropPos(e);
-      setDropPos(null);
+      setDropTarget(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
       onMoveEntry(src, entry, pos);
     },
-    [entry, computeDropPos, onMoveEntry],
+    [entry, computeDropPos, onMoveEntry, setDropTarget],
   );
 
   return (
@@ -580,6 +595,8 @@ function FileTreeNode({
               clearRenameRequest={clearRenameRequest}
               onRowKeyDown={onRowKeyDown}
               onMoveEntry={onMoveEntry}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
             />
           ))}
         </div>
@@ -608,6 +625,7 @@ export function FileTree() {
   const [newName, setNewName] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [dropTarget, setDropTarget] = useState<{ path: string; pos: DropPos } | null>(null);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -844,6 +862,7 @@ export function FileTree() {
     (e: ReactDragEvent) => {
       e.preventDefault();
       setRootDragOver(false);
+      setDropTarget(null);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
@@ -853,6 +872,13 @@ export function FileTree() {
     },
     [renameNote],
   );
+
+  // Safety net: whenever a drag finishes anywhere in the tree (drop, ESC, or
+  // dropped outside), wipe the highlight so no row stays lit.
+  const handleDragEnd = useCallback(() => {
+    setDropTarget(null);
+    setRootDragOver(false);
+  }, []);
 
   if (!vaultRoot) return null;
 
@@ -888,6 +914,7 @@ export function FileTree() {
         onDragOver={handleRootDragOver}
         onDragLeave={handleRootDragLeave}
         onDrop={handleRootDrop}
+        onDragEnd={handleDragEnd}
       >
         {creating && creating.parent === '' && (
           <div className="py-0.5" style={{ paddingLeft: '24px', paddingRight: '8px' }}>
@@ -928,6 +955,8 @@ export function FileTree() {
             clearRenameRequest={clearRenameRequest}
             onRowKeyDown={onRowKeyDown}
             onMoveEntry={moveEntry}
+            dropTarget={dropTarget}
+            setDropTarget={setDropTarget}
           />
         ))}
         {fileTree.length === 0 && !creating && (
