@@ -103,6 +103,8 @@ interface NodeProps {
   onMoveEntry: (src: string, target: FileEntry, pos: DropPos) => void;
   dropTarget: { path: string; pos: DropPos } | null;
   setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
+  dragging: boolean;
+  setDragging: (v: boolean) => void;
 }
 
 function FileTreeNode({
@@ -128,6 +130,8 @@ function FileTreeNode({
   onMoveEntry,
   dropTarget,
   setDropTarget,
+  dragging,
+  setDragging,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -281,8 +285,13 @@ function FileTreeNode({
       e.dataTransfer.setData(DRAG_MIME, entry.path);
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
+      // Chromium freezes :hover for the duration of a native drag, so the row
+      // the pointer was over when the drag began stays lit. Flag the whole tree
+      // as dragging so hover/focus backgrounds are suppressed and only the
+      // single drop-zone highlight remains.
+      setDragging(true);
     },
-    [entry.path, isLocked, renaming],
+    [entry.path, isLocked, renaming, setDragging],
   );
 
   // Decide which of the three drop zones the pointer is in. Folders that can
@@ -338,12 +347,13 @@ function FileTreeNode({
       e.stopPropagation();
       const pos = computeDropPos(e);
       setDropTarget(null);
+      setDragging(false);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
       onMoveEntry(src, entry, pos);
     },
-    [entry, computeDropPos, onMoveEntry, setDropTarget],
+    [entry, computeDropPos, onMoveEntry, setDropTarget, setDragging],
   );
 
   return (
@@ -358,10 +368,14 @@ function FileTreeNode({
         onDrop={handleDrop}
         className={clsx(
           'group relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
-          'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
+          'focus-visible:ring-1 focus-visible:ring-accent/60',
+          // Suppress hover/focus backgrounds during a drag: Chromium keeps the
+          // pre-drag :hover stuck on a row, which otherwise lights up alongside
+          // the real drop target (multiple "phantom" highlights at once).
+          !dragging && 'hover:bg-surface-hover',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
-          isFocused && !isActive && 'bg-surface-hover',
+          isFocused && !isActive && !dragging && 'bg-surface-hover',
           dropPos === 'inside' && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -597,6 +611,8 @@ function FileTreeNode({
               onMoveEntry={onMoveEntry}
               dropTarget={dropTarget}
               setDropTarget={setDropTarget}
+              dragging={dragging}
+              setDragging={setDragging}
             />
           ))}
         </div>
@@ -626,6 +642,9 @@ export function FileTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<{ path: string; pos: DropPos } | null>(null);
+  // True while a row is being dragged. Used to disable hover/focus backgrounds
+  // that Chromium otherwise leaves "stuck" on rows during a native drag.
+  const [dragging, setDragging] = useState(false);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -863,6 +882,7 @@ export function FileTree() {
       e.preventDefault();
       setRootDragOver(false);
       setDropTarget(null);
+      setDragging(false);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
@@ -878,6 +898,7 @@ export function FileTree() {
   const handleDragEnd = useCallback(() => {
     setDropTarget(null);
     setRootDragOver(false);
+    setDragging(false);
   }, []);
 
   if (!vaultRoot) return null;
@@ -957,6 +978,8 @@ export function FileTree() {
             onMoveEntry={moveEntry}
             dropTarget={dropTarget}
             setDropTarget={setDropTarget}
+            dragging={dragging}
+            setDragging={setDragging}
           />
         ))}
         {fileTree.length === 0 && !creating && (
