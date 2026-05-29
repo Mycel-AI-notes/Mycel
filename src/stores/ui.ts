@@ -11,7 +11,7 @@ export const PALETTES: { id: Palette; label: string; swatch: string }[] = [
   { id: 'coral',   label: 'Coral',         swatch: '#FF7E6B' },
   { id: 'amber',   label: 'Amber (Light)', swatch: '#E48A1A' },
   { id: 'azure',   label: 'Azure (Light)', swatch: '#3A82E2' },
-  { id: 'sage',    label: 'Sage (Light)',  swatch: '#8FD3A3' },
+  { id: 'sage',    label: 'Sage (Light)',  swatch: '#6B8A52' },
   { id: 'classic', label: 'Classic',       swatch: '#ffffff' },
 ];
 

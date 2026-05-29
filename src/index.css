@@ -141,55 +141,56 @@
   --color-selection:        rgba(58, 130, 226, 0.22);
   --shadow-glow:            0 0 24px rgba(58, 130, 226, 0.18);
 }
-/* Sage — soft pastel green. Light-forcing (like Amber/Azure/Classic): picking
-   it gives a calm mint-on-paper look regardless of the dark/light toggle. */
+/* Sage — steel-gray surfaces with a muted swamp-green accent. Light-forcing
+   (like Amber/Azure/Classic): picking it gives a calm cool-gray look with an
+   olive/bog-green accent regardless of the dark/light toggle. */
 :root[data-palette='sage'],
 .dark[data-palette='sage'] {
   --color-surface-0:        #ffffff;
-  --color-surface-1:        #f1f8f3;
-  --color-surface-2:        #e4f1e8;
-  --color-surface-hover:    #d6e9db;
+  --color-surface-1:        #f1f3f5;
+  --color-surface-2:        #e3e7ea;
+  --color-surface-hover:    #d5dbe0;
 
-  --color-text-primary:     #15271c;
-  --color-text-secondary:   #36513f;
-  --color-text-muted:       #6b8573;
-  --color-text-disabled:    #a6bfac;
+  --color-text-primary:     #1b2127;
+  --color-text-secondary:   #3b454d;
+  --color-text-muted:       #69737b;
+  --color-text-disabled:    #a6afb6;
 
-  --color-accent:           #3E8E5A;
-  --color-accent-bright:    #5FB67C;
-  --color-accent-muted:     #4C9E68;
-  --color-accent-deep:      #275C3A;
+  --color-accent:           #4F6B3A;
+  --color-accent-bright:    #6B8A52;
+  --color-accent-muted:     #5C7A47;
+  --color-accent-deep:      #324425;
 
-  --color-border:           #d2e6d8;
-  --color-border-strong:    #abcdb4;
+  --color-border:           #d3d9de;
+  --color-border-strong:    #aab2ba;
 
   --color-success:          #2fa372;
   --color-warning:          #c98a1a;
   --color-error:            #d94a4a;
   --color-info:             #3a82d6;
 
-  --color-graph-active:     #5FB67C;
-  --color-graph-connected:  #93D6A8;
-  --color-graph-inactive:   #c3dac9;
-  --color-graph-edge:       #d2e6d8;
-  --color-graph-edge-glow:  #5FB67C;
+  --color-graph-active:     #6B8A52;
+  --color-graph-connected:  #93AE7A;
+  --color-graph-inactive:   #c3cac4;
+  --color-graph-edge:       #d3d9de;
+  --color-graph-edge-glow:  #6B8A52;
 
-  --color-wikilink:         #3E8E5A;
+  --color-wikilink:         #4F6B3A;
   --color-wikilink-broken:  #c0382b;
   --color-tag:              #2f7a8a;
   --color-embedding:        #2faf6c;
 
-  --color-search-bg:        #eaf4ed;
-  --color-search-selected:  #d6e9db;
-  --color-semantic-glow:    rgba(95, 182, 124, 0.18);
+  --color-search-bg:        #eceff2;
+  --color-search-selected:  #d5dbe0;
+  --color-semantic-glow:    rgba(107, 138, 82, 0.18);
 
-  --color-code-bg:          #e7f2eb;
-  --color-inline-code:      #3E8E5A;
+  --color-code-bg:          #e8ebee;
+  --color-inline-code:      #4F6B3A;
 
-  --color-selection:        rgba(95, 182, 124, 0.22);
+  --color-selection:        rgba(107, 138, 82, 0.22);
   --color-active-line:      rgba(0, 0, 0, 0.03);
 
-  --shadow-glow:            0 0 24px rgba(95, 182, 124, 0.18);
+  --shadow-glow:            0 0 24px rgba(107, 138, 82, 0.18);
 
   color-scheme: light;
 }
