@@ -93,13 +93,16 @@ interface NodeProps {
   cancelCreate: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   openKbMenu: (x: number, y: number, entry: FileEntry) => void;
-  focusedPath: string | null;
   tabbablePath: string | null;
   autoFocusPath: string | null;
   setFocusedPath: (p: string | null) => void;
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
+  // focusedPath isn't passed to nodes on purpose: a row no longer paints a
+  // persistent background for the "logically focused" path (that lingering
+  // highlight read as a second selected row). Keyboard focus is shown by the
+  // focus-visible ring on the actually-focused DOM row instead.
   onMoveEntry: (src: string, target: FileEntry, pos: DropPos) => void;
   dropTarget: { path: string; pos: DropPos } | null;
   setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
@@ -122,7 +125,6 @@ function FileTreeNode({
   cancelCreate,
   inputRef,
   openKbMenu,
-  focusedPath,
   tabbablePath,
   autoFocusPath,
   setFocusedPath,
@@ -145,7 +147,6 @@ function FileTreeNode({
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
-  const isFocused = focusedPath === entry.path;
   const isTabbable = tabbablePath === entry.path;
   // Hover is tracked in JS rather than via the CSS :hover pseudo-class.
   // Chromium leaves :hover "stuck" on every row a native drag passed over —
@@ -390,7 +391,6 @@ function FileTreeNode({
           isHovered && 'bg-surface-hover',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
-          isFocused && !isActive && !dragging && 'bg-surface-hover',
           dropPos === 'inside' && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -616,7 +616,6 @@ function FileTreeNode({
               cancelCreate={cancelCreate}
               inputRef={inputRef}
               openKbMenu={openKbMenu}
-              focusedPath={focusedPath}
               tabbablePath={tabbablePath}
               autoFocusPath={autoFocusPath}
               setFocusedPath={setFocusedPath}
@@ -989,7 +988,6 @@ export function FileTree() {
             cancelCreate={cancelCreate}
             inputRef={inputRef}
             openKbMenu={openKbMenu}
-            focusedPath={focusedPath}
             tabbablePath={tabbablePath}
             autoFocusPath={autoFocusPath}
             setFocusedPath={setFocusedPath}
