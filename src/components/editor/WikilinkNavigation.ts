@@ -31,14 +31,31 @@ export function makeWikilinkClickHandler(
   createNote: (path: string) => Promise<void>,
 ) {
   return EditorView.domEventHandlers({
-    click(event, _view) {
+    // Handle on mousedown, not click: a click moves the caret into the link
+    // span first, which makes the live-preview plugin swap the rendered widget
+    // back to raw `[[...]]` text before the click handler ever runs. Acting on
+    // mousedown keeps the widget in place and stops the caret from jumping in.
+    mousedown(event, _view) {
+      // Only follow a plain left click; leave modified clicks for editing.
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return false;
+      }
       // Only navigate when clicking the rendered widget, not raw [[...]] text.
-      const target = event.target as HTMLElement;
-      if (!target.classList.contains('cm-wikilink')) return false;
+      const el = (event.target as HTMLElement | null)?.closest?.(
+        '.cm-wikilink',
+      ) as HTMLElement | null;
+      if (!el) return false;
 
-      const label = target.textContent?.trim() ?? '';
+      const label = el.textContent?.trim() ?? '';
       if (!label) return false;
 
+      event.preventDefault();
       void resolveWikilink(label).then((resolved) => {
         if (resolved) {
           void openNote(resolved);

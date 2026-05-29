@@ -23,6 +23,7 @@ import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
 import { externalLinkClickHandler } from './ExternalLinkNavigation';
+import { makeWikilinkClickHandler } from './WikilinkNavigation';
 import {
   mathDecorationField,
   mathAtomicRangesField,
@@ -155,7 +156,7 @@ interface Props {
 export function MarkdownEditor({ path }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const { noteCache, saveNote, markDirty, updateNoteLive } = useVaultStore();
+  const { noteCache, saveNote, markDirty, updateNoteLive, openNote, createNote } = useVaultStore();
   const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDark = document.documentElement.classList.contains('dark');
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -205,6 +206,7 @@ export function MarkdownEditor({ path }: Props) {
         markdownPreviewPlugin,
         markdownPreviewTheme,
         externalLinkClickHandler,
+        makeWikilinkClickHandler(openNote, createNote),
         mathDecorationField,
         mathAtomicRangesField,
         mathDecorationTheme,
