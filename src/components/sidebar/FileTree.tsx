@@ -674,7 +674,6 @@ export function FileTree() {
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
   const [renameRequest, setRenameRequest] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const initializedRef = useRef(false);
 
   const clearRenameRequest = useCallback(() => setRenameRequest(null), []);
 
@@ -782,19 +781,10 @@ export function FileTree() {
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
-  // Expand top-level folders on first load so the tree isn't completely collapsed.
-  useEffect(() => {
-    if (initializedRef.current) return;
-    if (fileTree.length === 0) return;
-    initializedRef.current = true;
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      fileTree.forEach((e) => {
-        if (e.is_dir) next.add(e.path);
-      });
-      return next;
-    });
-  }, [fileTree]);
+  // The tree starts fully collapsed on a fresh app launch. While the app is
+  // running (including when the window is minimized — Tauri keeps the webview
+  // alive, so this state persists), whatever the user expands/collapses sticks.
+  // It only resets to collapsed on a full quit + relaunch.
 
   // Whenever the user opens a note (file tree click, quick switcher, palette,
   // or Garden's "Create page"), expand every ancestor folder so the file is
