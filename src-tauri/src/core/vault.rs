@@ -187,8 +187,23 @@ fn read_dir_recursive(
 ) -> Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
 
+    // Read the directory once and precompute each entry's name and
+    // directory-ness. `is_dir` is resolved here (one `stat` per entry, with
+    // the same symlink-following semantics as `Path::is_dir`) so the sort
+    // comparator below doesn't re-`stat` and re-allocate names on every
+    // comparison — that turned a folder scan into O(n·log n) syscalls.
+    struct ReadItem {
+        entry: std::fs::DirEntry,
+        name: String,
+        is_dir: bool,
+    }
     let mut read = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
+        .map(|e| {
+            let is_dir = e.path().is_dir();
+            let name = e.file_name().to_string_lossy().to_string();
+            ReadItem { entry: e, name, is_dir }
+        })
         .collect::<Vec<_>>();
 
     // The manual order (if any) is keyed by this folder's vault-relative path,
@@ -205,10 +220,8 @@ fn read_dir_recursive(
     // "dirs first, then alphabetical" and is appended after the ordered ones.
     read.sort_by(|a, b| {
         if let Some(list) = custom {
-            let a_name = a.file_name().to_string_lossy().to_string();
-            let b_name = b.file_name().to_string_lossy().to_string();
-            let ai = list.iter().position(|n| n == &a_name);
-            let bi = list.iter().position(|n| n == &b_name);
+            let ai = list.iter().position(|n| n == &a.name);
+            let bi = list.iter().position(|n| n == &b.name);
             match (ai, bi) {
                 (Some(x), Some(y)) => return x.cmp(&y),
                 (Some(_), None) => return std::cmp::Ordering::Less,
@@ -216,18 +229,16 @@ fn read_dir_recursive(
                 (None, None) => {}
             }
         }
-        let a_dir = a.path().is_dir();
-        let b_dir = b.path().is_dir();
-        if a_dir != b_dir {
-            b_dir.cmp(&a_dir)
+        if a.is_dir != b.is_dir {
+            b.is_dir.cmp(&a.is_dir)
         } else {
-            a.file_name().cmp(&b.file_name())
+            a.name.cmp(&b.name)
         }
     });
 
-    for entry in read {
+    for item in read {
+        let ReadItem { entry, name, is_dir } = item;
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
 
         // Skip hidden dirs (except within content), skip .mycel entirely
         if name.starts_with('.') {
@@ -247,7 +258,7 @@ fn read_dir_recursive(
             continue;
         }
 
-        if path.is_dir() {
+        if is_dir {
             let is_kb_dir = kb_paths.contains(&rel_path);
             // Descendants of a KB folder inherit the `is_inside_kb`
             // flag so the UI knows to suppress KB-creation actions on
