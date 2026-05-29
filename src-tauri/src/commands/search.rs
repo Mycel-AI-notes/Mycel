@@ -1,8 +1,21 @@
 use crate::core::parser::parse_note;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use tauri::State;
 use walkdir::WalkDir;
+
+/// File modification time as epoch milliseconds, or `0` when it can't be read
+/// (which simply forces a re-read — the index never serves a stale `0`).
+fn entry_mtime(entry: &walkdir::DirEntry) -> i64 {
+    entry
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NoteSummary {
@@ -30,7 +43,21 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
             .ok_or("No vault open")?
     };
 
+    // Consult the metadata index so unchanged notes never get re-read. When
+    // the index is absent (open failed) `cached` is empty and we degrade to the
+    // original full-scan behaviour — every `.md` is read and parsed.
+    let index_guard = state.note_index.lock().await;
+    let index = index_guard.as_ref();
+    let cached = index
+        .and_then(|ix| ix.load_titles().ok())
+        .unwrap_or_default();
+
     let mut notes = Vec::new();
+    // Titles to (re)write into the index, and the set of `.md` paths seen this
+    // scan so we can prune entries whose files were deleted or moved.
+    let mut upserts: Vec<(String, i64, String)> = Vec::new();
+    let mut seen_md: HashSet<String> = HashSet::new();
+
     for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         let rel = path
@@ -48,26 +75,58 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
             continue;
         }
 
-        let stem = if is_enc {
-            // Strip `.md.age` cleanly so the switcher shows the bare name.
-            rel.rsplit('/').next().unwrap_or(&rel).trim_end_matches(".md.age").to_string()
-        } else {
-            path.file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default()
-        };
+        if is_enc {
+            // Encrypted notes are never indexed — we can't peek inside without
+            // unlocking, so the title is always the bare stem (no file read).
+            let title = rel
+                .rsplit('/')
+                .next()
+                .unwrap_or(&rel)
+                .trim_end_matches(".md.age")
+                .to_string();
+            notes.push(NoteSummary { path: rel, title });
+            continue;
+        }
 
-        let title = if is_enc {
-            // We can't peek inside without unlocking — use the file stem.
-            stem
-        } else {
-            std::fs::read_to_string(path)
-                .ok()
-                .and_then(|content| parse_note(&content).meta.title)
-                .unwrap_or(stem)
-        };
+        // Plaintext `.md`: serve the cached title when the file is unchanged,
+        // otherwise read + parse and queue the fresh title for the index.
+        seen_md.insert(rel.clone());
+        let mtime = entry_mtime(&entry);
+        if let Some((cached_mtime, cached_title)) = cached.get(&rel) {
+            if *cached_mtime == mtime {
+                notes.push(NoteSummary { path: rel, title: cached_title.clone() });
+                continue;
+            }
+        }
 
-        notes.push(NoteSummary { path: rel, title });
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        match std::fs::read_to_string(path) {
+            Ok(content) => {
+                let title = parse_note(&content).meta.title.unwrap_or(stem);
+                if index.is_some() {
+                    upserts.push((rel.clone(), mtime, title.clone()));
+                }
+                notes.push(NoteSummary { path: rel, title });
+            }
+            Err(_) => {
+                // Transient read failure: fall back to the stem and don't cache,
+                // so a later successful scan still picks up the real title.
+                notes.push(NoteSummary { path: rel, title: stem });
+            }
+        }
+    }
+
+    // Persist title changes and drop entries for files that disappeared.
+    if let Some(ix) = index {
+        let deletes: Vec<String> = cached
+            .keys()
+            .filter(|p| !seen_md.contains(*p))
+            .cloned()
+            .collect();
+        let _ = ix.apply_titles(&upserts, &deletes);
     }
 
     notes.sort_by(|a, b| a.title.cmp(&b.title));

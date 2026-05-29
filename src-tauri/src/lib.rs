@@ -16,6 +16,10 @@ pub struct AppState {
     /// loaded `AiConfig`. Lazily materialized on the first AI command so
     /// vaults that never use AI never open the DB.
     pub ai: Arc<Mutex<Option<Arc<core::ai::AiState>>>>,
+    /// Per-vault metadata index (`.mycel/index.db`) backing fast vault-wide
+    /// queries like `notes_list`. Opened on `vault_open`; `None` when the open
+    /// failed, in which case those commands fall back to a full file scan.
+    pub note_index: Arc<Mutex<Option<core::index::NoteIndex>>>,
     /// Per-file mutexes for database operations. Every db_* command that
     /// does read-modify-write on a .db.json acquires the lock for its path
     /// before reading; without this, two near-simultaneous commands (e.g.
@@ -45,6 +49,7 @@ impl Default for AppState {
             watcher: Arc::new(Mutex::new(None)),
             crypto: Arc::new(core::crypto::Session::default()),
             ai: Arc::new(Mutex::new(None)),
+            note_index: Arc::new(Mutex::new(None)),
             db_locks: Arc::new(StdMutex::new(HashMap::new())),
         }
     }

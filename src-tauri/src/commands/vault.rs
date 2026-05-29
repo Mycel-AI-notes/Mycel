@@ -23,6 +23,12 @@ pub async fn vault_open(
     // new vault's `.mycel/ai/`.
     *state.ai.lock().await = None;
 
+    // (Re)open the per-vault metadata index that backs `notes_list`. Failure
+    // is non-fatal: the command falls back to a full file scan when it's
+    // `None`, so a broken/locked DB degrades performance but never blocks
+    // opening the vault.
+    *state.note_index.lock().await = crate::core::index::NoteIndex::open(&root).ok();
+
     let new_watcher = start_watcher(app, root);
     *state.watcher.lock().await = new_watcher;
 

@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod crypto;
 pub mod garden;
+pub mod index;
 pub mod parser;
 pub mod sync;
 pub mod sync_keyring;
