@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 type Theme = 'light' | 'dark' | 'system';
 
-export type Palette = 'moss' | 'amber' | 'azure' | 'plum' | 'coral' | 'classic';
+export type Palette = 'moss' | 'amber' | 'azure' | 'plum' | 'coral' | 'sage' | 'classic';
 
 export const PALETTES: { id: Palette; label: string; swatch: string }[] = [
   { id: 'moss',    label: 'Moss',          swatch: '#C8F52A' },
@@ -11,6 +11,7 @@ export const PALETTES: { id: Palette; label: string; swatch: string }[] = [
   { id: 'coral',   label: 'Coral',         swatch: '#FF7E6B' },
   { id: 'amber',   label: 'Amber (Light)', swatch: '#E48A1A' },
   { id: 'azure',   label: 'Azure (Light)', swatch: '#3A82E2' },
+  { id: 'sage',    label: 'Sage (Light)',  swatch: '#8FD3A3' },
   { id: 'classic', label: 'Classic',       swatch: '#ffffff' },
 ];
 
