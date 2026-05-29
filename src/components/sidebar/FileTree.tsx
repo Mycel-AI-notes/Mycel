@@ -93,16 +93,23 @@ interface NodeProps {
   cancelCreate: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   openKbMenu: (x: number, y: number, entry: FileEntry) => void;
-  focusedPath: string | null;
   tabbablePath: string | null;
   autoFocusPath: string | null;
   setFocusedPath: (p: string | null) => void;
   renameRequest: string | null;
   clearRenameRequest: () => void;
   onRowKeyDown: (e: React.KeyboardEvent, entry: FileEntry) => void;
+  // focusedPath isn't passed to nodes on purpose: a row no longer paints a
+  // persistent background for the "logically focused" path (that lingering
+  // highlight read as a second selected row). Keyboard focus is shown by the
+  // focus-visible ring on the actually-focused DOM row instead.
   onMoveEntry: (src: string, target: FileEntry, pos: DropPos) => void;
   dropTarget: { path: string; pos: DropPos } | null;
   setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
+  dragging: boolean;
+  setDragging: (v: boolean) => void;
+  hoveredPath: string | null;
+  setHoveredPath: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 function FileTreeNode({
@@ -118,7 +125,6 @@ function FileTreeNode({
   cancelCreate,
   inputRef,
   openKbMenu,
-  focusedPath,
   tabbablePath,
   autoFocusPath,
   setFocusedPath,
@@ -128,6 +134,10 @@ function FileTreeNode({
   onMoveEntry,
   dropTarget,
   setDropTarget,
+  dragging,
+  setDragging,
+  hoveredPath,
+  setHoveredPath,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -137,14 +147,24 @@ function FileTreeNode({
   const { openNote, deleteNote, renameNote, pinTab, activeTabPath } = useVaultStore();
   const { status: cryptoStatus, encryptNote, decryptNote } = useCryptoStore();
   const rowRef = useRef<HTMLDivElement>(null);
-  const isFocused = focusedPath === entry.path;
   const isTabbable = tabbablePath === entry.path;
+  // Hover is tracked in JS rather than via the CSS :hover pseudo-class.
+  // Chromium leaves :hover "stuck" on every row a native drag passed over —
+  // even after the drag ends — so CSS hover backgrounds accumulate across
+  // moves. A JS flag (cleared on drag start, never set by dragover) can't get
+  // stuck that way.
+  const isHovered = hoveredPath === entry.path && !dragging;
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
   const isKbDir = !!entry.is_kb_dir;
   const isQuickRoot = !!entry.is_quick_notes;
   const isLocked = isKB || isQuickRoot;
+  // The quick-capture folder can be reordered among the vault-root siblings,
+  // but it stays locked against rename/delete/drop-in and can't be moved into
+  // another folder (its identity and the global capture path are pinned to
+  // `quick/` at the root). KB stays fully locked.
+  const isDraggable = !isKB;
   const isOpen = entry.is_dir && expanded.has(entry.path);
   const isEnc = !!entry.is_encrypted;
 
@@ -274,15 +294,22 @@ function FileTreeNode({
 
   const handleDragStart = useCallback(
     (e: ReactDragEvent) => {
-      if (isLocked || renaming) {
+      if (!isDraggable || renaming) {
         e.preventDefault();
         return;
       }
       e.dataTransfer.setData(DRAG_MIME, entry.path);
       e.dataTransfer.setData('text/plain', entry.path);
       e.dataTransfer.effectAllowed = 'move';
+      // Chromium freezes :hover for the duration of a native drag, so the row
+      // the pointer was over when the drag began stays lit. Flag the whole tree
+      // as dragging so hover/focus backgrounds are suppressed and only the
+      // single drop-zone highlight remains, and drop the JS hover so nothing
+      // lingers once the drag ends.
+      setDragging(true);
+      setHoveredPath(null);
     },
-    [entry.path, isLocked, renaming],
+    [entry.path, isDraggable, renaming, setDragging, setHoveredPath],
   );
 
   // Decide which of the three drop zones the pointer is in. Folders that can
@@ -338,30 +365,37 @@ function FileTreeNode({
       e.stopPropagation();
       const pos = computeDropPos(e);
       setDropTarget(null);
+      setDragging(false);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
       onMoveEntry(src, entry, pos);
     },
-    [entry, computeDropPos, onMoveEntry, setDropTarget],
+    [entry, computeDropPos, onMoveEntry, setDropTarget, setDragging],
   );
 
   return (
     <div>
       <div
         ref={rowRef}
-        draggable={!renaming && !isLocked}
+        draggable={!renaming && isDraggable}
         tabIndex={isTabbable ? 0 : -1}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onMouseEnter={() => setHoveredPath(entry.path)}
+        onMouseLeave={() => setHoveredPath((p) => (p === entry.path ? null : p))}
         className={clsx(
-          'group relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
-          'hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-accent/60',
+          'relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+          'focus-visible:ring-1 focus-visible:ring-accent/60',
+          // Hover/focus backgrounds use JS-tracked hover (isHovered) instead of
+          // the CSS :hover pseudo-class, which Chromium leaves stuck on every
+          // row a drag passed over — causing multiple phantom highlights that
+          // accumulate across moves.
+          isHovered && 'bg-surface-hover',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
-          isFocused && !isActive && 'bg-surface-hover',
           dropPos === 'inside' && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -445,7 +479,7 @@ function FileTreeNode({
         )}
 
         {!renaming && !isLocked && (
-          <span className="hidden group-hover:flex items-center gap-0.5">
+          <span className={clsx('items-center gap-0.5', isHovered ? 'flex' : 'hidden')}>
             {entry.is_dir && (
               <>
                 <button
@@ -587,7 +621,6 @@ function FileTreeNode({
               cancelCreate={cancelCreate}
               inputRef={inputRef}
               openKbMenu={openKbMenu}
-              focusedPath={focusedPath}
               tabbablePath={tabbablePath}
               autoFocusPath={autoFocusPath}
               setFocusedPath={setFocusedPath}
@@ -597,6 +630,10 @@ function FileTreeNode({
               onMoveEntry={onMoveEntry}
               dropTarget={dropTarget}
               setDropTarget={setDropTarget}
+              dragging={dragging}
+              setDragging={setDragging}
+              hoveredPath={hoveredPath}
+              setHoveredPath={setHoveredPath}
             />
           ))}
         </div>
@@ -626,6 +663,12 @@ export function FileTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<{ path: string; pos: DropPos } | null>(null);
+  // True while a row is being dragged. Used to disable hover/focus backgrounds
+  // that Chromium otherwise leaves "stuck" on rows during a native drag.
+  const [dragging, setDragging] = useState(false);
+  // JS-tracked hovered row, replacing the CSS :hover pseudo-class (which
+  // Chromium leaves stuck on rows a drag crossed). Cleared on drag start.
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -820,6 +863,16 @@ export function FileTree() {
       const destParent = pos === 'inside' ? target.path : parentOf(target.path);
       // Never drop an entry into itself or one of its own descendants.
       if (destParent === src || destParent.startsWith(src + '/')) return;
+      // The managed roots (quick-capture / Knowledge Base) may be reordered
+      // among the vault-root siblings but never moved into another folder:
+      // their identity and the global capture path are pinned to the root, and
+      // the backend rejects renaming them anyway. Only allow root-level reorder.
+      if (
+        (src === QUICK_NOTES_DIR || src === KNOWLEDGE_BASE_DIR) &&
+        destParent !== ''
+      ) {
+        return;
+      }
 
       const moving = parentOf(src) !== destParent;
       if (moving) {
@@ -863,6 +916,7 @@ export function FileTree() {
       e.preventDefault();
       setRootDragOver(false);
       setDropTarget(null);
+      setDragging(false);
       const src =
         e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain');
       if (!src) return;
@@ -878,6 +932,8 @@ export function FileTree() {
   const handleDragEnd = useCallback(() => {
     setDropTarget(null);
     setRootDragOver(false);
+    setDragging(false);
+    setHoveredPath(null);
   }, []);
 
   if (!vaultRoot) return null;
@@ -947,7 +1003,6 @@ export function FileTree() {
             cancelCreate={cancelCreate}
             inputRef={inputRef}
             openKbMenu={openKbMenu}
-            focusedPath={focusedPath}
             tabbablePath={tabbablePath}
             autoFocusPath={autoFocusPath}
             setFocusedPath={setFocusedPath}
@@ -957,6 +1012,10 @@ export function FileTree() {
             onMoveEntry={moveEntry}
             dropTarget={dropTarget}
             setDropTarget={setDropTarget}
+            dragging={dragging}
+            setDragging={setDragging}
+            hoveredPath={hoveredPath}
+            setHoveredPath={setHoveredPath}
           />
         ))}
         {fileTree.length === 0 && !creating && (
