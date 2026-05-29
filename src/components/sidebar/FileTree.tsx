@@ -105,6 +105,8 @@ interface NodeProps {
   setDropTarget: (t: { path: string; pos: DropPos } | null) => void;
   dragging: boolean;
   setDragging: (v: boolean) => void;
+  hoveredPath: string | null;
+  setHoveredPath: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 function FileTreeNode({
@@ -132,6 +134,8 @@ function FileTreeNode({
   setDropTarget,
   dragging,
   setDragging,
+  hoveredPath,
+  setHoveredPath,
 }: NodeProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -143,6 +147,12 @@ function FileTreeNode({
   const rowRef = useRef<HTMLDivElement>(null);
   const isFocused = focusedPath === entry.path;
   const isTabbable = tabbablePath === entry.path;
+  // Hover is tracked in JS rather than via the CSS :hover pseudo-class.
+  // Chromium leaves :hover "stuck" on every row a native drag passed over —
+  // even after the drag ends — so CSS hover backgrounds accumulate across
+  // moves. A JS flag (cleared on drag start, never set by dragover) can't get
+  // stuck that way.
+  const isHovered = hoveredPath === entry.path && !dragging;
 
   const isActive = activeTabPath === entry.path;
   const isKB = !!entry.is_knowledge_base;
@@ -288,10 +298,12 @@ function FileTreeNode({
       // Chromium freezes :hover for the duration of a native drag, so the row
       // the pointer was over when the drag began stays lit. Flag the whole tree
       // as dragging so hover/focus backgrounds are suppressed and only the
-      // single drop-zone highlight remains.
+      // single drop-zone highlight remains, and drop the JS hover so nothing
+      // lingers once the drag ends.
       setDragging(true);
+      setHoveredPath(null);
     },
-    [entry.path, isLocked, renaming, setDragging],
+    [entry.path, isLocked, renaming, setDragging, setHoveredPath],
   );
 
   // Decide which of the three drop zones the pointer is in. Folders that can
@@ -366,13 +378,16 @@ function FileTreeNode({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onMouseEnter={() => setHoveredPath(entry.path)}
+        onMouseLeave={() => setHoveredPath((p) => (p === entry.path ? null : p))}
         className={clsx(
-          'group relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+          'relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
           'focus-visible:ring-1 focus-visible:ring-accent/60',
-          // Suppress hover/focus backgrounds during a drag: Chromium keeps the
-          // pre-drag :hover stuck on a row, which otherwise lights up alongside
-          // the real drop target (multiple "phantom" highlights at once).
-          !dragging && 'hover:bg-surface-hover',
+          // Hover/focus backgrounds use JS-tracked hover (isHovered) instead of
+          // the CSS :hover pseudo-class, which Chromium leaves stuck on every
+          // row a drag passed over — causing multiple phantom highlights that
+          // accumulate across moves.
+          isHovered && 'bg-surface-hover',
           isActive && 'bg-accent/12 text-accent',
           !isActive && 'text-text-secondary',
           isFocused && !isActive && !dragging && 'bg-surface-hover',
@@ -459,7 +474,7 @@ function FileTreeNode({
         )}
 
         {!renaming && !isLocked && (
-          <span className="hidden group-hover:flex items-center gap-0.5">
+          <span className={clsx('items-center gap-0.5', isHovered ? 'flex' : 'hidden')}>
             {entry.is_dir && (
               <>
                 <button
@@ -613,6 +628,8 @@ function FileTreeNode({
               setDropTarget={setDropTarget}
               dragging={dragging}
               setDragging={setDragging}
+              hoveredPath={hoveredPath}
+              setHoveredPath={setHoveredPath}
             />
           ))}
         </div>
@@ -645,6 +662,9 @@ export function FileTree() {
   // True while a row is being dragged. Used to disable hover/focus backgrounds
   // that Chromium otherwise leaves "stuck" on rows during a native drag.
   const [dragging, setDragging] = useState(false);
+  // JS-tracked hovered row, replacing the CSS :hover pseudo-class (which
+  // Chromium leaves stuck on rows a drag crossed). Cleared on drag start.
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [kbMenu, setKbMenu] = useState<KbMenuState | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [autoFocusPath, setAutoFocusPath] = useState<string | null>(null);
@@ -899,6 +919,7 @@ export function FileTree() {
     setDropTarget(null);
     setRootDragOver(false);
     setDragging(false);
+    setHoveredPath(null);
   }, []);
 
   if (!vaultRoot) return null;
@@ -980,6 +1001,8 @@ export function FileTree() {
             setDropTarget={setDropTarget}
             dragging={dragging}
             setDragging={setDragging}
+            hoveredPath={hoveredPath}
+            setHoveredPath={setHoveredPath}
           />
         ))}
         {fileTree.length === 0 && !creating && (
