@@ -160,6 +160,11 @@ function FileTreeNode({
   const isKbDir = !!entry.is_kb_dir;
   const isQuickRoot = !!entry.is_quick_notes;
   const isLocked = isKB || isQuickRoot;
+  // The quick-capture folder can be reordered among the vault-root siblings,
+  // but it stays locked against rename/delete/drop-in and can't be moved into
+  // another folder (its identity and the global capture path are pinned to
+  // `quick/` at the root). KB stays fully locked.
+  const isDraggable = !isKB;
   const isOpen = entry.is_dir && expanded.has(entry.path);
   const isEnc = !!entry.is_encrypted;
 
@@ -289,7 +294,7 @@ function FileTreeNode({
 
   const handleDragStart = useCallback(
     (e: ReactDragEvent) => {
-      if (isLocked || renaming) {
+      if (!isDraggable || renaming) {
         e.preventDefault();
         return;
       }
@@ -304,7 +309,7 @@ function FileTreeNode({
       setDragging(true);
       setHoveredPath(null);
     },
-    [entry.path, isLocked, renaming, setDragging, setHoveredPath],
+    [entry.path, isDraggable, renaming, setDragging, setHoveredPath],
   );
 
   // Decide which of the three drop zones the pointer is in. Folders that can
@@ -373,7 +378,7 @@ function FileTreeNode({
     <div>
       <div
         ref={rowRef}
-        draggable={!renaming && !isLocked}
+        draggable={!renaming && isDraggable}
         tabIndex={isTabbable ? 0 : -1}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -858,6 +863,16 @@ export function FileTree() {
       const destParent = pos === 'inside' ? target.path : parentOf(target.path);
       // Never drop an entry into itself or one of its own descendants.
       if (destParent === src || destParent.startsWith(src + '/')) return;
+      // The managed roots (quick-capture / Knowledge Base) may be reordered
+      // among the vault-root siblings but never moved into another folder:
+      // their identity and the global capture path are pinned to the root, and
+      // the backend rejects renaming them anyway. Only allow root-level reorder.
+      if (
+        (src === QUICK_NOTES_DIR || src === KNOWLEDGE_BASE_DIR) &&
+        destParent !== ''
+      ) {
+        return;
+      }
 
       const moving = parentOf(src) !== destParent;
       if (moving) {
