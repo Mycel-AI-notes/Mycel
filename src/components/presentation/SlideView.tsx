@@ -1,7 +1,9 @@
 import { createElement, Fragment, type ReactNode } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import 'katex/dist/katex.min.css';
 import { renderInlineMarkdown } from '@/components/markdown/InlineMarkdown';
 import { renderKatex } from '@/components/editor/math/katex-render';
+import { useVaultStore } from '@/stores/vault';
 import type { Slide } from '@/lib/presentation/splitSlides';
 
 /**
@@ -21,17 +23,37 @@ import type { Slide } from '@/lib/presentation/splitSlides';
 
 // ── inline helpers ──────────────────────────────────────────────────────────
 
-/** Inline render that also resolves `$…$` math, which the shared inline
- *  renderer doesn't know about. Splits the text on inline-math spans and
- *  hands the non-math pieces to `renderInlineMarkdown`. */
+/** Resolve an image `src` to something the webview can load. External URLs
+ *  pass through; local attachment paths are made absolute against the vault
+ *  root and routed through Tauri's asset protocol (same as the editor). */
+function resolveImageSrc(src: string): string {
+  if (/^(https?:|data:|blob:)/i.test(src)) return src;
+  try {
+    const root = useVaultStore.getState().vaultRoot;
+    if (!root) return src;
+    const clean = src.replace(/^\/+/, '');
+    return convertFileSrc(`${root}/${clean}`);
+  } catch {
+    return src;
+  }
+}
+
+// Image `![alt](src)` or inline math `$…$`. Images win when both could
+// match a `!`-prefixed bracket. Handled here because the shared inline
+// renderer knows neither.
+const INLINE_TOKEN_RE =
+  /!\[([^\]\n]*)\]\(([^)\n]+)\)|(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
+
+/** Inline render that also resolves images and `$…$` math, splitting the
+ *  text on those spans and handing the rest to `renderInlineMarkdown`. */
 function renderInline(text: string): ReactNode {
   if (!text) return null;
   const parts: ReactNode[] = [];
-  const re = /(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let key = 0;
-  while ((m = re.exec(text)) !== null) {
+  INLINE_TOKEN_RE.lastIndex = 0;
+  while ((m = INLINE_TOKEN_RE.exec(text)) !== null) {
     if (m.index > last) {
       parts.push(
         <Fragment key={key++}>
@@ -39,15 +61,28 @@ function renderInline(text: string): ReactNode {
         </Fragment>,
       );
     }
-    const { html, error } = renderKatex(m[1], false);
-    if (error) {
+    if (m[2] !== undefined) {
+      // image
       parts.push(
-        <Fragment key={key++}>{renderInlineMarkdown(m[0])}</Fragment>,
+        <img
+          key={key++}
+          src={resolveImageSrc(m[2])}
+          alt={m[1]}
+          draggable={false}
+        />,
       );
     } else {
-      parts.push(
-        <span key={key++} dangerouslySetInnerHTML={{ __html: html }} />,
-      );
+      // inline math
+      const { html, error } = renderKatex(m[3], false);
+      if (error) {
+        parts.push(
+          <Fragment key={key++}>{renderInlineMarkdown(m[0])}</Fragment>,
+        );
+      } else {
+        parts.push(
+          <span key={key++} dangerouslySetInnerHTML={{ __html: html }} />,
+        );
+      }
     }
     last = m.index + m[0].length;
   }
@@ -224,24 +259,26 @@ export function renderSlideMarkdown(md: string): ReactNode {
         i++;
       }
       out.push(
-        <table key={key++}>
-          <thead>
-            <tr>
-              {header.map((c, ci) => (
-                <th key={ci}>{renderInline(c)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, ri) => (
-              <tr key={ri}>
-                {header.map((_, ci) => (
-                  <td key={ci}>{renderInline(r[ci] ?? '')}</td>
+        <div key={key++} className="slide-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {header.map((c, ci) => (
+                  <th key={ci}>{renderInline(c)}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>,
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {header.map((_, ci) => (
+                    <td key={ci}>{renderInline(r[ci] ?? '')}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
       );
       continue;
     }

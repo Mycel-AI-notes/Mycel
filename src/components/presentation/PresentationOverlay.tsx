@@ -166,11 +166,11 @@ export function PresentationOverlay() {
       >
         <div
           data-tauri-drag-region
-          className="min-h-full flex flex-col items-center justify-start px-6 sm:px-12 pt-16 pb-24"
+          className="min-h-full flex flex-col items-center justify-center px-6 sm:px-12 py-16"
         >
           <div
             className="w-full rounded-2xl border border-border bg-surface-0 shadow-lg px-8 sm:px-14 py-10 sm:py-12"
-            style={{ maxWidth: '860px' }}
+            style={{ maxWidth: '1040px' }}
           >
             {slide && <SlideView slide={slide} fontScale={fontScale} />}
           </div>

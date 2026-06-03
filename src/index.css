@@ -896,6 +896,13 @@ body {
   border-top: 1px solid var(--color-border);
   margin: 1.5em 0;
 }
+.prose-mycel img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+  border-radius: 6px;
+}
 .prose-mycel table {
   width: 100%;
   border-collapse: collapse;
@@ -926,6 +933,20 @@ body {
   margin: 1em 0;
   text-align: center;
   overflow-x: auto;
+}
+
+/* Wide tables scroll horizontally within their card instead of bleeding
+   past the slide edge. The table keeps its natural column widths but never
+   shrinks below the card width. */
+.prose-mycel .slide-table-wrap {
+  margin: 1em 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.prose-mycel .slide-table-wrap table {
+  margin: 0;
+  width: auto;
+  min-width: 100%;
 }
 
 /* ── Database widget ──────────────────────────────────────────────────── */
