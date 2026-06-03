@@ -214,7 +214,9 @@ export function PresentationOverlay() {
             className="w-full rounded-2xl border border-border bg-surface-0 shadow-lg px-8 sm:px-14 py-10 sm:py-12"
             style={{ maxWidth: '1040px' }}
           >
-            {slide && <SlideView slide={slide} fontScale={fontScale} />}
+            {slide && (
+              <SlideView key={current} slide={slide} fontScale={fontScale} />
+            )}
           </div>
         </div>
       </div>

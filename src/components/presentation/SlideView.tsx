@@ -46,8 +46,10 @@ function ExternalLink({ href, children }: { href: string; children: ReactNode })
  * existing KaTeX helper (`renderKatex`), styled by the existing
  * `.prose-mycel` rules in `index.css`. A slide is presentation output, not
  * an editor: there are no CodeMirror widgets here, so databases and tables
- * render read-only by construction and links are inert (clicks are
- * swallowed at the overlay level to keep the audience in the show).
+ * render read-only by construction. External links open in the browser and
+ * wikilinks navigate (leaving the show); math is rendered declaratively via
+ * `katex.renderToString`, and the overlay remounts this component per slide
+ * (`key={current}`) so a formula never lingers from the previous slide.
  *
  * The block grammar handled here mirrors what the editor's live preview
  * recognises: ATX headings, fenced code, block math, blockquotes,
