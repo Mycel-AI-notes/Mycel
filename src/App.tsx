@@ -26,6 +26,9 @@ import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { isInsightsTabPath } from '@/lib/insights-tab';
 import { InsightsView } from '@/components/insights/InsightsView';
 import { isAttachmentPath } from '@/lib/note-name';
+import { getEditorView } from '@/lib/editor-registry';
+import { usePresentationStore } from '@/stores/presentation';
+import { PresentationOverlay } from '@/components/presentation/PresentationOverlay';
 import { Logo } from '@/components/brand/Logo';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -111,10 +114,27 @@ export default function App() {
         // Cmd+Shift+A — Open Next Actions.
         e.preventDefault();
         if (vaultRoot) openGardenTab({ kind: 'actions' }, { preview: true });
-      } else if (gardenEnabled && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        // Cmd+Shift+P — Open Projects.
-        e.preventDefault();
-        if (vaultRoot) openGardenTab({ kind: 'projects' }, { preview: true });
+      } else if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        // Cmd+Shift+P — Present the active note. When the active tab isn't a
+        // presentable note (Garden / Insights / attachment / empty) fall back
+        // to opening Garden Projects, which historically owned this chord.
+        const path = activeTabPath;
+        const presentable =
+          !!path &&
+          !isGardenTabPath(path) &&
+          !isInsightsTabPath(path) &&
+          !isAttachmentPath(path);
+        if (presentable) {
+          e.preventDefault();
+          const content =
+            getEditorView(path)?.state.doc.toString() ??
+            useVaultStore.getState().noteCache.get(path)?.content ??
+            '';
+          usePresentationStore.getState().start(content, path);
+        } else if (gardenEnabled && vaultRoot) {
+          e.preventDefault();
+          openGardenTab({ kind: 'projects' }, { preview: true });
+        }
       } else if (e.key === 's' || e.key === 'S') {
         // Cmd+S on a Garden tab pins it — there's no document to save, but
         // the user expects the same "promote preview to pinned" gesture.
@@ -338,6 +358,9 @@ export default function App() {
 
       {/* Settings dialog. Self-renders when open. */}
       <SettingsDialog />
+
+      {/* Presentation overlay. Self-renders (via portal) only when open. */}
+      <PresentationOverlay />
     </div>
   );
 }

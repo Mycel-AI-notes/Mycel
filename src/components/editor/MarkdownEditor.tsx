@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Database } from 'lucide-react';
+import { Database, Play } from 'lucide-react';
 import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
@@ -37,6 +37,7 @@ import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
+import { usePresentationStore } from '@/stores/presentation';
 import {
   extFromMime,
   insertImageLink,
@@ -357,6 +358,17 @@ export function MarkdownEditor({ path }: Props) {
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
         <span className="text-xs text-text-muted font-mono">{path}</span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() =>
+              usePresentationStore
+                .getState()
+                .start(viewRef.current?.state.doc.toString() ?? note.content, path)
+            }
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+            title="Present (⌘/Ctrl+Shift+P)"
+          >
+            <Play size={12} /> Play
+          </button>
           <button
             onClick={() => {
               slashRangeRef.current = null;
