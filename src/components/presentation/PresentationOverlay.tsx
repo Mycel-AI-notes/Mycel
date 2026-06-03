@@ -25,7 +25,6 @@ const HIDE_DELAY_MS = 2500;
 const SHORTCUTS: [string, string][] = [
   ['→  Space  PageDn', 'Next slide'],
   ['←  PageUp', 'Previous slide'],
-  ['Home  End', 'First / last slide'],
   ['O  /  G', 'Toggle overview'],
   ['E', 'Edit this slide'],
   ['F', 'Toggle fullscreen'],
@@ -53,7 +52,6 @@ export function PresentationOverlay() {
   const fontScale = usePresentationStore((s) => s.fontScale);
   const next = usePresentationStore((s) => s.next);
   const prev = usePresentationStore((s) => s.prev);
-  const goto = usePresentationStore((s) => s.goto);
   const close = usePresentationStore((s) => s.close);
   const toggleOverview = usePresentationStore((s) => s.toggleOverview);
   const setFontScale = usePresentationStore((s) => s.setFontScale);
@@ -133,14 +131,6 @@ export function PresentationOverlay() {
           e.preventDefault();
           if (!ov) prev();
           break;
-        case 'Home':
-          e.preventDefault();
-          goto(0);
-          break;
-        case 'End':
-          e.preventDefault();
-          goto(slides.length - 1);
-          break;
         case 'o':
         case 'O':
         case 'g':
@@ -177,7 +167,7 @@ export function PresentationOverlay() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, slides.length, next, prev, goto, close, toggleOverview, toggleFullscreen, editCurrentSlide, setHelp, revealControls]);
+  }, [open, slides.length, next, prev, close, toggleOverview, toggleFullscreen, editCurrentSlide, setHelp, revealControls]);
 
   // Start the auto-hide cycle when the overlay opens; reset transient UI and
   // drop fullscreen on close.
