@@ -11,8 +11,6 @@ import {
   saveAttachmentFile,
   SUPPORTED_IMAGE_EXTS,
 } from '@/lib/attachments';
-import { usePresentationStore } from '@/stores/presentation';
-import { useVaultStore } from '@/stores/vault';
 
 export interface SlashCommand {
   label: string;
@@ -103,22 +101,6 @@ const COMMANDS: SlashCommand[] = [
           detail: { from, to: from },
         }),
       );
-    },
-  },
-  {
-    label: 'Present',
-    detail: 'Play this note as a presentation',
-    keywords: ['present', 'slides', 'slideshow', 'play', 'present mode'],
-    run: (view, from, to) => {
-      // Strip the slash trigger, then present the live buffer.
-      view.dispatch({
-        changes: { from, to, insert: '' },
-        selection: { anchor: from },
-      });
-      const sourcePath = useVaultStore.getState().activeTabPath ?? undefined;
-      usePresentationStore
-        .getState()
-        .start(view.state.doc.toString(), sourcePath);
     },
   },
 ];

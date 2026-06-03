@@ -154,17 +154,26 @@ export function PresentationOverlay() {
       style={{ height: '100vh', width: '100vw' }}
       onMouseMove={revealControls}
     >
-      {/* Slide content */}
+      {/* Slide content. The padding area around the card carries
+          `data-tauri-drag-region` so the user can grab the empty space to
+          move the window — the overlay otherwise hides the title bar. The
+          card itself isn't a drag region, so its text stays selectable and
+          scrollable. */}
       <div
         ref={slideRef}
-        className="absolute inset-0 overflow-y-auto flex flex-col items-center justify-center px-12 py-16"
+        className="absolute inset-0 overflow-y-auto"
         onClickCapture={onContentClickCapture}
       >
         <div
-          className="w-full"
-          style={{ fontSize: `calc(1rem * ${fontScale})`, maxWidth: '820px' }}
+          data-tauri-drag-region
+          className="min-h-full flex flex-col items-center justify-start px-6 sm:px-12 pt-16 pb-24"
         >
-          {slide && <SlideView slide={slide} />}
+          <div
+            className="w-full rounded-2xl border border-border bg-surface-0 shadow-lg px-8 sm:px-14 py-10 sm:py-12"
+            style={{ maxWidth: '860px' }}
+          >
+            {slide && <SlideView slide={slide} fontScale={fontScale} />}
+          </div>
         </div>
       </div>
 

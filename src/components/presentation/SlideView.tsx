@@ -294,9 +294,18 @@ export function renderSlideMarkdown(md: string): ReactNode {
   return out;
 }
 
-export function SlideView({ slide }: { slide: Slide }) {
+export function SlideView({
+  slide,
+  fontScale = 1,
+}: {
+  slide: Slide;
+  fontScale?: number;
+}) {
+  // `.prose-mycel` hard-codes `font-size: 16px`, so the only reliable way to
+  // scale the slide live is to set the base size inline on the prose root —
+  // inline styles win over the stylesheet, and every child sizes in `em`.
   return (
-    <div className="prose-mycel mx-auto" style={{ maxWidth: '820px' }}>
+    <div className="prose-mycel" style={{ fontSize: `${16 * fontScale}px`, maxWidth: 'none' }}>
       {renderSlideMarkdown(slide.md)}
     </div>
   );
