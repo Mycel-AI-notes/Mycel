@@ -1,5 +1,6 @@
 import { createElement, Fragment, type ReactNode } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import 'katex/dist/katex.min.css';
 import { renderInlineMarkdown } from '@/components/markdown/InlineMarkdown';
 import { renderKatex } from '@/components/editor/math/katex-render';
@@ -17,6 +18,25 @@ function followWikilink(target: string) {
     if (path) void openNote(path);
     else void createNote(`${target}.md`);
   });
+}
+
+/** External link that opens in the system browser. The Tauri webview won't
+ *  follow a plain anchor, so we route the click through the opener plugin —
+ *  the same path the editor uses for rendered links. */
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      title={href}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.preventDefault();
+        void openUrl(href).catch((err) => console.error('Open URL failed:', err));
+      }}
+    >
+      {children}
+    </a>
+  );
 }
 
 /**
@@ -51,15 +71,21 @@ function resolveImageSrc(src: string): string {
   }
 }
 
-// Image `![alt](src)`, wikilink `[[target|alias]]`, or inline math `$…$`.
-// Images win over wikilinks for a `!`-prefixed bracket. Handled here because
-// the shared inline renderer renders wikilinks inert and knows no math.
+// Tokens the shared inline renderer can't handle on its own, in priority
+// order: image, markdown link, wikilink, bare URL, inline math. Markdown and
+// bare links are pulled out here so every external link routes through the
+// opener plugin instead of relying on dead anchor navigation.
+//   1 alt    2 src        (image)
+//   3 label  4 url        (markdown link)
+//   5 target 6 alias      (wikilink)
+//   7 url                 (bare URL)
+//   8 body                (inline math)
 const INLINE_TOKEN_RE =
-  /!\[([^\]\n]*)\]\(([^)\n]+)\)|\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]|(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
+  /!\[([^\]\n]*)\]\(([^)\n]+)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]|(https?:\/\/[^\s<>"')\]]+)|(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
 
-/** Inline render that resolves images, clickable wikilinks and `$…$` math,
- *  splitting the text on those spans and handing the rest to
- *  `renderInlineMarkdown` (which still renders `[label](url)` links). */
+/** Inline render that resolves images, clickable external/wiki links and
+ *  `$…$` math, splitting the text on those spans and handing the rest to
+ *  `renderInlineMarkdown` (bold / italic / code / strike). */
 function renderInline(text: string): ReactNode {
   if (!text) return null;
   const parts: ReactNode[] = [];
@@ -85,10 +111,17 @@ function renderInline(text: string): ReactNode {
           draggable={false}
         />,
       );
-    } else if (m[3] !== undefined) {
+    } else if (m[4] !== undefined) {
+      // markdown link [label](url)
+      parts.push(
+        <ExternalLink key={key++} href={m[4]}>
+          {renderInlineMarkdown(m[3])}
+        </ExternalLink>,
+      );
+    } else if (m[5] !== undefined) {
       // wikilink — clickable, navigates and leaves the show
-      const target = m[3].trim();
-      const label = (m[4] ?? m[3]).trim();
+      const target = m[5].trim();
+      const label = (m[6] ?? m[5]).trim();
       parts.push(
         <span
           key={key++}
@@ -101,9 +134,23 @@ function renderInline(text: string): ReactNode {
           {label}
         </span>,
       );
+    } else if (m[7] !== undefined) {
+      // bare URL — trim trailing punctuation the way the editor does
+      let url = m[7];
+      let trailing = '';
+      while (url.length && /[.,;:!?]$/.test(url)) {
+        trailing = url[url.length - 1] + trailing;
+        url = url.slice(0, -1);
+      }
+      parts.push(
+        <ExternalLink key={key++} href={url}>
+          {url}
+        </ExternalLink>,
+      );
+      if (trailing) parts.push(<Fragment key={key++}>{trailing}</Fragment>);
     } else {
       // inline math
-      const { html, error } = renderKatex(m[5], false);
+      const { html, error } = renderKatex(m[8], false);
       if (error) {
         parts.push(
           <Fragment key={key++}>{renderInlineMarkdown(m[0])}</Fragment>,
