@@ -916,6 +916,13 @@ body {
   accent-color: var(--color-accent);
 }
 
+/* Block math inside a slide / prose body. */
+.prose-mycel .slide-math-block {
+  margin: 1em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
 /* ── Database widget ──────────────────────────────────────────────────── */
 
 .db-root {

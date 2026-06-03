@@ -1,0 +1,258 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  ChevronLeft,
+  ChevronRight,
+  AArrowDown,
+  AArrowUp,
+  LayoutGrid,
+  Maximize2,
+  X,
+} from 'lucide-react';
+import {
+  usePresentationStore,
+  FONT_SCALE_STEP,
+} from '@/stores/presentation';
+import { SlideView } from './SlideView';
+import { SlideOverview } from './SlideOverview';
+
+const HIDE_DELAY_MS = 2500;
+
+/** Toggle the OS window fullscreen when running under Tauri. No-op (and
+ *  silent) under a plain Vite dev server where the Tauri API is absent. */
+async function setWindowFullscreen(on: boolean) {
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().setFullscreen(on);
+  } catch {
+    /* not running under Tauri — ignore */
+  }
+}
+
+export function PresentationOverlay() {
+  const open = usePresentationStore((s) => s.open);
+  const slides = usePresentationStore((s) => s.slides);
+  const current = usePresentationStore((s) => s.current);
+  const overview = usePresentationStore((s) => s.overview);
+  const fontScale = usePresentationStore((s) => s.fontScale);
+  const next = usePresentationStore((s) => s.next);
+  const prev = usePresentationStore((s) => s.prev);
+  const goto = usePresentationStore((s) => s.goto);
+  const close = usePresentationStore((s) => s.close);
+  const toggleOverview = usePresentationStore((s) => s.toggleOverview);
+  const setFontScale = usePresentationStore((s) => s.setFontScale);
+
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slideRef = useRef<HTMLDivElement>(null);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setControlsVisible(false), HIDE_DELAY_MS);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((on) => {
+      void setWindowFullscreen(!on);
+      return !on;
+    });
+  }, []);
+
+  // Reset scroll to the top whenever the slide changes.
+  useEffect(() => {
+    slideRef.current?.scrollTo({ top: 0 });
+  }, [current]);
+
+  // Keyboard controls. Bound only while presenting.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      const { overview: ov } = usePresentationStore.getState();
+      switch (e.key) {
+        case 'ArrowRight':
+        case ' ':
+        case 'PageDown':
+          e.preventDefault();
+          if (!ov) next();
+          break;
+        case 'ArrowLeft':
+        case 'PageUp':
+          e.preventDefault();
+          if (!ov) prev();
+          break;
+        case 'Home':
+          e.preventDefault();
+          goto(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          goto(slides.length - 1);
+          break;
+        case 'o':
+        case 'O':
+        case 'g':
+        case 'G':
+          e.preventDefault();
+          toggleOverview();
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          if (ov) toggleOverview();
+          else close();
+          break;
+        default:
+          return;
+      }
+      revealControls();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, slides.length, next, prev, goto, close, toggleOverview, toggleFullscreen, revealControls]);
+
+  // Start the auto-hide cycle when the overlay opens; drop fullscreen on close.
+  useEffect(() => {
+    if (open) {
+      revealControls();
+    } else {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      setControlsVisible(true);
+      if (isFullscreen) {
+        void setWindowFullscreen(false);
+        setIsFullscreen(false);
+      }
+    }
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, [open, revealControls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!open) return null;
+
+  const slide = slides[current];
+  const total = slides.length;
+  const progress = total > 0 ? ((current + 1) / total) * 100 : 0;
+
+  // Swallow link / wikilink clicks so the audience stays in the show.
+  const onContentClickCapture = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('a, .cm-wikilink')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const overlay = (
+    <div
+      className="fixed inset-0 z-[1000] bg-surface-1 text-text-primary"
+      style={{ height: '100vh', width: '100vw' }}
+      onMouseMove={revealControls}
+    >
+      {/* Slide content */}
+      <div
+        ref={slideRef}
+        className="absolute inset-0 overflow-y-auto flex flex-col items-center justify-center px-12 py-16"
+        onClickCapture={onContentClickCapture}
+      >
+        <div
+          className="w-full"
+          style={{ fontSize: `calc(1rem * ${fontScale})`, maxWidth: '820px' }}
+        >
+          {slide && <SlideView slide={slide} />}
+        </div>
+      </div>
+
+      {/* Overview grid (renders above the slide) */}
+      {overview && <SlideOverview />}
+
+      {/* Chevrons */}
+      <button
+        onClick={prev}
+        disabled={current === 0}
+        className={`absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full text-text-muted hover:text-text-primary hover:bg-surface-hover transition-opacity disabled:opacity-20 ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        title="Previous slide (←)"
+      >
+        <ChevronLeft size={32} />
+      </button>
+      <button
+        onClick={next}
+        disabled={current >= total - 1}
+        className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full text-text-muted hover:text-text-primary hover:bg-surface-hover transition-opacity disabled:opacity-20 ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        title="Next slide (→)"
+      >
+        <ChevronRight size={32} />
+      </button>
+
+      {/* Bottom bar */}
+      <div
+        className={`absolute bottom-0 inset-x-0 transition-opacity ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="flex items-center gap-2 px-4 py-2 text-text-muted text-xs">
+          <button
+            onClick={() => setFontScale(fontScale - FONT_SCALE_STEP)}
+            className="p-1.5 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Smaller text (A−)"
+          >
+            <AArrowDown size={16} />
+          </button>
+          <button
+            onClick={() => setFontScale(fontScale + FONT_SCALE_STEP)}
+            className="p-1.5 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Larger text (A+)"
+          >
+            <AArrowUp size={16} />
+          </button>
+
+          <span className="flex-1 text-center font-mono tabular-nums">
+            {current + 1} / {total}
+          </span>
+
+          <button
+            onClick={toggleOverview}
+            className={`p-1.5 rounded hover:bg-surface-hover hover:text-text-primary transition-colors ${
+              overview ? 'text-accent' : ''
+            }`}
+            title="Overview (O)"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="p-1.5 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Fullscreen (F)"
+          >
+            <Maximize2 size={16} />
+          </button>
+          <button
+            onClick={close}
+            className="p-1.5 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Exit presentation (Esc)"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {/* Progress bar */}
+        <div className="h-0.5 w-full bg-surface-2">
+          <div
+            className="h-full bg-accent transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  return createPortal(overlay, document.body);
+}
