@@ -3,8 +3,21 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import 'katex/dist/katex.min.css';
 import { renderInlineMarkdown } from '@/components/markdown/InlineMarkdown';
 import { renderKatex } from '@/components/editor/math/katex-render';
+import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
 import { useVaultStore } from '@/stores/vault';
+import { usePresentationStore } from '@/stores/presentation';
 import type { Slide } from '@/lib/presentation/splitSlides';
+
+/** Follow a wikilink target: leave the show and open the linked note
+ *  (creating it when missing), so the user lands where they clicked. */
+function followWikilink(target: string) {
+  const { openNote, createNote } = useVaultStore.getState();
+  usePresentationStore.getState().close();
+  void resolveWikilink(target).then((path) => {
+    if (path) void openNote(path);
+    else void createNote(`${target}.md`);
+  });
+}
 
 /**
  * Renders one slide's markdown as static prose.
@@ -38,14 +51,15 @@ function resolveImageSrc(src: string): string {
   }
 }
 
-// Image `![alt](src)` or inline math `$…$`. Images win when both could
-// match a `!`-prefixed bracket. Handled here because the shared inline
-// renderer knows neither.
+// Image `![alt](src)`, wikilink `[[target|alias]]`, or inline math `$…$`.
+// Images win over wikilinks for a `!`-prefixed bracket. Handled here because
+// the shared inline renderer renders wikilinks inert and knows no math.
 const INLINE_TOKEN_RE =
-  /!\[([^\]\n]*)\]\(([^)\n]+)\)|(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
+  /!\[([^\]\n]*)\]\(([^)\n]+)\)|\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]|(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
 
-/** Inline render that also resolves images and `$…$` math, splitting the
- *  text on those spans and handing the rest to `renderInlineMarkdown`. */
+/** Inline render that resolves images, clickable wikilinks and `$…$` math,
+ *  splitting the text on those spans and handing the rest to
+ *  `renderInlineMarkdown` (which still renders `[label](url)` links). */
 function renderInline(text: string): ReactNode {
   if (!text) return null;
   const parts: ReactNode[] = [];
@@ -71,9 +85,25 @@ function renderInline(text: string): ReactNode {
           draggable={false}
         />,
       );
+    } else if (m[3] !== undefined) {
+      // wikilink — clickable, navigates and leaves the show
+      const target = m[3].trim();
+      const label = (m[4] ?? m[3]).trim();
+      parts.push(
+        <span
+          key={key++}
+          className="cm-wikilink"
+          role="link"
+          tabIndex={0}
+          onClick={() => followWikilink(target)}
+          title={target === label ? target : `${label} → ${target}`}
+        >
+          {label}
+        </span>,
+      );
     } else {
       // inline math
-      const { html, error } = renderKatex(m[3], false);
+      const { html, error } = renderKatex(m[5], false);
       if (error) {
         parts.push(
           <Fragment key={key++}>{renderInlineMarkdown(m[0])}</Fragment>,

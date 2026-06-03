@@ -903,6 +903,12 @@ body {
   margin: 1em auto;
   border-radius: 6px;
 }
+.prose-mycel .cm-wikilink {
+  color: var(--color-wikilink);
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-wikilink) 40%, transparent);
+}
+.prose-mycel .cm-wikilink:hover { color: var(--color-accent-bright); }
 .prose-mycel table {
   width: 100%;
   border-collapse: collapse;

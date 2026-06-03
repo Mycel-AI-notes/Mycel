@@ -6,7 +6,7 @@ interface NoteSummary {
   title: string;
 }
 
-async function resolveWikilink(target: string): Promise<string | null> {
+export async function resolveWikilink(target: string): Promise<string | null> {
   const stem = target.trim().toLowerCase();
   try {
     const notes = await invoke<NoteSummary[]>('notes_list');
