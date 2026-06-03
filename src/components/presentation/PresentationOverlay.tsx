@@ -19,6 +19,7 @@ import { useVaultStore } from '@/stores/vault';
 import { getEditorView, scrollEditorToLine } from '@/lib/editor-registry';
 import { SlideView } from './SlideView';
 import { SlideOverview } from './SlideOverview';
+import { SlideErrorBoundary } from './SlideErrorBoundary';
 
 const HIDE_DELAY_MS = 2500;
 
@@ -215,7 +216,9 @@ export function PresentationOverlay() {
             style={{ maxWidth: '1040px' }}
           >
             {slide && (
-              <SlideView key={current} slide={slide} fontScale={fontScale} />
+              <SlideErrorBoundary key={current} fallbackText={slide.md}>
+                <SlideView slide={slide} fontScale={fontScale} />
+              </SlideErrorBoundary>
             )}
           </div>
         </div>

@@ -208,6 +208,22 @@ function isTableSeparator(line: string): boolean {
     line.includes('-');
 }
 
+/** If `lines[i]` opens a *properly closed* `$$…$$` block, return the index of
+ *  its closing line; otherwise -1. An unclosed `$$` is treated as ordinary
+ *  text — otherwise a stray `$$` would swallow every heading and paragraph
+ *  after it into one giant (and broken) formula. */
+function blockMathEnd(lines: string[], i: number): number {
+  const t = lines[i].trim();
+  if (!t.startsWith('$$')) return -1;
+  const rest = t.slice(2).trim();
+  // Self-closed on one line: `$$ … $$`.
+  if (rest.length >= 2 && rest.endsWith('$$')) return i;
+  for (let j = i + 1; j < lines.length; j++) {
+    if (lines[j].trim().endsWith('$$')) return j;
+  }
+  return -1;
+}
+
 function splitRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith('|')) s = s.slice(1);
@@ -257,34 +273,17 @@ export function renderSlideMarkdown(md: string): ReactNode {
       continue;
     }
 
-    // block math $$ … $$
-    if (line.trim().startsWith('$$')) {
-      const startRest = line.trim().slice(2);
-      const body: string[] = [];
-      // single-line $$ x $$
-      if (startRest.trim().endsWith('$$') && startRest.trim().length >= 2) {
-        body.push(startRest.trim().slice(0, -2));
-        i++;
-      } else {
-        if (startRest.trim()) body.push(startRest);
-        i++;
-        while (i < lines.length) {
-          const l = lines[i].trim();
-          if (l.endsWith('$$')) {
-            const inner = l.slice(0, -2);
-            if (inner.trim()) body.push(inner);
-            i++;
-            break;
-          }
-          body.push(lines[i]);
-          i++;
-        }
-      }
-      const { html, error } = renderKatex(body.join('\n').trim(), true);
+    // block math $$ … $$ (only when actually closed — see blockMathEnd)
+    const mathEnd = blockMathEnd(lines, i);
+    if (mathEnd !== -1) {
+      const raw = lines.slice(i, mathEnd + 1).join('\n').trim();
+      const body = raw.replace(/^\$\$/, '').replace(/\$\$$/, '').trim();
+      i = mathEnd + 1;
+      const { html, error } = renderKatex(body, true);
       out.push(
         error ? (
           <pre key={key++}>
-            <code>{body.join('\n')}</code>
+            <code>{body}</code>
           </pre>
         ) : (
           <div
@@ -395,7 +394,7 @@ export function renderSlideMarkdown(md: string): ReactNode {
         BLOCKQUOTE_RE.test(l) ||
         UL_RE.test(l) ||
         OL_RE.test(l) ||
-        l.trim().startsWith('$$')
+        blockMathEnd(lines, i) !== -1
       ) {
         break;
       }
