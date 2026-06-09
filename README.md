@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  Plain <code>.md</code> files on disk. A real Rust + Tauri shell. Wikilinks, a force-directed graph, inline databases, GitHub-backed sync, and a global hotkey that turns a fleeting thought into a note in under a second.
+  Plain <code>.md</code> files on disk. A real Rust + Tauri shell. Wikilinks, a force-directed graph, inline databases, LaTeX math, a present mode that turns any note into slides, GitHub-backed sync, and a global hotkey that turns a fleeting thought into a note in under a second.
 </p>
 
 <p align="center">
-  <a href="#-quick-start"><img src="https://img.shields.io/badge/get%20started-in%20under%202%20minutes-7c9b6a?style=for-the-badge" alt="Quick start"></a>
+  <a href="https://github.com/Mycel-AI-notes/Mycel/releases/latest"><img src="https://img.shields.io/badge/download-macOS%20·%20Windows%20·%20Linux-7c9b6a?style=for-the-badge" alt="Download"></a>
   &nbsp;
   <a href="https://github.com/Mycel-AI-notes/Mycel/stargazers"><img src="https://img.shields.io/github/stars/Mycel-AI-notes/Mycel?style=for-the-badge&logo=github&color=f5a623" alt="Stars"></a>
   &nbsp;
@@ -58,6 +58,10 @@ Most "second brains" lock your notes in a proprietary format, a slow Electron co
 
 ## 🚀 Quick start
 
+**Grab a binary** from the [latest release](https://github.com/Mycel-AI-notes/Mycel/releases/latest) — `.dmg` for macOS, `.msi` for Windows, `.deb` / `.AppImage` for Linux — and you're writing in under a minute.
+
+Or build from source:
+
 ```bash
 git clone https://github.com/Mycel-AI-notes/Mycel.git
 cd Mycel
@@ -86,6 +90,7 @@ npm run tauri build
 - 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
 - 📊 **Editable GFM tables** rendered as styled blocks; inline Markdown (links, wikilinks, bold) renders *inside* cells and stays clickable.
+- 🧮 **LaTeX math** — inline `$…$` and block `$$…$$`, rendered live with [KaTeX](https://katex.org) in the editor and on slides.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
@@ -96,6 +101,7 @@ npm run tauri build
 - 📍 **Live outline panel** — every heading in the current note, click to jump.
 - ↩️ **Backlinks panel** — folder-aware incoming references, plus outgoing wikilinks and external URLs.
 - 🏷️ **Tag system** — `#tags` autocomplete in the editor, dedicated tag panel, tag search across the vault, tag nodes in the graph.
+- 🎞️ **Present mode** (`⌘/Ctrl+Shift+P`) — any note becomes a slide deck. `---` lines split slides (fence-aware, frontmatter is skipped), `O` opens the overview grid, `F` toggles fullscreen, `E` drops you back in the editor at the current slide's source. Math, code blocks and links all render on slides.
 
 ### Structured data
 
@@ -128,6 +134,7 @@ npm run tauri build
 | `⌘/Ctrl + O` | Quick switcher (fuzzy file finder) |
 | `⌘/Ctrl + Shift + N` | **Quick note** (works globally, even when Mycel is unfocused) |
 | `⌘/Ctrl + G` | Toggle graph view |
+| `⌘/Ctrl + Shift + P` | Present mode (current note as slides) |
 | `⌘/Ctrl + S` | Save current note (also pins a preview tab) |
 | `/` in the editor | Slash command menu |
 | `[[` in the editor | Wikilink autocomplete |
@@ -145,6 +152,7 @@ npm run tauri build
 | Frontend | React 19 + TypeScript + Vite |
 | Editor | CodeMirror 6 |
 | Graph | `d3-force` |
+| Math | [KaTeX](https://katex.org) |
 | State | Zustand (with `persist` for UI prefs, recent vaults, sync config) |
 | Styling | Tailwind CSS |
 | Icons | `lucide-react` |
@@ -269,8 +277,6 @@ The big things on the bench, roughly in priority order:
 
 - 🔎 **Semantic search** — embed your notes locally and search by meaning, not just keywords. "What did I write about Bayesian priors in March?" — works even if the note never used those exact words.
 - 🤖 **Local AI integrations** — pluggable local LLM backends (Ollama, llama.cpp, LM Studio). A proactive assistant that surfaces related notes, suggests links, drafts daily summaries, and answers questions grounded in your vault. Everything runs on your machine by default; bring-your-own cloud key is opt-in.
-- 🔐 **Encrypted notes** *(security-grade)* — per-note encryption to `.md.age` files using [age](https://github.com/FiloSottile/age) with X25519 keys, mastered by a hardware-backed identity (Secure Enclave on macOS, TPM on Windows/Linux, FIDO2/YubiKey as a portable option). The plaintext private key **never** touches disk; decryption happens in-process and is wiped on lock. Optional post-quantum (Kyber) wrapping for long-lived secrets. Encrypted notes still sync as opaque blobs through GitHub.
-- 🧮 **LaTeX support** — inline `$…$` and block `$$…$$` math, rendered with KaTeX. Copy-as-image for sharing, optional MathML output for accessibility.
 - 🌳 **Knowledge-base hierarchy** — first-class nested structure: collapsible KB sections, breadcrumb navigation, parent/child relations surfaced in the graph and backlinks, drag-to-reparent in the sidebar.
 - 🖼️ **Image support** — drag-and-drop / paste images, stored next to the note (or in a configurable `attachments/` folder) and rendered inline.
 - 🎨 **Community themes** — a theme picker open to contributions.
