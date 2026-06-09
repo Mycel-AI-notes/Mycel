@@ -17,7 +17,8 @@ export type InsightKind =
   | 'stranded_note'
   | 'emerging_theme'
   | 'problem_researched'
-  | 'idea_state_of_art';
+  | 'idea_state_of_art'
+  | 'quick_note_filing';
 
 export type InsightAction =
   | { type: 'open_note'; note_path: string }
@@ -25,7 +26,8 @@ export type InsightAction =
   | { type: 'insert_wikilink'; source: string; target: string }
   | { type: 'create_note_from_template'; template_id: string; suggested_path: string }
   | { type: 'open_external'; url: string }
-  | { type: 'resolve_duplicate'; note_paths: string[] };
+  | { type: 'resolve_duplicate'; note_paths: string[] }
+  | { type: 'merge_quick_note'; source: string; target: string };
 
 export interface ExternalRef {
   url: string;
@@ -67,6 +69,12 @@ export interface InsightsSettings {
   similar_notes_duplicate_similarity: number;
   /// Notes shorter than this many words are ignored by the detector.
   similar_notes_min_words: number;
+  /// Minimum similarity (0-100%) for quick-note filing suggestions.
+  quick_filing_min_similarity: number;
+  /// Quick notes younger than this many minutes are never suggested.
+  quick_filing_min_age_minutes: number;
+  /// Default state of the merge dialog's "delete after merging" checkbox.
+  quick_filing_delete_after_merge: boolean;
 }
 
 export interface InsightsStatus {
@@ -105,7 +113,9 @@ interface InsightsState {
 
   loadStatus: () => Promise<void>;
   loadList: () => Promise<void>;
-  runNow: () => Promise<void>;
+  /// Run the engine. Pass a detector name to run only that detector — the
+  /// quick-folder "Suggest filing" affordance uses this.
+  runNow: (detector?: string) => Promise<void>;
   dismiss: (id: string) => Promise<void>;
   act: (id: string) => Promise<void>;
   updateSettings: (s: InsightsSettings) => Promise<void>;
@@ -154,10 +164,12 @@ export const useInsightsStore = create<InsightsState>((set, get) => ({
     }
   },
 
-  runNow: async () => {
+  runNow: async (detector?: string) => {
     set({ running: true });
     try {
-      const summary = await invoke<RunSummary>('insights_run_now');
+      const summary = await invoke<RunSummary>('insights_run_now', {
+        detector: detector ?? null,
+      });
       set({ lastRun: summary, running: false, lastError: null });
       await get().loadList();
       await get().loadStatus();

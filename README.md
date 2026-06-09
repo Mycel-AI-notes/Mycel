@@ -96,6 +96,7 @@ npm run tauri build
 - 📍 **Live outline panel** — every heading in the current note, click to jump.
 - ↩️ **Backlinks panel** — folder-aware incoming references, plus outgoing wikilinks and external URLs.
 - 🏷️ **Tag system** — `#tags` autocomplete in the editor, dedicated tag panel, tag search across the vault, tag nodes in the graph.
+- 📥 **Quick-note auto-filing** — with Insights enabled, Mycel finds the note each quick capture belongs to and offers a one-click, confirmed merge (with a provenance trail). The `quick/` folder stops being a graveyard. See [`docs/specs/quick-note-filing.md`](docs/specs/quick-note-filing.md).
 
 ### Structured data
 

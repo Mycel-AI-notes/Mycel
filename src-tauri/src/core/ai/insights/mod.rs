@@ -39,6 +39,9 @@ pub fn default_detectors() -> Vec<Box<dyn Detector>> {
     // Phase 2: the first real detector. Rides on the MVP-2 embedding index;
     // does nothing until the vault has been indexed.
     list.push(Box::new(detectors::similar_notes::SimilarNotesDetector));
+    // Quick-note auto-filing (docs/specs/quick-note-filing.md). Also rides
+    // the embedding index; suggestion-only, so it ships enabled.
+    list.push(Box::new(detectors::quick_filing::QuickFilingDetector));
     // Mock is off by default (see `MockDetector::enabled_by_default`) so even
     // in debug builds nothing happens until a developer flips it on.
     #[cfg(debug_assertions)]

@@ -52,6 +52,20 @@ pub struct InsightsSettings {
     /// unreliable matches, so we skip any pair that touches one.
     #[serde(default = "default_min_words")]
     pub similar_notes_min_words: u32,
+    /// Minimum semantic similarity (0-100%) for `quick_note_filing` to
+    /// suggest merging a quick note into a target. Lower than the
+    /// similar-notes default because quick notes are short and their
+    /// centroids are noisier.
+    #[serde(default = "default_quick_filing_min_similarity")]
+    pub quick_filing_min_similarity: u32,
+    /// Quick notes modified more recently than this are skipped — don't
+    /// file a thought the user is still typing.
+    #[serde(default = "default_quick_filing_min_age_minutes")]
+    pub quick_filing_min_age_minutes: u32,
+    /// Default state of the "Delete the quick note after merging" checkbox
+    /// in the merge confirmation dialog.
+    #[serde(default = "default_quick_filing_delete_after_merge")]
+    pub quick_filing_delete_after_merge: bool,
 }
 
 fn default_min_similarity() -> u32 {
@@ -64,6 +78,18 @@ fn default_duplicate_similarity() -> u32 {
 
 fn default_min_words() -> u32 {
     100
+}
+
+fn default_quick_filing_min_similarity() -> u32 {
+    60
+}
+
+fn default_quick_filing_min_age_minutes() -> u32 {
+    30
+}
+
+fn default_quick_filing_delete_after_merge() -> bool {
+    true
 }
 
 impl Default for InsightsSettings {
@@ -86,6 +112,9 @@ impl Default for InsightsSettings {
             similar_notes_min_similarity: default_min_similarity(),
             similar_notes_duplicate_similarity: default_duplicate_similarity(),
             similar_notes_min_words: default_min_words(),
+            quick_filing_min_similarity: default_quick_filing_min_similarity(),
+            quick_filing_min_age_minutes: default_quick_filing_min_age_minutes(),
+            quick_filing_delete_after_merge: default_quick_filing_delete_after_merge(),
         }
     }
 }

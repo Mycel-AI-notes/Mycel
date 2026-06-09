@@ -1,6 +1,6 @@
 # Spec: Quick-note auto-filing — "the note that files itself"
 
-**Status:** draft
+**Status:** Phase A (v1) implemented; Phases B/C pending
 **Depends on:** Insights engine (Phase 1, shipped), embedding index (MVP-2, shipped)
 **Owner modules:** `src-tauri/src/core/ai/insights/`, `src-tauri/src/commands/`, `src/components/insights/`
 

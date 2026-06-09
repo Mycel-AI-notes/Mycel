@@ -269,6 +269,68 @@ pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(),
     Ok(())
 }
 
+/// File a quick note into a target note: append its body as a dated section
+/// with a provenance line, then delete the source (or mark it `filed_to:`).
+/// The UI gates this behind an explicit confirmation dialog — see
+/// `docs/specs/quick-note-filing.md`.
+///
+/// Returns the timestamp label used in the appended heading.
+#[tauri::command]
+pub async fn quick_note_merge(
+    source: String,
+    target: String,
+    delete_source: bool,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+
+    let timestamp =
+        crate::core::quick_filing::merge(&vault_root, &source, &target, delete_source)
+            .map_err(|e| e.to_string())?;
+
+    // Best-effort index maintenance: drop the deleted source's chunks and
+    // re-embed the grown target. Failure here never fails the merge — the
+    // files on disk are already correct, and the next scheduled reindex
+    // reconciles the index anyway.
+    if let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await {
+        let _guard = ai.indexing.lock().await;
+        if delete_source {
+            if let Err(e) = crate::core::ai::indexer::remove_note(&ai.store, &source) {
+                eprintln!("quick_note_merge: failed to drop {source} from index: {e:#}");
+            }
+        }
+        let cfg = ai.config.lock().await.clone();
+        if cfg.enabled {
+            if let Ok(Some(key)) = crate::core::ai::keyring::get_key(&vault_root) {
+                let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
+                    key,
+                    cfg.embedding_model.clone(),
+                );
+                if let Err(e) = crate::core::ai::indexer::index_note(
+                    &ai.store,
+                    &embedder,
+                    &vault_root,
+                    &target,
+                    cfg.daily_budget_usd,
+                    &cfg.embedding_model,
+                )
+                .await
+                {
+                    eprintln!("quick_note_merge: failed to reindex {target}: {e:#}");
+                }
+            }
+        }
+    }
+
+    Ok(timestamp)
+}
+
 #[tauri::command]
 pub async fn note_rename(old_path: String, new_path: String, state: State<'_, AppState>) -> Result<(), String> {
     if is_protected(&old_path) {
