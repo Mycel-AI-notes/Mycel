@@ -16,8 +16,7 @@ captured thoughts. Every PKM tool has this problem; none solves it well.
 
 After you capture a quick note, Mycel figures out where it belongs and
 offers — as an Insights card — to file it there with one click: merge it
-into the related note (with a wikilink and provenance), or send it to the
-Garden inbox if it reads like a task.
+into the most related note, with a provenance trail.
 
 The user never loses control: nothing is written or deleted without an
 explicit confirmation. This matches the existing Insights contract
@@ -29,7 +28,7 @@ explicit confirmation. This matches the existing Insights contract
 
 - A new detector, `quick_note_filing`, that runs on the existing daily
   schedule and on "Run now", producing at most one card per quick note.
-- Two new resolving actions: merge-into-note and send-to-Garden-inbox.
+- One new resolving action: merge-into-note.
 - The merge is performed atomically in Rust (not through the editor
   buffer), preserves full content, and leaves a provenance trail.
 - Zero new API costs: the detector rides the existing embedding index,
@@ -37,6 +36,11 @@ explicit confirmation. This matches the existing Insights contract
 
 **Non-goals (v1, explicitly deferred):**
 
+- **No Garden integration.** Filing targets are notes, full stop. Garden
+  is a separate, optional workflow; this feature must be fully useful
+  for someone who never opens it. A task-like capture files into a note
+  like any other capture — routing tasks anywhere else is out of scope
+  for this feature in every version.
 - LLM-generated titles/summaries or target-section selection (v3).
 - Near-real-time "filed a minute after capture" trigger (v2 — the daily
   run ships first because all its plumbing already exists).
@@ -54,35 +58,35 @@ icon: `FolderInput`).
 
 Merge suggestion:
 
-> **File quick note → Garden plans**
-> This quick note from May 12 looks like it belongs in [[Garden plans]].
+> **File quick note → Orchard plans**
+> This quick note from May 12 looks like it belongs in [[Orchard plans]].
 > Merge it there and clear it from your quick folder?
 >
 > *…first ~200 chars of the quick note…*
 >
 > `[Merge into note]` `[Open both]` `[✕]`
 
-Task suggestion:
+### 4.2 Confirmation dialog
 
-> **Quick note looks like a task**
-> "Call the nursery about apple saplings" reads like a to-do. Send it to
-> your Garden inbox?
->
-> `[Send to Garden inbox]` `[Open]` `[✕]`
+**Merge** opens a dialog showing: source content (full), target note
+name, the exact section that will be appended, and a checkbox
+"Delete the quick note after merging" (default: checked, persisted as
+a setting). Confirm → backend command → card marked acted.
 
-### 4.2 Confirmation dialogs
-
-- **Merge** opens a dialog showing: source content (full), target note
-  name, the exact section that will be appended, and a checkbox
-  "Delete the quick note after merging" (default: checked, persisted as
-  a setting). Confirm → backend command → card marked acted.
-- **Send to Garden inbox** opens a small dialog with the captured text
-  (editable, pre-filled with the note body), same delete-after checkbox.
-
-Both follow the `ResolveDuplicateDialog` pattern: the insight is only
+It follows the `ResolveDuplicateDialog` pattern: the insight is only
 marked `acted` after the backend confirms the write.
 
-### 4.3 Dismiss semantics
+### 4.3 Sidebar affordance
+
+The `quick/` folder row gets a hover action (sparkle icon, "Suggest
+filing") that triggers the engine for this detector and opens the
+Insights panel. Rationale: the feature's audience is someone staring at
+a pile of quick notes — the affordance belongs where the pile is, not
+three panels away. It calls the same engine entry point as "Run now"
+(restricted to this detector), so it adds discoverability without
+adding a subsystem.
+
+### 4.4 Dismiss semantics
 
 Dismiss uses the standard cooldown (default 14 days). The stable id is
 `stable_id("quick_note_filing", [quick_path], [target_path])`, so:
@@ -140,27 +144,9 @@ Emit at most ONE merge card per quick note: the top surviving hit.
 `confidence` = similarity, so the engine's existing ranking naturally
 prefers confident filings when the per-kind quota bites.
 
-### 5.3 Task heuristic (Garden suggestion)
-
-v1 keeps this deliberately dumb and language-neutral. A candidate is
-task-like when its body (frontmatter stripped) matches any of:
-
-- contains a GFM checkbox (`- [ ]` / `- [x]`);
-- contains a `#todo` or `#task` tag;
-- first non-empty line ends with `!` and is ≤ 80 chars *and* the note is
-  a single line (a barked imperative).
-
-Task-likeness produces a Garden card with `confidence = 0.55` (fixed —
-deliberately below typical merge similarities so merge suggestions
-out-rank task guesses). If a note is BOTH task-like and has a strong
-merge target, emit only the merge card: the content survives either
-way, and one card per note is the rule. v3's LLM classifier replaces
-this heuristic wholesale.
-
-### 5.4 Insight construction
+### 5.3 Insight construction
 
 ```rust
-// merge card
 Insight {
     id: stable_id("quick_note_filing", &[quick_path], &[&target_path]),
     kind: InsightKind::QuickNoteFiling,
@@ -174,27 +160,12 @@ Insight {
     ],
     ..
 }
-
-// garden card
-Insight {
-    id: stable_id("quick_note_filing", &[quick_path], &["garden"]),
-    ...
-    actions: vec![
-        InsightAction::SendToGardenInbox { source, text },
-        InsightAction::OpenNote { note_path: source },
-    ],
-}
 ```
-
-The `"garden"` key-field keeps garden-suggestion ids distinct from any
-merge suggestion for the same note (different `note_paths` set already
-guarantees distinct signatures, but the explicit field makes it
-self-documenting).
 
 ## 6. New wire types
 
 `models.rs` gains one `InsightKind` variant (`QuickNoteFiling`,
-key `"quick_note_filing"`) and two `InsightAction` variants:
+key `"quick_note_filing"`) and one `InsightAction` variant:
 
 ```rust
 /// Append the full content of `source` to `target` as a dated section,
@@ -202,10 +173,6 @@ key `"quick_note_filing"`) and two `InsightAction` variants:
 /// MUST show a confirmation dialog with a preview before invoking the
 /// merge command — this action deletes a file when the user opts in.
 MergeQuickNote { source: String, target: String },
-
-/// Capture `text` into the Garden inbox. `source` is the quick note the
-/// text came from; the UI offers to delete it after capture.
-SendToGardenInbox { source: String, text: String },
 ```
 
 ## 7. The merge command (backend)
@@ -256,12 +223,6 @@ Frontend (`InsightCard.tsx`): `merge_quick_note` action → confirmation
 dialog → `invoke('quick_note_merge', …)` → `act(insight.id)` → if the
 source was open in a tab, close it; open the target.
 
-`send_to_garden_inbox` needs no new backend: it calls the existing
-`garden_inbox_capture(text)`, then optionally `note_delete(source)`.
-(Optional polish: extend capture to set `InboxItem.source =
-"quick_filing"` and `page = source` for traceability — both fields
-already exist on the struct.)
-
 ## 8. Settings
 
 `InsightsSettings` gains three knobs (serde defaults, same pattern as
@@ -298,7 +259,6 @@ one click → the note lands in the right place.
 **Phase C — LLM polish (v3).**
 Requires adding chat completions to `openrouter.rs` (it only does
 embeddings today). When `ctx.has_llm`:
-- classify {reference / task / ephemeral} instead of the §5.3 heuristic;
 - suggest which *section* of the target to merge under, and a cleaned-up
   heading instead of the timestamp;
 - propose 1–3 tags for unfileable notes ("nothing similar in the vault")
@@ -331,8 +291,6 @@ Unit tests mirror `similar_notes.rs`'s setup (TempDir + `StubEmbedder` +
   (mtime), `filed_to:` frontmatter — all skipped;
 - top-1 merge target above threshold → one card with both actions;
 - below threshold → no card; already-wikilinked target → no card;
-- checkbox body → garden card; checkbox body *with* strong merge target
-  → merge card only;
 - stable id across runs; id differs per target;
 - `quick_note_merge`: appends section with provenance, deletes source
   when asked, writes `filed_to` when not, refuses path escapes, refuses
@@ -342,13 +300,27 @@ Telemetry needs no new work: the existing acceptance report
 (`acted / shown` per detector) is exactly the success metric. Target:
 ≥ 30% acceptance; below ~10% means the threshold defaults are wrong.
 
-## 12. Open questions
+## 12. Resolved design decisions
 
-1. Should "Run now" in the Insights panel get a sibling "File my quick
-   notes" button somewhere near the quick folder in the sidebar? (Pure
-   UI affordance; engine call is the same.)
-2. Merge heading format: `## Quick note · <timestamp>` vs. first line of
-   the note as heading. v1 uses the timestamp (deterministic, no
-   truncation games); v3's LLM can do better.
-3. After several merges a target accumulates `## Quick note · …`
-   sections. Acceptable for v1; v3 section-targeting addresses it.
+Each of these was an open question; resolved by Mycel's philosophy —
+plain files, deterministic behavior, no magic without confirmation, no
+new subsystems where an existing one fits.
+
+1. **Sidebar affordance: yes** (§4.3). The killer feature must be
+   discoverable where the pain lives — on the `quick/` folder itself.
+   It reuses the engine entry point, so it's pure UI, not a subsystem.
+2. **Merge heading is the capture timestamp**, not the note's first
+   line. Deterministic, no truncation heuristics, and it preserves the
+   one piece of metadata a quick note genuinely has — *when the thought
+   happened*. A first-line heading would duplicate content and break on
+   long or markdown-formatted first lines. Smarter headings are an
+   LLM-opt-in (v3), never a silent default.
+3. **Accumulating `## Quick note · …` sections is accepted, by
+   design.** The target becomes a visible accretion log of thinking —
+   plain markdown any tool can read, and the user can refactor it like
+   any other text. Hiding the seams would mean rewriting the user's
+   prose, which crosses the "no magic writes" line. v3's opt-in
+   section-targeting is the refinement path.
+4. **No Garden coupling, in any version.** Filing is a notes feature
+   and must stand alone for users who never touch the GTD side. One
+   feature, one concept: a quick note's destination is a note.
