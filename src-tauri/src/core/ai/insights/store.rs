@@ -408,20 +408,11 @@ pub fn last_successful_run_at(store: &AiStore) -> Result<Option<i64>> {
 }
 
 fn parse_kind(s: &str) -> Option<InsightKind> {
-    Some(match s {
-        "missing_wikilink" => InsightKind::MissingWikilink,
-        "bridge_candidate" => InsightKind::BridgeCandidate,
-        "resurfacing" => InsightKind::Resurfacing,
-        "today_companion" => InsightKind::TodayCompanion,
-        "question_answered" => InsightKind::QuestionAnswered,
-        "news_for_theme" => InsightKind::NewsForTheme,
-        "echo" => InsightKind::Echo,
-        "stranded_note" => InsightKind::StrandedNote,
-        "emerging_theme" => InsightKind::EmergingTheme,
-        "problem_researched" => InsightKind::ProblemResearched,
-        "idea_state_of_art" => InsightKind::IdeaStateOfArt,
-        _ => return None,
-    })
+    // Deserialize through serde so this can never drift from the enum's
+    // `rename_all = "snake_case"` names. A hand-written match here once
+    // missed a newly added kind, which made `list_insights` fail for the
+    // whole inbox as soon as that detector saved its first card.
+    serde_json::from_str(&format!("\"{s}\"")).ok()
 }
 
 #[cfg(test)]
@@ -449,6 +440,34 @@ mod tests {
             }],
             external_refs: vec![],
             generated_at: 1000,
+        }
+    }
+
+    #[test]
+    fn parse_kind_round_trips_every_kind() {
+        // Every variant must survive as_key() → parse_kind(), otherwise a
+        // saved insight of that kind poisons the whole list_insights call.
+        let all = [
+            InsightKind::MissingWikilink,
+            InsightKind::BridgeCandidate,
+            InsightKind::Resurfacing,
+            InsightKind::TodayCompanion,
+            InsightKind::QuestionAnswered,
+            InsightKind::NewsForTheme,
+            InsightKind::Echo,
+            InsightKind::StrandedNote,
+            InsightKind::EmergingTheme,
+            InsightKind::ProblemResearched,
+            InsightKind::IdeaStateOfArt,
+            InsightKind::QuickNoteFiling,
+        ];
+        for kind in all {
+            assert_eq!(
+                parse_kind(kind.as_key()),
+                Some(kind.clone()),
+                "kind {:?} does not round-trip through the store",
+                kind
+            );
         }
     }
 

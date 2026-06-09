@@ -1,7 +1,8 @@
 use crate::core::crypto::{self, is_encrypted_path};
 use crate::core::parser::{parse_note, ParsedNote};
 use crate::core::vault::{
-    read_tree_order, write_tree_order, KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR,
+    auto_heading, is_safe_rel_path, read_tree_order, write_tree_order, KNOWLEDGE_BASE_DIR,
+    QUICK_NOTES_DIR,
 };
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -222,7 +223,7 @@ pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Not
         // Strip the inner `.md` from `foo.md.age` so the H1 reads sensibly.
         .trim_end_matches(".md")
         .to_string();
-    let initial = format!("# {stem}\n\n");
+    let initial = format!("{}\n\n", auto_heading(&stem));
     let disk_hash = note_save(path.clone(), initial.clone(), state.clone()).await?;
     let parsed = parse_note(&initial);
     Ok(Note {
@@ -250,6 +251,9 @@ pub async fn folder_create(path: String, state: State<'_, AppState>) -> Result<(
 
 #[tauri::command]
 pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid note path".into());
+    }
     if is_protected(&path) {
         return Err("This folder is managed by Mycel and cannot be deleted".into());
     }
@@ -294,45 +298,59 @@ pub async fn quick_note_merge(
         crate::core::quick_filing::merge(&vault_root, &source, &target, delete_source)
             .map_err(|e| e.to_string())?;
 
-    // Best-effort index maintenance: drop the deleted source's chunks and
-    // re-embed the grown target. Failure here never fails the merge — the
-    // files on disk are already correct, and the next scheduled reindex
-    // reconciles the index anyway.
     if let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await {
-        let _guard = ai.indexing.lock().await;
-        if delete_source {
-            if let Err(e) = crate::core::ai::indexer::remove_note(&ai.store, &source) {
-                eprintln!("quick_note_merge: failed to drop {source} from index: {e:#}");
-            }
-        }
-        let cfg = ai.config.lock().await.clone();
-        if cfg.enabled {
-            if let Ok(Some(key)) = crate::core::ai::keyring::get_key(&vault_root) {
-                let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
-                    key,
-                    cfg.embedding_model.clone(),
-                );
-                if let Err(e) = crate::core::ai::indexer::index_note(
-                    &ai.store,
-                    &embedder,
-                    &vault_root,
-                    &target,
-                    cfg.daily_budget_usd,
-                    &cfg.embedding_model,
-                )
-                .await
-                {
-                    eprintln!("quick_note_merge: failed to reindex {target}: {e:#}");
-                }
-            }
-        }
+        refresh_index_after_merge(&ai, &vault_root, &source, &target, delete_source).await;
     }
 
     Ok(timestamp)
 }
 
+/// Best-effort index maintenance after a quick-note merge: drop the deleted
+/// source's chunks and re-embed the grown target. Never fails the merge —
+/// the files on disk are already correct, and the next scheduled reindex
+/// reconciles the index anyway.
+async fn refresh_index_after_merge(
+    ai: &std::sync::Arc<crate::core::ai::AiState>,
+    vault_root: &std::path::Path,
+    source: &str,
+    target: &str,
+    source_deleted: bool,
+) {
+    use crate::core::ai::{embedder::OpenRouterEmbedder, indexer, keyring};
+
+    let _guard = ai.indexing.lock().await;
+    if source_deleted {
+        if let Err(e) = indexer::remove_note(&ai.store, source) {
+            eprintln!("quick_note_merge: failed to drop {source} from index: {e:#}");
+        }
+    }
+    let cfg = ai.config.lock().await.clone();
+    if !cfg.enabled {
+        return;
+    }
+    let Ok(Some(key)) = keyring::get_key(vault_root) else {
+        return;
+    };
+    let embedder = OpenRouterEmbedder::new(key, cfg.embedding_model.clone());
+    if let Err(e) = indexer::index_note(
+        &ai.store,
+        &embedder,
+        vault_root,
+        target,
+        cfg.daily_budget_usd,
+        &cfg.embedding_model,
+    )
+    .await
+    {
+        eprintln!("quick_note_merge: failed to reindex {target}: {e:#}");
+    }
+}
+
 #[tauri::command]
 pub async fn note_rename(old_path: String, new_path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if !is_safe_rel_path(&old_path) || !is_safe_rel_path(&new_path) {
+        return Err("Invalid note path".into());
+    }
     if is_protected(&old_path) {
         return Err("This folder is managed by Mycel and cannot be renamed".into());
     }

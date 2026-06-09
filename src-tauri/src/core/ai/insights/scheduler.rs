@@ -187,6 +187,11 @@ impl InsightsEngine {
     /// Like `run_once`, but limited to the single detector named `only` when
     /// given. Powers targeted triggers like the quick-folder "Suggest
     /// filing" affordance; cooldowns, quotas, and telemetry are identical.
+    ///
+    /// Filtered runs still go through the pre-run `refresh_index` on
+    /// purpose: it's incremental (the indexer skips unchanged chunks by
+    /// hash), and a targeted quick-filing run is exactly the moment a
+    /// freshly captured note must reach the index to be fileable at all.
     pub async fn run_filtered(
         &self,
         settings: &InsightsSettings,

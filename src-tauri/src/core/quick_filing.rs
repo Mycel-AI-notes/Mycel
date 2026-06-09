@@ -11,57 +11,48 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use super::vault::QUICK_NOTES_DIR;
+use super::vault::{auto_heading, is_safe_rel_path, QUICK_NOTES_DIR};
 
 /// True when `rel` lives under the quick-capture folder.
 pub fn is_quick_path(rel: &str) -> bool {
     rel.starts_with(&format!("{QUICK_NOTES_DIR}/"))
 }
 
-/// Paths that are safe to join onto the vault root: relative, slash-separated,
-/// no traversal. Vault-relative paths everywhere else in the app already have
-/// this shape; this guard exists because the merge command both writes and
-/// deletes by path.
-pub fn is_safe_rel_path(rel: &str) -> bool {
-    !rel.is_empty()
-        && !rel.starts_with('/')
-        && !rel.contains('\\')
-        && !rel.contains(':')
-        && rel.split('/').all(|c| !c.is_empty() && c != "." && c != "..")
+/// Split `raw` into `(frontmatter_inner, body)` when it starts with a
+/// terminated YAML frontmatter block. `frontmatter_inner` is everything
+/// between the two `---` delimiter lines (trailing newline included).
+/// Returns `None` for no block — and for an *unterminated* block, so
+/// callers treat the whole file as body rather than silently swallowing
+/// everything after the first `---`.
+fn frontmatter_parts(raw: &str) -> Option<(&str, &str)> {
+    let rest = raw.strip_prefix("---\n").or_else(|| raw.strip_prefix("---\r\n"))?;
+    let mut offset = 0usize;
+    for line in rest.split_inclusive('\n') {
+        if line.trim_end() == "---" {
+            return Some((&rest[..offset], &rest[offset + line.len()..]));
+        }
+        offset += line.len();
+    }
+    None
 }
 
 /// Body of `raw` with an optional YAML frontmatter block removed.
 pub fn strip_frontmatter(raw: &str) -> &str {
-    let Some(rest) = raw.strip_prefix("---\n").or_else(|| raw.strip_prefix("---\r\n")) else {
-        return raw;
-    };
-    let mut offset = 0usize;
-    for line in rest.split_inclusive('\n') {
-        offset += line.len();
-        if line.trim_end() == "---" {
-            return &rest[offset..];
-        }
+    match frontmatter_parts(raw) {
+        Some((_, body)) => body,
+        None => raw,
     }
-    // Unterminated frontmatter: treat the whole file as body rather than
-    // silently swallowing everything after the first `---`.
-    raw
 }
 
 /// True when the frontmatter block contains a `filed_to:` key — the marker
 /// `merge` leaves on a kept source so the detector skips it forever.
 pub fn has_filed_marker(raw: &str) -> bool {
-    let Some(rest) = raw.strip_prefix("---\n").or_else(|| raw.strip_prefix("---\r\n")) else {
+    let Some((inner, _)) = frontmatter_parts(raw) else {
         return false;
     };
-    for line in rest.lines() {
-        if line.trim_end() == "---" {
-            return false;
-        }
-        if line.trim_start().starts_with("filed_to:") {
-            return true;
-        }
-    }
-    false
+    inner
+        .lines()
+        .any(|line| line.trim_start().starts_with("filed_to:"))
 }
 
 /// The quick note's meaningful content: frontmatter stripped, and the
@@ -73,7 +64,7 @@ pub fn note_body(raw: &str, rel_path: &str) -> String {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
-    let auto_heading = format!("# {stem}");
+    let auto_heading = auto_heading(stem);
     let trimmed = body.trim_start();
     if let Some(rest) = trimmed.strip_prefix(&auto_heading) {
         if rest.is_empty() || rest.starts_with('\n') || rest.starts_with("\r\n") {
@@ -127,18 +118,12 @@ pub fn build_section(timestamp: &str, body: &str, source_rel: &str) -> String {
 /// Insert `filed_to: <target>` into the source's frontmatter (creating the
 /// block when absent) so a kept original is never suggested again.
 pub fn mark_filed(raw: &str, target_rel: &str) -> String {
-    if let Some(rest) = raw.strip_prefix("---\n").or_else(|| raw.strip_prefix("---\r\n")) {
-        let mut offset = 0usize;
-        for line in rest.split_inclusive('\n') {
-            if line.trim_end() == "---" {
-                let head = &rest[..offset];
-                let tail = &rest[offset..];
-                return format!("---\n{head}filed_to: {target_rel}\n{tail}");
-            }
-            offset += line.len();
+    match frontmatter_parts(raw) {
+        Some((inner, body)) => {
+            format!("---\n{inner}filed_to: {target_rel}\n---\n{body}")
         }
+        None => format!("---\nfiled_to: {target_rel}\n---\n\n{raw}"),
     }
-    format!("---\nfiled_to: {target_rel}\n---\n\n{raw}")
 }
 
 /// Perform the merge on disk. Each step runs only if the previous one

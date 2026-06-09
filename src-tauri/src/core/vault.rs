@@ -17,6 +17,26 @@ pub const QUICK_NOTES_DIR: &str = "quick";
 /// promoted to Knowledge Bases. See `docs/specs/kb-directory.md`.
 pub const KB_DIRS_FILE: &str = "kb-dirs.json";
 
+/// The heading `note_create` seeds into a brand-new note. Quick-note filing
+/// strips this exact line back off when deciding whether a capture was ever
+/// typed into — sharing the constructor keeps the two in sync by
+/// construction instead of by convention.
+pub fn auto_heading(stem: &str) -> String {
+    format!("# {stem}")
+}
+
+/// Paths that are safe to join onto the vault root: relative,
+/// slash-separated, no traversal components. Every command that writes or
+/// deletes by a caller-supplied vault-relative path should pass it through
+/// this guard first.
+pub fn is_safe_rel_path(rel: &str) -> bool {
+    !rel.is_empty()
+        && !rel.starts_with('/')
+        && !rel.contains('\\')
+        && !rel.contains(':')
+        && rel.split('/').all(|c| !c.is_empty() && c != "." && c != "..")
+}
+
 /// Registry file under `.mycel/` that remembers the user's manual ordering
 /// of entries within a folder. Maps a vault-relative folder path (`""` for
 /// the vault root) to the ordered list of child *names* the user arranged by

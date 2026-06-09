@@ -15,12 +15,13 @@
 //! entire input. Noise is controlled by the similarity threshold and the
 //! engine's quotas instead.
 
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use walkdir::WalkDir;
 
-use super::util::{base_name, links_to, similarity};
+use super::util::{base_name, similarity};
 use crate::core::ai::insights::detector::{stable_id, Detector, DetectorContext};
 use crate::core::ai::insights::models::{Insight, InsightAction, InsightKind};
 use crate::core::ai::related::find_related;
@@ -51,24 +52,29 @@ impl Detector for QuickFilingDetector {
         let mut out = Vec::new();
         let generated_at = chrono::Utc::now().timestamp();
 
-        for quick_path in candidates(ctx, now, min_age) {
+        // One query up front instead of one per candidate.
+        let indexed = indexed_quick_paths(ctx)?;
+
+        for cand in candidates(ctx, now, min_age) {
             // Skip anything the index hasn't seen yet — the detector never
             // embeds on its own (that's the scheduler's pre-run reindex job).
-            if !is_indexed(ctx, &quick_path)? {
+            if !indexed.contains(&cand.path) {
                 continue;
             }
 
+            // Targets the note already wikilinks to are never suggested;
+            // parse the links once per candidate, not once per neighbour.
+            let linked = wikilink_basenames(&cand.body);
             let Some((target, confidence)) =
-                best_target(ctx, &quick_path, min_similarity)?
+                best_target(ctx, &cand.path, &linked, min_similarity)?
             else {
                 continue;
             };
 
-            let raw = std::fs::read_to_string(ctx.vault_root.join(&quick_path))
-                .unwrap_or_default();
-            let body = qf::note_body(&raw, &quick_path);
-            let preview: String = body.chars().take(PREVIEW_CHARS).collect();
-            let ellipsis = if body.chars().count() > PREVIEW_CHARS { "…" } else { "" };
+            let quick_path = cand.path;
+            let preview: String = cand.body.chars().take(PREVIEW_CHARS).collect();
+            let ellipsis =
+                if cand.body.chars().count() > PREVIEW_CHARS { "…" } else { "" };
             let captured = qf::capture_timestamp(&quick_path)
                 .unwrap_or_else(|| "earlier".to_string());
 
@@ -104,13 +110,20 @@ impl Detector for QuickFilingDetector {
     }
 }
 
+/// One eligible quick note, with its body kept so `run` doesn't read the
+/// file a second time for the card preview.
+struct Candidate {
+    path: String,
+    body: String,
+}
+
 /// Quick notes eligible for filing: plain `.md` under `quick/`, old enough,
 /// not marked `filed_to:`, and with a non-empty body.
 fn candidates(
     ctx: &DetectorContext<'_>,
     now: SystemTime,
     min_age: Duration,
-) -> Vec<String> {
+) -> Vec<Candidate> {
     let quick_root = ctx.vault_root.join(QUICK_NOTES_DIR);
     let mut out = Vec::new();
     for entry in WalkDir::new(&quick_root)
@@ -151,32 +164,51 @@ fn candidates(
         if qf::has_filed_marker(&raw) {
             continue;
         }
-        if qf::note_body(&raw, &rel).is_empty() {
+        let body = qf::note_body(&raw, &rel);
+        if body.is_empty() {
             continue;
         }
-        out.push(rel);
+        out.push(Candidate { path: rel, body });
     }
-    out.sort();
+    out.sort_by(|a, b| a.path.cmp(&b.path));
     out
 }
 
-fn is_indexed(ctx: &DetectorContext<'_>, rel: &str) -> anyhow::Result<bool> {
+/// Every quick note the embedding index knows about, in one query.
+fn indexed_quick_paths(ctx: &DetectorContext<'_>) -> anyhow::Result<HashSet<String>> {
+    let pattern = format!("{QUICK_NOTES_DIR}/%");
     ctx.store.with_conn(|c| {
-        let n: i64 = c.query_row(
-            "SELECT COUNT(*) FROM chunks WHERE note_path = ?1",
-            [rel],
-            |r| r.get(0),
-        )?;
-        Ok(n > 0)
+        let mut stmt =
+            c.prepare("SELECT DISTINCT note_path FROM chunks WHERE note_path LIKE ?1")?;
+        let rows = stmt
+            .query_map([pattern.as_str()], |r| r.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
     })
 }
 
+/// Lowercased base names of every wikilink target in `body` (heading
+/// anchors stripped) — the same comparison `util::links_to` makes, computed
+/// once instead of re-parsing the note for every neighbour.
+fn wikilink_basenames(body: &str) -> HashSet<String> {
+    crate::core::parser::parse_note(body)
+        .wikilinks
+        .iter()
+        .map(|wl| {
+            let t = wl.target.split('#').next().unwrap_or(&wl.target);
+            base_name(t).to_lowercase()
+        })
+        .collect()
+}
+
 /// Best merge target for one quick note, or `None` when nothing clears the
-/// threshold. Other quick notes, encrypted notes, and targets the note
-/// already links to are never suggested.
+/// threshold. Other quick notes, encrypted notes, and targets in `linked`
+/// (already wikilinked from the note) are never suggested.
 fn best_target(
     ctx: &DetectorContext<'_>,
     quick_path: &str,
+    linked: &HashSet<String>,
     min_similarity: f32,
 ) -> anyhow::Result<Option<(String, f32)>> {
     let hits = find_related(&ctx.store, quick_path, K)?;
@@ -190,7 +222,7 @@ fn best_target(
             // Ordered by distance: everything after this is weaker too.
             return Ok(None);
         }
-        if links_to(ctx, quick_path, &hit.note_path) {
+        if linked.contains(&base_name(&hit.note_path).to_lowercase()) {
             continue;
         }
         return Ok(Some((hit.note_path, sim)));

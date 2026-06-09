@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { X, Loader2, FolderInput } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { useInsightsStore } from '@/stores/insights';
+import { displayName } from '@/lib/note-name';
 import type { Note } from '@/types';
 
 interface Props {
@@ -13,11 +14,6 @@ interface Props {
   onClose: () => void;
   /// Called after the merge landed, so the card can mark the insight acted.
   onResolved: () => void;
-}
-
-function baseName(path: string): string {
-  const file = path.split('/').pop() ?? path;
-  return file.replace(/\.md$/, '');
 }
 
 /// Confirmation dialog for a quick-note merge. Shows the source's current
@@ -83,7 +79,7 @@ export function MergeQuickNoteDialog({ source, target, onClose, onResolved }: Pr
         <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-0">
           <h2 className="flex items-center gap-2 text-text-primary text-sm font-semibold">
             <FolderInput size={15} className="text-accent" />
-            File quick note into “{baseName(target)}”
+            File quick note into “{displayName(target)}”
           </h2>
           <button
             onClick={onClose}
