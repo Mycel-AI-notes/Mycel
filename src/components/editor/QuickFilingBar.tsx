@@ -3,6 +3,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { Sparkles, X, FolderInput, PenLine, FilePlus2 } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { displayName } from '@/lib/note-name';
+import {
+  markPendingSuggest,
+  consumePendingSuggest,
+} from '@/lib/quick-filing-pending';
 import type { FileEntry } from '@/types';
 import { MergeQuickNoteDialog } from '@/components/insights/MergeQuickNoteDialog';
 
@@ -49,9 +53,17 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
   const [sugg, setSugg] = useState<Suggestions | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Internal trigger for suggestions that must survive a remount — e.g.
+  // right after the user accepts a rename and the bar reappears under the
+  // new path without a fresh save.
+  const [localTick, setLocalTick] = useState(0);
 
   useEffect(() => {
-    if (saveTick === 0) return;
+    if (consumePendingSuggest(path)) setLocalTick((t) => t + 1);
+  }, [path]);
+
+  useEffect(() => {
+    if (saveTick === 0 && localTick === 0) return;
     let cancelled = false;
     setPhase('thinking');
     invoke<Suggestions>('quick_note_suggest', { path })
@@ -71,7 +83,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
     return () => {
       cancelled = true;
     };
-  }, [saveTick, path]);
+  }, [saveTick, localTick, path]);
 
   if (phase === 'hidden') return null;
 
@@ -84,13 +96,17 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
       stem = `${title} ${n}`;
       n++;
     }
+    const newPath = `${parent}/${stem}.md`;
     setBusy(true);
+    // The tab follows the rename and this component remounts under the new
+    // path; the pending flag makes the remounted bar immediately re-ask for
+    // "move into" suggestions instead of waiting for another save.
+    markPendingSuggest(newPath);
     try {
-      // The tab follows the rename; this component remounts under the new
-      // path with the bar reset — which is right, the suggestion was taken.
-      await renameNote(path, `${parent}/${stem}.md`);
+      await renameNote(path, newPath);
     } catch (e) {
       console.error('Rename failed:', e);
+      consumePendingSuggest(newPath);
       setBusy(false);
     }
   };
