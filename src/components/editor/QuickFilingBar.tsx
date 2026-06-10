@@ -27,6 +27,14 @@ interface Suggestions {
 
 type Phase = 'hidden' | 'thinking' | 'ready';
 
+/// Fire-and-forget outcome record for the local filing-trace log
+/// (`.mycel/ai/quick_filing_log.jsonl`) — fuel for tuning the suggester.
+function logOutcome(action: string, source: string, target?: string) {
+  invoke('quick_filing_log_outcome', { action, source, target: target ?? null }).catch(
+    () => {},
+  );
+}
+
 /// Children names (without extension) of the folder `parent` in the tree —
 /// used to keep a suggested rename from colliding with a sibling.
 function siblingStems(tree: FileEntry[], parent: string): Set<string> {
@@ -102,6 +110,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
     // path; the pending flag makes the remounted bar immediately re-ask for
     // "move into" suggestions instead of waiting for another save.
     markPendingSuggest(newPath);
+    logOutcome('rename', path, newPath);
     try {
       await renameNote(path, newPath);
     } catch (e) {
@@ -116,6 +125,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
   // an existing target — the destructive half stays gated.
   const startNew = async (target: string) => {
     setBusy(true);
+    logOutcome('create', path, target);
     try {
       await createNote(target);
       setMergeTarget(target);
@@ -183,7 +193,10 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
             )}
             <button
               type="button"
-              onClick={() => setPhase('hidden')}
+              onClick={() => {
+                logOutcome('dismiss', path);
+                setPhase('hidden');
+              }}
               className="ml-auto p-0.5 rounded text-text-muted hover:text-text-primary"
               title="Dismiss until the next save"
             >

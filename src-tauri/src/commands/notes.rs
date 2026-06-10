@@ -298,6 +298,18 @@ pub async fn quick_note_merge(
         crate::core::quick_filing::merge(&vault_root, &source, &target, delete_source)
             .map_err(|e| e.to_string())?;
 
+    crate::core::ai::filing_log::append(
+        &vault_root,
+        &serde_json::json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "event": "outcome",
+            "action": "merge",
+            "source": source,
+            "target": target,
+            "deleted_source": delete_source,
+        }),
+    );
+
     if let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await {
         refresh_index_after_merge(&ai, &vault_root, &source, &target, delete_source).await;
     }
@@ -408,7 +420,10 @@ pub async fn quick_note_suggest(
         quick_suggest::rank_targets(&ai.store, &path, &body, LLM_CANDIDATE_FLOOR, 6)
             .map_err(|e| e.to_string())?;
 
-    match llm_filing_advice(&ai, &vault_root, &key, &cfg, &body, &wide).await {
+    let advice = llm_filing_advice(&ai, &vault_root, &key, &cfg, &body, &wide).await;
+    let advice_for_log = advice.clone();
+
+    match advice {
         Some(advice) => {
             if still_auto_named {
                 if let Some(t) = advice
@@ -476,7 +491,55 @@ pub async fn quick_note_suggest(
         }
     }
 
+    // Trace for later tuning: what we saw, what the model said, what the
+    // bar showed. Outcomes (merge/rename/create/dismiss) land in the same
+    // file as separate records.
+    crate::core::ai::filing_log::append(
+        &vault_root,
+        &serde_json::json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "event": "suggest",
+            "note": path,
+            "body": body.chars().take(2000).collect::<String>(),
+            "candidates": wide
+                .iter()
+                .map(|h| serde_json::json!({
+                    "path": h.note_path,
+                    "similarity": h.similarity,
+                }))
+                .collect::<Vec<_>>(),
+            "llm_used": advice_for_log.is_some(),
+            "llm": advice_for_log,
+            "shown": {
+                "title": out.title,
+                "targets": out.targets.iter().map(|t| t.note_path.clone()).collect::<Vec<_>>(),
+                "create_path": out.create_path,
+            },
+        }),
+    );
+
     Ok(out)
+}
+
+/// Outcome records for the quick-filing trace: the frontend reports what
+/// the user did with a suggestion (rename, create, dismiss). Merges are
+/// logged by `quick_note_merge` itself.
+#[tauri::command]
+pub async fn quick_filing_log_outcome(
+    action: String,
+    source: String,
+    target: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    crate::core::ai::filing_log::outcome(&vault_root, &action, &source, target.as_deref());
+    Ok(())
 }
 
 /// Ask the chat model where the note belongs. `None` on any failure —

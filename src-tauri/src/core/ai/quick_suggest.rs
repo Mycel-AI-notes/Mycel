@@ -51,7 +51,8 @@ pub struct CandidateContext {
 
 /// What the LLM decided about a quick note. Every field is optional —
 /// the caller falls back to pure-embedding behavior for anything missing.
-#[derive(Debug, Default, Clone)]
+/// Serializable so the filing log can store the verdict verbatim.
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct LlmAdvice {
     pub title: Option<String>,
     /// Exact path from the candidate list, validated by the caller.

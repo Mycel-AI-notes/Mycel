@@ -20,6 +20,7 @@ pub mod chunker;
 pub mod config;
 pub mod edges;
 pub mod embedder;
+pub mod filing_log;
 pub mod indexer;
 pub mod insights;
 pub mod keyring;
