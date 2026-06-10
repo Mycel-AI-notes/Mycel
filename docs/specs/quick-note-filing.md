@@ -210,7 +210,7 @@ Semantics, in order — each step only runs if the previous succeeded:
 
    <full source body>
 
-   *(filed from `quick/2026-06-09/14-32-08.md`)*
+   `filed from quick/2026-06-09/14-32-08.md`
    ```
 
    The heading timestamp comes from the source filename/path (capture

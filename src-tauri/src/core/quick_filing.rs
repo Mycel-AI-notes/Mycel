@@ -143,9 +143,9 @@ pub fn capture_timestamp(rel_path: &str) -> Option<String> {
 /// time (the one piece of metadata a quick note genuinely has); the trailing
 /// line is the provenance trail.
 pub fn build_section(timestamp: &str, body: &str, source_rel: &str) -> String {
-    format!(
-        "\n\n## Quick note · {timestamp}\n\n{body}\n\n*(filed from `{source_rel}`)*\n"
-    )
+    // Plain inline code for the provenance line: italics wrapped around
+    // code spans don't render in the editor's preview decorations.
+    format!("\n\n## Quick note · {timestamp}\n\n{body}\n\n`filed from {source_rel}`\n")
 }
 
 /// Insert `filed_to: <target>` into the source's frontmatter (creating the
@@ -323,7 +323,7 @@ mod tests {
         let target = read(dir.path(), "garden.md");
         assert!(target.starts_with("# Garden\n\nexisting\n\n## Quick note · 2026-06-09 14:32\n"));
         assert!(target.contains("plant the apple tree"));
-        assert!(target.contains("*(filed from `quick/2026-06-09/14-32-08.md`)*"));
+        assert!(target.contains("`filed from quick/2026-06-09/14-32-08.md`"));
         assert!(!dir.path().join("quick/2026-06-09/14-32-08.md").exists());
     }
 
