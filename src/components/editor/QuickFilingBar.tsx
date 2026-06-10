@@ -59,7 +59,9 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
   const createNote = useVaultStore((s) => s.createNote);
   const [phase, setPhase] = useState<Phase>('hidden');
   const [sugg, setSugg] = useState<Suggestions | null>(null);
-  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [merge, setMerge] = useState<{ target: string; title: string | null } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   // Internal trigger for suggestions that must survive a remount — e.g.
   // right after the user accepts a rename and the bar reappears under the
@@ -128,7 +130,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
     logOutcome('create', path, target);
     try {
       await createNote(target);
-      setMergeTarget(target);
+      setMerge({ target, title: sugg?.title ?? null });
     } catch (e) {
       console.error('Create-note failed:', e);
     } finally {
@@ -149,6 +151,20 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
         sugg && (
           <div className="ai-arrive flex flex-wrap items-center gap-1.5 text-xs">
             <Sparkles size={13} className="shrink-0 text-accent" />
+            {sugg.title && sugg.targets.length > 0 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  setMerge({ target: sugg.targets[0].note_path, title: sugg.title })
+                }
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-white hover:opacity-90 disabled:opacity-50"
+                title={`Rename and move in one go: filed into ${sugg.targets[0].note_path} as “${sugg.title}”`}
+              >
+                <Sparkles size={11} />
+                File as “{sugg.title}” → “{displayName(sugg.targets[0].note_path)}”
+              </button>
+            )}
             {sugg.title && (
               <button
                 type="button"
@@ -166,7 +182,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
                 key={t.note_path}
                 type="button"
                 disabled={busy}
-                onClick={() => setMergeTarget(t.note_path)}
+                onClick={() => setMerge({ target: t.note_path, title: null })}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-surface-1 text-text-primary hover:bg-surface-hover disabled:opacity-50"
                 title={`${t.note_path} · ${Math.round(t.similarity * 100)}% match`}
               >
@@ -211,13 +227,14 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
         )
       )}
 
-      {mergeTarget && (
+      {merge && (
         <MergeQuickNoteDialog
           source={path}
-          target={mergeTarget}
-          onClose={() => setMergeTarget(null)}
+          target={merge.target}
+          sectionTitle={merge.title}
+          onClose={() => setMerge(null)}
           onResolved={() => {
-            setMergeTarget(null);
+            setMerge(null);
             setPhase('hidden');
           }}
         />

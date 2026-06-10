@@ -284,6 +284,7 @@ pub async fn quick_note_merge(
     source: String,
     target: String,
     delete_source: bool,
+    section_title: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let vault_root = {
@@ -294,9 +295,20 @@ pub async fn quick_note_merge(
             .ok_or("No vault open")?
     };
 
-    let timestamp =
-        crate::core::quick_filing::merge(&vault_root, &source, &target, delete_source)
-            .map_err(|e| e.to_string())?;
+    // Headings are single-line by definition; everything else about the
+    // title is the user's business.
+    let section_title = section_title
+        .map(|t| t.replace(['\n', '\r'], " ").trim().to_string())
+        .filter(|t| !t.is_empty());
+
+    let timestamp = crate::core::quick_filing::merge(
+        &vault_root,
+        &source,
+        &target,
+        delete_source,
+        section_title.as_deref(),
+    )
+    .map_err(|e| e.to_string())?;
 
     crate::core::ai::filing_log::append(
         &vault_root,
@@ -307,6 +319,7 @@ pub async fn quick_note_merge(
             "source": source,
             "target": target,
             "deleted_source": delete_source,
+            "section_title": section_title,
         }),
     );
 

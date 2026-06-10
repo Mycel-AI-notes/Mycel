@@ -142,10 +142,18 @@ pub fn capture_timestamp(rel_path: &str) -> Option<String> {
 /// The section appended to the target note. Heading carries the capture
 /// time (the one piece of metadata a quick note genuinely has); the trailing
 /// line is the provenance trail.
-pub fn build_section(timestamp: &str, body: &str, source_rel: &str) -> String {
+pub fn build_section(
+    timestamp: &str,
+    body: &str,
+    source_rel: &str,
+    title: Option<&str>,
+) -> String {
+    // With a title (the bar's combined "file as X into Y" action) the
+    // section heading carries it; the capture time stays either way.
     // Plain inline code for the provenance line: italics wrapped around
     // code spans don't render in the editor's preview decorations.
-    format!("\n\n## Quick note · {timestamp}\n\n{body}\n\n`filed from {source_rel}`\n")
+    let heading = title.filter(|t| !t.trim().is_empty()).unwrap_or("Quick note");
+    format!("\n\n## {heading} · {timestamp}\n\n{body}\n\n`filed from {source_rel}`\n")
 }
 
 /// Insert `filed_to: <target>` into the source's frontmatter (creating the
@@ -169,6 +177,7 @@ pub fn merge(
     source_rel: &str,
     target_rel: &str,
     delete_source: bool,
+    section_title: Option<&str>,
 ) -> Result<String> {
     if !is_safe_rel_path(source_rel) || !is_safe_rel_path(target_rel) {
         bail!("Invalid note path");
@@ -211,7 +220,7 @@ pub fn merge(
     let merged = format!(
         "{}{}",
         target.trim_end(),
-        build_section(&timestamp, &body, source_rel)
+        build_section(&timestamp, &body, source_rel, section_title)
     );
     std::fs::write(&target_abs, &merged)
         .with_context(|| format!("Failed to write {target_rel}"))?;
@@ -317,7 +326,7 @@ mod tests {
         write(dir.path(), "quick/2026-06-09/14-32-08.md", "# 14-32-08\n\nplant the apple tree\n");
         write(dir.path(), "garden.md", "# Garden\n\nexisting\n");
 
-        let ts = merge(dir.path(), "quick/2026-06-09/14-32-08.md", "garden.md", true).unwrap();
+        let ts = merge(dir.path(), "quick/2026-06-09/14-32-08.md", "garden.md", true, None).unwrap();
         assert_eq!(ts, "2026-06-09 14:32");
 
         let target = read(dir.path(), "garden.md");
@@ -328,12 +337,41 @@ mod tests {
     }
 
     #[test]
+    fn merge_uses_section_title_when_given() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "quick/2026-06-09/14-32-08.md", "plant the apple tree\n");
+        write(dir.path(), "garden.md", "# Garden\n");
+        merge(
+            dir.path(),
+            "quick/2026-06-09/14-32-08.md",
+            "garden.md",
+            true,
+            Some("Apple trees"),
+        )
+        .unwrap();
+        let target = read(dir.path(), "garden.md");
+        assert!(target.contains("## Apple trees · 2026-06-09 14:32"));
+        // Blank titles fall back to the default heading.
+        write(dir.path(), "quick/2026-06-09/15-00-00.md", "water it\n");
+        merge(
+            dir.path(),
+            "quick/2026-06-09/15-00-00.md",
+            "garden.md",
+            true,
+            Some("   "),
+        )
+        .unwrap();
+        let target = read(dir.path(), "garden.md");
+        assert!(target.contains("## Quick note · 2026-06-09 15:00"));
+    }
+
+    #[test]
     fn merge_keeps_source_with_marker_when_asked() {
         let dir = TempDir::new().unwrap();
         write(dir.path(), "quick/2026-06-09/14-32-08.md", "a thought\n");
         write(dir.path(), "garden.md", "# Garden\n");
 
-        merge(dir.path(), "quick/2026-06-09/14-32-08.md", "garden.md", false).unwrap();
+        merge(dir.path(), "quick/2026-06-09/14-32-08.md", "garden.md", false, None).unwrap();
 
         let source = read(dir.path(), "quick/2026-06-09/14-32-08.md");
         assert!(has_filed_marker(&source));
@@ -348,17 +386,17 @@ mod tests {
         write(dir.path(), "t.md", "# T\n");
 
         // Source outside quick/.
-        assert!(merge(dir.path(), "t.md", "quick/2026-06-09/a.md", true).is_err());
+        assert!(merge(dir.path(), "t.md", "quick/2026-06-09/a.md", true, None).is_err());
         // Path traversal.
-        assert!(merge(dir.path(), "quick/../../etc/x.md", "t.md", true).is_err());
+        assert!(merge(dir.path(), "quick/../../etc/x.md", "t.md", true, None).is_err());
         // Encrypted extension.
-        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "t.md.age", true).is_err());
+        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "t.md.age", true, None).is_err());
         // Same note.
-        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "quick/2026-06-09/a.md", true).is_err());
+        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "quick/2026-06-09/a.md", true, None).is_err());
         // Empty body (auto heading only).
-        assert!(merge(dir.path(), "quick/2026-06-09/empty.md", "t.md", true).is_err());
+        assert!(merge(dir.path(), "quick/2026-06-09/empty.md", "t.md", true, None).is_err());
         // Missing target.
-        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "missing.md", true).is_err());
+        assert!(merge(dir.path(), "quick/2026-06-09/a.md", "missing.md", true, None).is_err());
         // Nothing was harmed.
         assert_eq!(read(dir.path(), "t.md"), "# T\n");
         assert!(dir.path().join("quick/2026-06-09/a.md").exists());

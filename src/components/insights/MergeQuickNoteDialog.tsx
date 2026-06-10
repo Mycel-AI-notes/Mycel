@@ -11,6 +11,9 @@ interface Props {
   source: string;
   /// Vault-relative path of the note it merges into.
   target: string;
+  /// Optional human title for the appended section heading
+  /// (`## {title} · <capture time>`); defaults to "Quick note".
+  sectionTitle?: string | null;
   onClose: () => void;
   /// Called after the merge landed, so the card can mark the insight acted.
   onResolved: () => void;
@@ -20,7 +23,13 @@ interface Props {
 /// content (re-read at open, and re-read again by the backend at confirm
 /// time) and spells out exactly what happens, because the default path
 /// deletes the source file.
-export function MergeQuickNoteDialog({ source, target, onClose, onResolved }: Props) {
+export function MergeQuickNoteDialog({
+  source,
+  target,
+  sectionTitle,
+  onClose,
+  onResolved,
+}: Props) {
   const status = useInsightsStore((s) => s.status);
   const openNote = useVaultStore((s) => s.openNote);
   const closeTab = useVaultStore((s) => s.closeTab);
@@ -55,6 +64,7 @@ export function MergeQuickNoteDialog({ source, target, onClose, onResolved }: Pr
         source,
         target,
         deleteSource,
+        sectionTitle: sectionTitle ?? null,
       });
       if (deleteSource) closeTab(source);
       await refreshTree();
@@ -94,8 +104,8 @@ export function MergeQuickNoteDialog({ source, target, onClose, onResolved }: Pr
           <p className="text-xs text-text-secondary leading-relaxed">
             The quick note’s content is appended to{' '}
             <span className="text-text-primary">{target}</span> as a dated{' '}
-            <code className="text-[11px]">## Quick note</code> section with a
-            link back to where it came from.
+            <code className="text-[11px]">## {sectionTitle || 'Quick note'}</code>{' '}
+            section with a link back to where it came from.
           </p>
 
           {error && <div className="text-[11px] text-error">{error}</div>}
