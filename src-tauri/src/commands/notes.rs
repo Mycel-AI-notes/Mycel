@@ -311,21 +311,34 @@ pub struct QuickSuggestions {
     /// timestamp name (`HH-MM-SS.md`). `None` once the user renamed it.
     pub title: Option<String>,
     pub targets: Vec<crate::core::ai::quick_suggest::TargetHit>,
+    /// Vault-relative path for a brand-new note, proposed by the LLM when
+    /// nothing in the vault covers the topic ("start a project with this").
+    pub create_path: Option<String>,
+    /// One short LLM sentence explaining the choice, in the note's language.
+    pub reason: Option<String>,
     /// False when AI is off or no key is saved — the bar can then only
     /// offer the rename and hints at enabling AI for filing targets.
     pub ai_available: bool,
 }
 
+/// Similarity floor for the candidate list handed to the LLM. Deliberately
+/// lower than the user-facing threshold: the model reads the candidates'
+/// content and can reject them; without an LLM verdict the user threshold
+/// still gates what the bar shows.
+const LLM_CANDIDATE_FLOOR: f32 = 0.35;
+
 /// Suggestions for the in-editor filing bar, computed right after a quick
-/// note is saved: a title derived from the first content line, and the
-/// closest merge targets from the embedding index. The note is (re)indexed
-/// first so a thought saved seconds ago can match at all — cheap, since the
-/// indexer skips unchanged chunks by hash.
+/// note is saved: a title derived from the note, the closest merge targets,
+/// and — when a chat model is reachable — an LLM verdict on where the note
+/// belongs, possibly "start a new note". The vault index is refreshed first
+/// (incremental: unchanged notes are hash-skipped) so both the fresh quick
+/// note and never-indexed targets can match at all.
 #[tauri::command]
 pub async fn quick_note_suggest(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<QuickSuggestions, String> {
+    use crate::core::ai::quick_suggest;
     use crate::core::quick_filing as qf;
 
     let vault_root = {
@@ -341,67 +354,228 @@ pub async fn quick_note_suggest(
 
     let raw = std::fs::read_to_string(vault_root.join(&path)).map_err(|e| e.to_string())?;
     let body = qf::note_body(&raw, &path);
-    if body.is_empty() {
-        return Ok(QuickSuggestions {
-            title: None,
-            targets: vec![],
-            ai_available: true,
-        });
-    }
-    let title = if qf::capture_timestamp(&path).is_some() {
-        qf::suggest_title(&body)
-    } else {
-        None
+    let still_auto_named = qf::capture_timestamp(&path).is_some();
+    let mut out = QuickSuggestions {
+        title: None,
+        targets: vec![],
+        create_path: None,
+        reason: None,
+        ai_available: false,
     };
+    if body.is_empty() {
+        out.ai_available = true;
+        return Ok(out);
+    }
+    if still_auto_named {
+        out.title = qf::suggest_title(&body);
+    }
 
-    let mut targets = Vec::new();
-    let mut ai_available = false;
-    if let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await {
-        let cfg = ai.config.lock().await.clone();
-        let key = crate::core::ai::keyring::get_key(&vault_root).ok().flatten();
-        if let (true, Some(key)) = (cfg.enabled, key) {
-            ai_available = true;
-            {
-                let _guard = ai.indexing.lock().await;
-                let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
-                    key,
-                    cfg.embedding_model.clone(),
-                );
-                if let Err(e) = crate::core::ai::indexer::index_note(
-                    &ai.store,
-                    &embedder,
-                    &vault_root,
-                    &path,
-                    cfg.daily_budget_usd,
-                    &cfg.embedding_model,
-                )
-                .await
-                {
-                    // Budget exhausted or offline: still rank against
-                    // whatever embedding the note already has, if any.
-                    eprintln!("quick_note_suggest: index failed for {path}: {e:#}");
-                }
-            }
-            let min_similarity = {
-                let s = ai.insights.settings.lock().await;
-                (s.quick_filing_min_similarity.min(100) as f32) / 100.0
-            };
-            targets = crate::core::ai::quick_suggest::rank_targets(
-                &ai.store,
-                &path,
-                &body,
-                min_similarity,
-                3,
-            )
-            .map_err(|e| e.to_string())?;
+    let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await else {
+        return Ok(out);
+    };
+    let cfg = ai.config.lock().await.clone();
+    let key = crate::core::ai::keyring::get_key(&vault_root).ok().flatten();
+    let (true, Some(key)) = (cfg.enabled, key) else {
+        return Ok(out);
+    };
+    out.ai_available = true;
+
+    // Freshen the whole index, not just this note: on a vault that was
+    // never indexed there is nothing to match against otherwise.
+    {
+        let _guard = ai.indexing.lock().await;
+        let embedder =
+            crate::core::ai::embedder::OpenRouterEmbedder::new(key.clone(), cfg.embedding_model.clone());
+        if let Err(e) = crate::core::ai::indexer::bulk_reindex(
+            &ai.store,
+            &embedder,
+            &vault_root,
+            cfg.daily_budget_usd,
+            &cfg.embedding_model,
+            |_p| {},
+        )
+        .await
+        {
+            eprintln!("quick_note_suggest: reindex failed: {e:#}");
         }
     }
 
-    Ok(QuickSuggestions {
-        title,
-        targets,
-        ai_available,
-    })
+    let min_similarity = {
+        let s = ai.insights.settings.lock().await;
+        (s.quick_filing_min_similarity.min(100) as f32) / 100.0
+    };
+    let wide =
+        quick_suggest::rank_targets(&ai.store, &path, &body, LLM_CANDIDATE_FLOOR, 6)
+            .map_err(|e| e.to_string())?;
+
+    match llm_filing_advice(&ai, &vault_root, &key, &cfg, &body, &wide).await {
+        Some(advice) => {
+            if still_auto_named {
+                if let Some(t) = advice
+                    .title
+                    .as_deref()
+                    .map(qf::sanitize_for_filename)
+                    .filter(|t| !t.is_empty())
+                {
+                    out.title = Some(t);
+                }
+            }
+            out.reason = advice.reason.map(|r| r.chars().take(200).collect());
+
+            // The model's pick leads, validated against the candidate list
+            // so a hallucinated path can never reach the UI.
+            if let Some(tp) = advice.target.as_deref() {
+                if let Some(hit) = wide.iter().find(|h| h.note_path == tp) {
+                    out.targets.push(hit.clone());
+                }
+            }
+            for h in &wide {
+                if out.targets.len() >= 3 {
+                    break;
+                }
+                if h.similarity < min_similarity
+                    || out.targets.iter().any(|t| t.note_path == h.note_path)
+                {
+                    continue;
+                }
+                out.targets.push(h.clone());
+            }
+
+            // "Start a new note" only when nothing existing was accepted.
+            if out.targets.is_empty() {
+                if let Some((folder, name)) = advice.new_note {
+                    let name = qf::sanitize_for_filename(&name);
+                    if !name.is_empty() {
+                        let rel = if folder.is_empty() {
+                            format!("{name}.md")
+                        } else {
+                            format!("{folder}/{name}.md")
+                        };
+                        let folder_ok =
+                            folder.is_empty() || vault_root.join(&folder).is_dir();
+                        if is_safe_rel_path(&rel)
+                            && !qf::is_quick_path(&rel)
+                            && folder_ok
+                            && !vault_root.join(&rel).exists()
+                        {
+                            out.create_path = Some(rel);
+                        }
+                    }
+                }
+            }
+        }
+        // No LLM verdict (offline, over budget, unparseable): plain
+        // embedding ranking under the user's threshold.
+        None => {
+            out.targets = wide
+                .iter()
+                .filter(|h| h.similarity >= min_similarity)
+                .take(3)
+                .cloned()
+                .collect();
+        }
+    }
+
+    Ok(out)
+}
+
+/// Ask the chat model where the note belongs. `None` on any failure —
+/// missing budget, network error, unparseable reply — the caller falls
+/// back to pure-embedding suggestions.
+async fn llm_filing_advice(
+    ai: &std::sync::Arc<crate::core::ai::AiState>,
+    vault_root: &std::path::Path,
+    key: &str,
+    cfg: &crate::core::ai::config::AiConfig,
+    body: &str,
+    wide: &[crate::core::ai::quick_suggest::TargetHit],
+) -> Option<crate::core::ai::quick_suggest::LlmAdvice> {
+    use crate::core::ai::{budget, openrouter::OpenRouterClient, quick_suggest};
+    use crate::core::quick_filing as qf;
+
+    let candidates: Vec<quick_suggest::CandidateContext> = wide
+        .iter()
+        .map(|t| {
+            let snippet = std::fs::read_to_string(vault_root.join(&t.note_path))
+                .map(|raw| {
+                    qf::strip_frontmatter(&raw)
+                        .trim()
+                        .chars()
+                        .take(240)
+                        .collect::<String>()
+                })
+                .unwrap_or_default();
+            quick_suggest::CandidateContext {
+                note_path: t.note_path.clone(),
+                similarity: t.similarity,
+                snippet,
+            }
+        })
+        .collect();
+    let folders = vault_folders(vault_root);
+    let user = quick_suggest::filing_user_prompt(body, &candidates, &folders);
+
+    let est = quick_suggest::est_chat_cost_usd(
+        quick_suggest::FILING_SYSTEM_PROMPT.len() + user.len(),
+    );
+    if let Err(e) = budget::check(&ai.store, cfg.daily_budget_usd, &cfg.chat_model, est) {
+        eprintln!("quick_note_suggest: chat step skipped: {e:#}");
+        return None;
+    }
+
+    let client = OpenRouterClient::new();
+    match client
+        .chat(key, &cfg.chat_model, quick_suggest::FILING_SYSTEM_PROMPT, &user)
+        .await
+    {
+        Ok(reply) => {
+            let tokens_in = reply.usage.prompt_tokens;
+            let tokens_out = reply.usage.total_tokens.saturating_sub(tokens_in);
+            let cost = quick_suggest::chat_cost_usd(tokens_in, tokens_out);
+            if let Err(e) =
+                budget::record(&ai.store, &cfg.chat_model, tokens_in, tokens_out, cost)
+            {
+                eprintln!("quick_note_suggest: usage record failed: {e:#}");
+            }
+            quick_suggest::parse_advice(&reply.content)
+        }
+        Err(e) => {
+            eprintln!("quick_note_suggest: chat failed: {e:#}");
+            None
+        }
+    }
+}
+
+/// Vault folders (depth ≤ 2) the LLM may file a brand-new note into.
+/// Hidden directories and the quick-capture folder are excluded.
+fn vault_folders(vault_root: &std::path::Path) -> Vec<String> {
+    let mut out = Vec::new();
+    for entry in walkdir::WalkDir::new(vault_root)
+        .min_depth(1)
+        .max_depth(2)
+        .into_iter()
+        .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'))
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_dir())
+    {
+        let Ok(rel_os) = entry.path().strip_prefix(vault_root) else {
+            continue;
+        };
+        let rel = rel_os
+            .components()
+            .filter_map(|c| c.as_os_str().to_str())
+            .collect::<Vec<_>>()
+            .join("/");
+        if rel == QUICK_NOTES_DIR || crate::core::quick_filing::is_quick_path(&rel) {
+            continue;
+        }
+        out.push(rel);
+        if out.len() >= 30 {
+            break;
+        }
+    }
+    out.sort();
+    out
 }
 
 /// Best-effort index maintenance after a quick-note merge: drop the deleted

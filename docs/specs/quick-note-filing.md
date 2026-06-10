@@ -2,7 +2,11 @@
 
 **Status:** Phase A (v1) implemented; Phase B implemented as the in-editor
 suggestion bar (`QuickFilingBar` + `quick_note_suggest`, triggered on save
-instead of a watcher debounce); Phase C pending
+instead of a watcher debounce); Phase C partially implemented — the bar's
+LLM verdict (chat completions in `openrouter.rs`, candidate snippets +
+folder list in the prompt, "start a new note" proposals, budget-gated,
+embeddings-only fallback). Remaining for C: section targeting inside the
+merge, tag proposals for orphans.
 **Depends on:** Insights engine (Phase 1, shipped), embedding index (MVP-2, shipped)
 **Owner modules:** `src-tauri/src/core/ai/insights/`, `src-tauri/src/commands/`, `src/components/insights/`
 

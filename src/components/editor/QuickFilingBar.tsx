@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Sparkles, X, FolderInput, PenLine } from 'lucide-react';
+import { Sparkles, X, FolderInput, PenLine, FilePlus2 } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { displayName } from '@/lib/note-name';
 import type { FileEntry } from '@/types';
@@ -14,6 +14,10 @@ interface TargetHit {
 interface Suggestions {
   title: string | null;
   targets: TargetHit[];
+  /// New-note proposal from the LLM when nothing existing fits.
+  create_path: string | null;
+  /// One-line LLM explanation, in the note's language.
+  reason: string | null;
   ai_available: boolean;
 }
 
@@ -40,6 +44,7 @@ function siblingStems(tree: FileEntry[], parent: string): Set<string> {
 /// stays hidden until there's something worth suggesting.
 export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: number }) {
   const renameNote = useVaultStore((s) => s.renameNote);
+  const createNote = useVaultStore((s) => s.createNote);
   const [phase, setPhase] = useState<Phase>('hidden');
   const [sugg, setSugg] = useState<Suggestions | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
@@ -52,7 +57,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
     invoke<Suggestions>('quick_note_suggest', { path })
       .then((s) => {
         if (cancelled) return;
-        if (!s.title && s.targets.length === 0) {
+        if (!s.title && s.targets.length === 0 && !s.create_path) {
           setPhase('hidden');
           return;
         }
@@ -86,6 +91,21 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
       await renameNote(path, `${parent}/${stem}.md`);
     } catch (e) {
       console.error('Rename failed:', e);
+      setBusy(false);
+    }
+  };
+
+  // "Start a new note with this thought": create the (non-destructive)
+  // target first, then run it through the same confirmed merge dialog as
+  // an existing target — the destructive half stays gated.
+  const startNew = async (target: string) => {
+    setBusy(true);
+    try {
+      await createNote(target);
+      setMergeTarget(target);
+    } catch (e) {
+      console.error('Create-note failed:', e);
+    } finally {
       setBusy(false);
     }
   };
@@ -128,6 +148,18 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
                 Move into “{displayName(t.note_path)}”
               </button>
             ))}
+            {sugg.create_path && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void startNew(sugg.create_path!)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-surface-1 text-text-primary hover:bg-surface-hover disabled:opacity-50"
+                title={`Create ${sugg.create_path} and move this note into it`}
+              >
+                <FilePlus2 size={11} className="text-accent" />
+                Start “{displayName(sugg.create_path)}”
+              </button>
+            )}
             {!sugg.ai_available && (
               <span className="text-[11px] text-text-muted">
                 Add an OpenRouter key in Settings → AI to get “move into” suggestions.
@@ -141,6 +173,11 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
             >
               <X size={12} />
             </button>
+            {sugg.reason && (
+              <span className="basis-full pl-[19px] text-[11px] text-text-muted">
+                {sugg.reason}
+              </span>
+            )}
           </div>
         )
       )}

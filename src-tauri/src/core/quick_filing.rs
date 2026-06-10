@@ -74,12 +74,11 @@ pub fn note_body(raw: &str, rel_path: &str) -> String {
     body.trim().to_string()
 }
 
-/// Title suggestion for a still-auto-named quick note: the first content
-/// line with markdown and filename-hostile characters stripped, truncated
-/// to 60 chars. `None` when the body has no usable line.
-pub fn suggest_title(body: &str) -> Option<String> {
-    let line = body.lines().find(|l| !l.trim().is_empty())?;
-    let line = line.trim().trim_start_matches(['#', '>', '-', '*', ' ']).trim();
+/// Make `line` safe and pleasant as a note filename: markdown noise and
+/// filename-hostile characters stripped, whitespace collapsed, truncated to
+/// 60 chars on a char boundary, no trailing punctuation. May come back
+/// empty when the input had nothing usable.
+pub fn sanitize_for_filename(line: &str) -> String {
     let mut cleaned = String::with_capacity(line.len());
     for c in line.chars() {
         match c {
@@ -92,11 +91,19 @@ pub fn suggest_title(body: &str) -> Option<String> {
     }
     let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
     let truncated: String = cleaned.chars().take(60).collect();
-    let truncated = truncated.trim_end_matches(['.', ' ', ',']).to_string();
-    if truncated.is_empty() {
+    truncated.trim_end_matches(['.', ' ', ',']).to_string()
+}
+
+/// Title suggestion for a still-auto-named quick note: the first content
+/// line, sanitized. `None` when the body has no usable line.
+pub fn suggest_title(body: &str) -> Option<String> {
+    let line = body.lines().find(|l| !l.trim().is_empty())?;
+    let line = line.trim().trim_start_matches(['#', '>', '-', '*', ' ']).trim();
+    let title = sanitize_for_filename(line);
+    if title.is_empty() {
         None
     } else {
-        Some(truncated)
+        Some(title)
     }
 }
 

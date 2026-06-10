@@ -19,6 +19,15 @@ pub struct AiConfig {
     /// Embedding model identifier passed to OpenRouter. Pinned to one option
     /// in MVP-1, but stored so future versions can switch without a migration.
     pub embedding_model: String,
+    /// Chat model used for the quick-filing "where does this belong" step.
+    /// Cheap-and-fast tier on purpose: the prompt is small and the answer
+    /// is a few lines of JSON.
+    #[serde(default = "default_chat_model")]
+    pub chat_model: String,
+}
+
+fn default_chat_model() -> String {
+    "openai/gpt-4o-mini".to_string()
 }
 
 impl Default for AiConfig {
@@ -27,6 +36,7 @@ impl Default for AiConfig {
             enabled: false,
             daily_budget_usd: 1.0,
             embedding_model: "openai/text-embedding-3-small".to_string(),
+            chat_model: default_chat_model(),
         }
     }
 }
@@ -77,7 +87,7 @@ mod tests {
         let cfg = AiConfig {
             enabled: true,
             daily_budget_usd: 2.5,
-            embedding_model: "openai/text-embedding-3-small".to_string(),
+            ..AiConfig::default()
         };
         save(dir.path(), &cfg).unwrap();
         let loaded = load(dir.path()).unwrap();
