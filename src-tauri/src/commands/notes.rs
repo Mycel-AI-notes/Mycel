@@ -305,6 +305,105 @@ pub async fn quick_note_merge(
     Ok(timestamp)
 }
 
+#[derive(Debug, Serialize)]
+pub struct QuickSuggestions {
+    /// Human title for the note, only while it still wears its auto
+    /// timestamp name (`HH-MM-SS.md`). `None` once the user renamed it.
+    pub title: Option<String>,
+    pub targets: Vec<crate::core::ai::quick_suggest::TargetHit>,
+    /// False when AI is off or no key is saved — the bar can then only
+    /// offer the rename and hints at enabling AI for filing targets.
+    pub ai_available: bool,
+}
+
+/// Suggestions for the in-editor filing bar, computed right after a quick
+/// note is saved: a title derived from the first content line, and the
+/// closest merge targets from the embedding index. The note is (re)indexed
+/// first so a thought saved seconds ago can match at all — cheap, since the
+/// indexer skips unchanged chunks by hash.
+#[tauri::command]
+pub async fn quick_note_suggest(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<QuickSuggestions, String> {
+    use crate::core::quick_filing as qf;
+
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    if !is_safe_rel_path(&path) || !qf::is_quick_path(&path) || !path.ends_with(".md") {
+        return Err("Not a quick note".into());
+    }
+
+    let raw = std::fs::read_to_string(vault_root.join(&path)).map_err(|e| e.to_string())?;
+    let body = qf::note_body(&raw, &path);
+    if body.is_empty() {
+        return Ok(QuickSuggestions {
+            title: None,
+            targets: vec![],
+            ai_available: true,
+        });
+    }
+    let title = if qf::capture_timestamp(&path).is_some() {
+        qf::suggest_title(&body)
+    } else {
+        None
+    };
+
+    let mut targets = Vec::new();
+    let mut ai_available = false;
+    if let Ok(ai) = crate::commands::ai::ensure_ai_state(&state).await {
+        let cfg = ai.config.lock().await.clone();
+        let key = crate::core::ai::keyring::get_key(&vault_root).ok().flatten();
+        if let (true, Some(key)) = (cfg.enabled, key) {
+            ai_available = true;
+            {
+                let _guard = ai.indexing.lock().await;
+                let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
+                    key,
+                    cfg.embedding_model.clone(),
+                );
+                if let Err(e) = crate::core::ai::indexer::index_note(
+                    &ai.store,
+                    &embedder,
+                    &vault_root,
+                    &path,
+                    cfg.daily_budget_usd,
+                    &cfg.embedding_model,
+                )
+                .await
+                {
+                    // Budget exhausted or offline: still rank against
+                    // whatever embedding the note already has, if any.
+                    eprintln!("quick_note_suggest: index failed for {path}: {e:#}");
+                }
+            }
+            let min_similarity = {
+                let s = ai.insights.settings.lock().await;
+                (s.quick_filing_min_similarity.min(100) as f32) / 100.0
+            };
+            targets = crate::core::ai::quick_suggest::rank_targets(
+                &ai.store,
+                &path,
+                &body,
+                min_similarity,
+                3,
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(QuickSuggestions {
+        title,
+        targets,
+        ai_available,
+    })
+}
+
 /// Best-effort index maintenance after a quick-note merge: drop the deleted
 /// source's chunks and re-embed the grown target. Never fails the merge —
 /// the files on disk are already correct, and the next scheduled reindex

@@ -1,6 +1,8 @@
 # Spec: Quick-note auto-filing — "the note that files itself"
 
-**Status:** Phase A (v1) implemented; Phases B/C pending
+**Status:** Phase A (v1) implemented; Phase B implemented as the in-editor
+suggestion bar (`QuickFilingBar` + `quick_note_suggest`, triggered on save
+instead of a watcher debounce); Phase C pending
 **Depends on:** Insights engine (Phase 1, shipped), embedding index (MVP-2, shipped)
 **Owner modules:** `src-tauri/src/core/ai/insights/`, `src-tauri/src/commands/`, `src/components/insights/`
 
@@ -245,16 +247,20 @@ Kind + actions + detector + merge command + dialogs + settings + tests.
 Runs on the daily schedule and "Run now". This alone empties the quick
 folder and is demoable.
 
-**Phase B — the magic moment (v2).**
-Debounced near-real-time trigger: when the file watcher sees a save
-under `quick/` and the file then stays untouched for ~90s, run *only*
-the `quick_filing` detector for *only* that path (new
-`InsightsEngine::run_detector_for_note(name, path)` entry point — index
-the single note first, budget-checked, then run with a filtered
-candidate set). Surface the result as a toast ("Quick note filed?
-[Review]") in addition to the inbox card. Quotas and cooldowns apply
-unchanged. This is the 15-second demo video: hotkey → type → toast →
-one click → the note lands in the right place.
+**Phase B — the magic moment (v2). SHIPPED as the in-editor bar.**
+Implemented more directly than the original watcher-debounce sketch:
+saving a quick note (`⌘/Ctrl+S`) triggers `quick_note_suggest`, which
+single-note-indexes the file (budget-checked) and returns a suggested
+title (first content line, only while the file still wears its
+timestamp name) plus the top-3 merge targets from
+`ai::quick_suggest::rank_targets` — the same ranking the daily detector
+takes its top-1 from. The `QuickFilingBar` under the editor shows a
+glowing "Finding a home for this thought…" strip while computing, then
+pops the suggestions as chips: *Call it "…"* (rename, sibling-collision
+safe) and *Move into "…"* (opens the same merge confirmation dialog as
+the inbox card). No Insights enablement required; without an AI key the
+bar still offers the rename and hints at enabling AI. The daily
+detector remains the catch-all for notes filed past the moment.
 
 **Phase C — LLM polish (v3).**
 Requires adding chat completions to `openrouter.rs` (it only does

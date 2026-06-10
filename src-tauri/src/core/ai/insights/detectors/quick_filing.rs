@@ -21,15 +21,12 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use walkdir::WalkDir;
 
-use super::util::{base_name, similarity};
+use super::util::base_name;
 use crate::core::ai::insights::detector::{stable_id, Detector, DetectorContext};
 use crate::core::ai::insights::models::{Insight, InsightAction, InsightKind};
-use crate::core::ai::related::find_related;
+use crate::core::ai::quick_suggest;
 use crate::core::quick_filing as qf;
 use crate::core::vault::QUICK_NOTES_DIR;
-
-/// Neighbours fetched per quick note before target filtering.
-const K: usize = 8;
 
 /// Characters of the quick note shown on the card as a preview.
 const PREVIEW_CHARS: usize = 200;
@@ -62,14 +59,21 @@ impl Detector for QuickFilingDetector {
                 continue;
             }
 
-            // Targets the note already wikilinks to are never suggested;
-            // parse the links once per candidate, not once per neighbour.
-            let linked = wikilink_basenames(&cand.body);
-            let Some((target, confidence)) =
-                best_target(ctx, &cand.path, &linked, min_similarity)?
+            // Same ranking the in-editor bar uses; the daily card only ever
+            // shows the single best target.
+            let Some(top) = quick_suggest::rank_targets(
+                &ctx.store,
+                &cand.path,
+                &cand.body,
+                min_similarity,
+                1,
+            )?
+            .into_iter()
+            .next()
             else {
                 continue;
             };
+            let (target, confidence) = (top.note_path, top.similarity);
 
             let quick_path = cand.path;
             let preview: String = cand.body.chars().take(PREVIEW_CHARS).collect();
@@ -186,48 +190,6 @@ fn indexed_quick_paths(ctx: &DetectorContext<'_>) -> anyhow::Result<HashSet<Stri
             .collect();
         Ok(rows)
     })
-}
-
-/// Lowercased base names of every wikilink target in `body` (heading
-/// anchors stripped) — the same comparison `util::links_to` makes, computed
-/// once instead of re-parsing the note for every neighbour.
-fn wikilink_basenames(body: &str) -> HashSet<String> {
-    crate::core::parser::parse_note(body)
-        .wikilinks
-        .iter()
-        .map(|wl| {
-            let t = wl.target.split('#').next().unwrap_or(&wl.target);
-            base_name(t).to_lowercase()
-        })
-        .collect()
-}
-
-/// Best merge target for one quick note, or `None` when nothing clears the
-/// threshold. Other quick notes, encrypted notes, and targets in `linked`
-/// (already wikilinked from the note) are never suggested.
-fn best_target(
-    ctx: &DetectorContext<'_>,
-    quick_path: &str,
-    linked: &HashSet<String>,
-    min_similarity: f32,
-) -> anyhow::Result<Option<(String, f32)>> {
-    let hits = find_related(&ctx.store, quick_path, K)?;
-    for hit in hits {
-        // Hits arrive ordered by distance, so the first survivor is the best.
-        if qf::is_quick_path(&hit.note_path) || !hit.note_path.ends_with(".md") {
-            continue;
-        }
-        let sim = similarity(hit.distance);
-        if sim < min_similarity {
-            // Ordered by distance: everything after this is weaker too.
-            return Ok(None);
-        }
-        if linked.contains(&base_name(&hit.note_path).to_lowercase()) {
-            continue;
-        }
-        return Ok(Some((hit.note_path, sim)));
-    }
-    Ok(None)
 }
 
 #[cfg(test)]

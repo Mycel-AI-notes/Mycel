@@ -74,6 +74,32 @@ pub fn note_body(raw: &str, rel_path: &str) -> String {
     body.trim().to_string()
 }
 
+/// Title suggestion for a still-auto-named quick note: the first content
+/// line with markdown and filename-hostile characters stripped, truncated
+/// to 60 chars. `None` when the body has no usable line.
+pub fn suggest_title(body: &str) -> Option<String> {
+    let line = body.lines().find(|l| !l.trim().is_empty())?;
+    let line = line.trim().trim_start_matches(['#', '>', '-', '*', ' ']).trim();
+    let mut cleaned = String::with_capacity(line.len());
+    for c in line.chars() {
+        match c {
+            // Markdown noise: drop entirely.
+            '[' | ']' | '`' | '*' | '_' | '|' => {}
+            // Unsafe in filenames on at least one supported OS.
+            '/' | '\\' | ':' | '?' | '"' | '<' | '>' => cleaned.push(' '),
+            _ => cleaned.push(c),
+        }
+    }
+    let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let truncated: String = cleaned.chars().take(60).collect();
+    let truncated = truncated.trim_end_matches(['.', ' ', ',']).to_string();
+    if truncated.is_empty() {
+        None
+    } else {
+        Some(truncated)
+    }
+}
+
 /// Capture time from the canonical quick-note path
 /// `quick/YYYY-MM-DD/HH-MM-SS[-n].md` → `"YYYY-MM-DD HH:MM"`. Returns `None`
 /// for anything that doesn't match — callers fall back to the file's mtime.
@@ -240,6 +266,19 @@ mod tests {
         );
         // Untouched fresh capture → empty.
         assert_eq!(note_body("# 14-32-08\n\n", "quick/2026-06-09/14-32-08.md"), "");
+    }
+
+    #[test]
+    fn suggest_title_cleans_first_line() {
+        assert_eq!(
+            suggest_title("- [ ] call the **nursery** about [[saplings]]\nmore"),
+            Some("call the nursery about saplings".to_string())
+        );
+        assert_eq!(suggest_title("idea: split sync/crypto?"), Some("idea split sync crypto".to_string()));
+        assert_eq!(suggest_title("\n\n   \n"), None);
+        // Truncated on a char boundary, no trailing punctuation.
+        let long = "x".repeat(80);
+        assert_eq!(suggest_title(&long).unwrap().chars().count(), 60);
     }
 
     #[test]

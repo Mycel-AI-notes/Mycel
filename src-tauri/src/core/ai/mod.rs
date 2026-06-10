@@ -24,6 +24,7 @@ pub mod indexer;
 pub mod insights;
 pub mod keyring;
 pub mod openrouter;
+pub mod quick_suggest;
 pub mod related;
 pub mod search;
 pub mod store;

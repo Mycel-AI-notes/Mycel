@@ -73,6 +73,7 @@ pub fn run() {
             commands::notes::note_delete,
             commands::notes::note_rename,
             commands::notes::quick_note_merge,
+            commands::notes::quick_note_suggest,
             commands::notes::tree_reorder,
             commands::notes::render_html,
             commands::notes::folder_create,

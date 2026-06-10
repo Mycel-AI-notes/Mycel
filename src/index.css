@@ -1976,3 +1976,53 @@ body {
 .mycel-search--replace .mycel-replace-row {
   display: flex;
 }
+
+/* ---- Quick-filing AI bar ------------------------------------------- */
+/* While Mycel decides where a just-saved quick note belongs, a gradient
+   hairline sweeps along the top edge of the suggestion bar. */
+.ai-glow-line {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-accent) 35%,
+    var(--color-accent-bright) 50%,
+    var(--color-accent) 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: ai-glow-slide 1.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes ai-glow-slide {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* "Thinking" label: a soft brightness sweep across the text. */
+.ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-text-muted) 30%,
+    var(--color-text-primary) 50%,
+    var(--color-text-muted) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ai-glow-slide 1.8s linear infinite;
+}
+
+/* Suggestions pop in with a small rise. */
+.ai-arrive {
+  animation: ai-arrive 240ms ease-out;
+}
+@keyframes ai-arrive {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}

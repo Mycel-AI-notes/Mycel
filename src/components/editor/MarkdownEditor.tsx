@@ -37,6 +37,8 @@ import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
+import { QUICK_NOTES_DIR } from '@/types';
+import { QuickFilingBar } from './QuickFilingBar';
 import { usePresentationStore } from '@/stores/presentation';
 import {
   extFromMime,
@@ -165,15 +167,21 @@ export function MarkdownEditor({ path }: Props) {
 
   const note = noteCache.get(path);
 
+  // Bumped after every successful save of a quick note; the filing bar
+  // below the editor re-asks the backend for suggestions on each bump.
+  const [saveTick, setSaveTick] = useState(0);
+  const isQuickNote = path.startsWith(`${QUICK_NOTES_DIR}/`) && !isEncryptedPath(path);
+
   const handleSave = useCallback(
     async (content: string) => {
       try {
         await saveNote(path, content);
+        if (isQuickNote) setSaveTick((t) => t + 1);
       } catch (e) {
         console.error('Save failed:', e);
       }
     },
-    [path, saveNote],
+    [path, saveNote, isQuickNote],
   );
 
   useEffect(() => {
@@ -390,6 +398,8 @@ export function MarkdownEditor({ path }: Props) {
       </div>
 
       <div ref={editorRef} className="flex-1 overflow-hidden" />
+
+      {isQuickNote && <QuickFilingBar path={path} saveTick={saveTick} />}
 
       {pickerOpen && (
         <DatabasePicker
