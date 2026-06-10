@@ -3,4 +3,6 @@
 //! A detector is registered by adding it to `default_detectors()` in the
 //! parent `insights` module. See `../README.md` for the playbook.
 
+pub mod quick_filing;
 pub mod similar_notes;
+pub mod util;

@@ -7,6 +7,7 @@ import {
   X,
   ExternalLink,
   Info,
+  FolderInput,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
@@ -14,6 +15,7 @@ import type { Insight, InsightAction, InsightKind } from '@/stores/insights';
 import { useInsightsStore } from '@/stores/insights';
 import { appendToEditor } from '@/lib/editor-registry';
 import { ResolveDuplicateDialog } from './ResolveDuplicateDialog';
+import { MergeQuickNoteDialog } from './MergeQuickNoteDialog';
 
 const KIND_META: Record<InsightKind, { label: string; icon: typeof LinkIcon }> = {
   missing_wikilink:    { label: 'Missing wikilink',    icon: LinkIcon },
@@ -27,6 +29,7 @@ const KIND_META: Record<InsightKind, { label: string; icon: typeof LinkIcon }> =
   emerging_theme:      { label: 'Emerging theme',      icon: Sparkles },
   problem_researched:  { label: 'Research',            icon: Sparkles },
   idea_state_of_art:   { label: 'State of the art',    icon: Sparkles },
+  quick_note_filing:   { label: 'File quick note',     icon: FolderInput },
 };
 
 /// Human-readable action label. Kept here (not in the store) so a designer
@@ -39,6 +42,7 @@ function actionLabel(a: InsightAction): string {
     case 'create_note_from_template': return 'Create note';
     case 'open_external':             return 'Open link';
     case 'resolve_duplicate':         return 'Resolve duplicate';
+    case 'merge_quick_note':          return 'Merge into note';
   }
 }
 
@@ -55,6 +59,10 @@ export function InsightCard({ insight }: Props) {
   const [showWhy, setShowWhy] = useState(false);
   // Paths for the duplicate-resolution dialog, or null when it's closed.
   const [dupPaths, setDupPaths] = useState<string[] | null>(null);
+  // Source/target for the quick-note merge dialog, or null when closed.
+  const [mergePair, setMergePair] = useState<{ source: string; target: string } | null>(
+    null,
+  );
 
   const runAction = async (a: InsightAction) => {
     switch (a.type) {
@@ -91,6 +99,11 @@ export function InsightCard({ insight }: Props) {
         // Opens the picker dialog. The insight is only marked acted once a
         // note is actually deleted — see the dialog's onResolved below.
         setDupPaths(a.note_paths);
+        break;
+      case 'merge_quick_note':
+        // Opens the merge confirmation. Marked acted only after the backend
+        // confirms the merge — see the dialog's onResolved below.
+        setMergePair({ source: a.source, target: a.target });
         break;
       case 'create_note_from_template':
         // Still surface-only — the template engine lands in a later phase.
@@ -219,6 +232,18 @@ export function InsightCard({ insight }: Props) {
           onClose={() => setDupPaths(null)}
           onResolved={() => {
             setDupPaths(null);
+            void act(insight.id);
+          }}
+        />
+      )}
+
+      {mergePair && (
+        <MergeQuickNoteDialog
+          source={mergePair.source}
+          target={mergePair.target}
+          onClose={() => setMergePair(null)}
+          onResolved={() => {
+            setMergePair(null);
             void act(insight.id);
           }}
         />

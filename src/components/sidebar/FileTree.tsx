@@ -15,6 +15,7 @@ import {
   Lock,
   LockOpen,
   Database as DatabaseIcon,
+  Sparkles,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
@@ -22,6 +23,7 @@ import type { FileEntry } from '@/types';
 import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
+import { useInsightsStore } from '@/stores/insights';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
@@ -477,6 +479,8 @@ function FileTreeNode({
             {entry.is_dir ? entry.name : stripNoteExt(entry.name)}
           </span>
         )}
+
+        {!renaming && isQuickRoot && <QuickFilingButton visible={isHovered} />}
 
         {!renaming && !isLocked && (
           <span className={clsx('items-center gap-0.5', isHovered ? 'flex' : 'hidden')}>
@@ -1022,5 +1026,35 @@ export function FileTree() {
         />
       )}
     </div>
+  );
+}
+
+/// Hover affordance on the quick-folder row: run the quick-note-filing
+/// detector and open the Insights inbox with the results. Renders nothing
+/// while the Insights engine is disabled — same self-gating rule as
+/// InsightsSidebar.
+function QuickFilingButton({ visible }: { visible: boolean }) {
+  const status = useInsightsStore((s) => s.status);
+  const running = useInsightsStore((s) => s.running);
+  const runNow = useInsightsStore((s) => s.runNow);
+  const openInsightsTab = useVaultStore((s) => s.openInsightsTab);
+
+  if (!status?.settings.enabled) return null;
+
+  return (
+    <span className={clsx('items-center', visible || running ? 'flex' : 'hidden')}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          openInsightsTab({ preview: true });
+          void runNow('quick_note_filing');
+        }}
+        disabled={running}
+        className="p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-accent disabled:opacity-50"
+        title="Suggest filing — find homes for these quick notes"
+      >
+        <Sparkles size={11} className={clsx(running && 'animate-pulse text-accent')} />
+      </button>
+    </span>
   );
 }

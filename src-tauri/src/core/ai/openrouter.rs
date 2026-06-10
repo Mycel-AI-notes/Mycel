@@ -171,6 +171,68 @@ impl<T: HttpTransport> OpenRouterClient<T> {
             resp.model
         })
     }
+
+    /// One system+user chat round-trip. Used by quick-filing's LLM step;
+    /// callers keep prompts short and parse the content themselves.
+    pub async fn chat(
+        &self,
+        api_key: &str,
+        model: &str,
+        system: &str,
+        user: &str,
+    ) -> Result<ChatReply> {
+        let url = format!("{}/chat/completions", self.base_url);
+        let body = serde_json::json!({
+            "model": model,
+            "messages": [
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ],
+            "temperature": 0.2,
+            "max_tokens": 500,
+        });
+        let resp = self.transport.post_json(&url, api_key, body).await?;
+        parse_chat_response(resp.status, &resp.body)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatReply {
+    pub content: String,
+    pub usage: Usage,
+}
+
+/// Pure parser for `/chat/completions`, mirroring `parse_response`'s error
+/// extraction so a 401's message surfaces instead of raw JSON.
+fn parse_chat_response(status: u16, body: &str) -> Result<ChatReply> {
+    if !(200..300).contains(&status) {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(body) {
+            if let Some(msg) = parsed
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+            {
+                return Err(anyhow!("OpenRouter {}: {}", status, msg));
+            }
+        }
+        return Err(anyhow!("OpenRouter {}: {}", status, truncate(body, 200)));
+    }
+    let parsed: serde_json::Value = serde_json::from_str(body)
+        .with_context(|| format!("Failed to parse OpenRouter response: {}", truncate(body, 200)))?;
+    let content = parsed
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| anyhow!("OpenRouter chat response had no content"))?
+        .to_string();
+    let usage: Usage = parsed
+        .get("usage")
+        .cloned()
+        .and_then(|u| serde_json::from_value(u).ok())
+        .unwrap_or_default();
+    Ok(ChatReply { content, usage })
 }
 
 /// Pure parser: extracted from `embed` so unit tests can hit it directly.

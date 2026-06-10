@@ -48,6 +48,7 @@ pub enum InsightKind {
     EmergingTheme,
     ProblemResearched,
     IdeaStateOfArt,
+    QuickNoteFiling,
 }
 
 impl InsightKind {
@@ -66,6 +67,7 @@ impl InsightKind {
             InsightKind::EmergingTheme => "emerging_theme",
             InsightKind::ProblemResearched => "problem_researched",
             InsightKind::IdeaStateOfArt => "idea_state_of_art",
+            InsightKind::QuickNoteFiling => "quick_note_filing",
         }
     }
 }
@@ -102,6 +104,15 @@ pub enum InsightAction {
     /// the UI must confirm the choice explicitly before calling `note_delete`.
     ResolveDuplicate {
         note_paths: Vec<String>,
+    },
+    /// Append the full content of `source` (a quick note) to `target` as a
+    /// dated section with a provenance line, and — by user choice — delete
+    /// `source`. The UI MUST show a confirmation dialog with a preview
+    /// before invoking `quick_note_merge`: this action deletes a file when
+    /// the user opts in.
+    MergeQuickNote {
+        source: String,
+        target: String,
     },
 }
 

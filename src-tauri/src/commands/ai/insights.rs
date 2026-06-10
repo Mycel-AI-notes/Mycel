@@ -27,7 +27,10 @@ pub async fn insights_list(
 }
 
 #[tauri::command]
-pub async fn insights_run_now(state: State<'_, AppState>) -> Result<RunSummary, String> {
+pub async fn insights_run_now(
+    detector: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<RunSummary, String> {
     let ai = ensure_ai_state(&state).await?;
     // Manual triggers ignore the enabled flag's "scheduled run" gating, but
     // we still honor the master toggle — clicking "Run now" while the engine
@@ -36,7 +39,10 @@ pub async fn insights_run_now(state: State<'_, AppState>) -> Result<RunSummary, 
     if !settings.enabled {
         return Err("Insights are disabled. Enable them in Settings first.".into());
     }
-    ai.insights.run_once(&settings).await.map_err(err)
+    ai.insights
+        .run_filtered(&settings, detector.as_deref())
+        .await
+        .map_err(err)
 }
 
 #[tauri::command]

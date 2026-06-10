@@ -157,6 +157,41 @@ export function InsightsSettings() {
 
       <fieldset className="flex flex-col gap-2" disabled={!draft.enabled}>
         <legend className="text-xs uppercase tracking-wider text-text-muted mb-1">
+          Quick-note filing
+        </legend>
+        <PercentRow
+          label="Minimum similarity"
+          hint="Higher = stricter, fewer “file this quick note into…” cards."
+          value={draft.quick_filing_min_similarity}
+          onChange={(v) => patch((s) => (s.quick_filing_min_similarity = v))}
+        />
+        <NumberRow
+          label="Leave fresh notes alone (minutes)"
+          value={draft.quick_filing_min_age_minutes}
+          min={0}
+          max={1440}
+          onChange={(v) => patch((s) => (s.quick_filing_min_age_minutes = v))}
+        />
+        <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={draft.quick_filing_delete_after_merge}
+            onChange={(e) =>
+              patch((s) => (s.quick_filing_delete_after_merge = e.target.checked))
+            }
+            className="mt-0.5"
+          />
+          <span>
+            Pre-check “delete the quick note” in the merge dialog.
+            <span className="block text-[11px] text-text-muted mt-0.5">
+              Merging always asks for confirmation either way.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2" disabled={!draft.enabled}>
+        <legend className="text-xs uppercase tracking-wider text-text-muted mb-1">
           Detectors
         </legend>
         {Object.keys(draft.detectors).length === 0 ? (

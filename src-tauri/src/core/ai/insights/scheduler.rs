@@ -181,6 +181,22 @@ impl InsightsEngine {
     /// Run the pipeline end-to-end and return a summary. Used directly by
     /// `insights_run_now`; the scheduler tick just throws the summary away.
     pub async fn run_once(&self, settings: &InsightsSettings) -> Result<RunSummary> {
+        self.run_filtered(settings, None).await
+    }
+
+    /// Like `run_once`, but limited to the single detector named `only` when
+    /// given. Powers targeted triggers like the quick-folder "Suggest
+    /// filing" affordance; cooldowns, quotas, and telemetry are identical.
+    ///
+    /// Filtered runs still go through the pre-run `refresh_index` on
+    /// purpose: it's incremental (the indexer skips unchanged chunks by
+    /// hash), and a targeted quick-filing run is exactly the moment a
+    /// freshly captured note must reach the index to be fileable at all.
+    pub async fn run_filtered(
+        &self,
+        settings: &InsightsSettings,
+        only: Option<&str>,
+    ) -> Result<RunSummary> {
         // Freshen the embedding index first so detectors see recent edits.
         self.refresh_index().await;
 
@@ -201,6 +217,11 @@ impl InsightsEngine {
         };
 
         for d in self.detectors.iter() {
+            if let Some(name) = only {
+                if d.name() != name {
+                    continue;
+                }
+            }
             // A detector runs if the user explicitly enabled it in settings,
             // or — when it's not in the settings dict yet — if it ships
             // enabled by default. Without the `enabled_by_default` fallback a
