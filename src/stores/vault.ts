@@ -5,6 +5,7 @@ import type { GardenView } from '@/types/garden';
 import { reparseBody } from '@/lib/markdown-parse';
 import { displayName } from '@/lib/note-name';
 import { remapPath } from '@/lib/path-move';
+import { upsertTab } from '@/lib/tabs';
 import { remapEditorViews, replaceEditorContent } from '@/lib/editor-registry';
 import {
   cancelAutosave,
@@ -288,7 +289,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   openNote: async (path, options) => {
     const preview = options?.preview ?? false;
-    const { openTabs, noteCache } = get();
+    const { noteCache } = get();
 
     if (!noteCache.has(path)) {
       // Encrypted note + locked vault: pop the unlock prompt instead of
@@ -320,39 +321,12 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       });
     }
 
-    const alreadyOpen = openTabs.find((t) => t.path === path);
     const note = get().noteCache.get(path)!;
     const title = note.parsed.meta.title ?? displayName(path);
-
-    if (alreadyOpen) {
-      // If user explicitly re-opens (non-preview) an existing preview tab,
-      // promote it. Otherwise leave it alone.
-      if (alreadyOpen.isPreview && !preview) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t) =>
-            t.path === path ? { ...t, isPreview: false } : t,
-          ),
-        }));
-      }
-    } else if (preview) {
-      // Replace the existing preview tab (if any), otherwise append.
-      const existingIdx = openTabs.findIndex((t) => t.isPreview);
-      if (existingIdx >= 0) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t, i) =>
-            i === existingIdx ? { path, title, isDirty: false, isPreview: true } : t,
-          ),
-        }));
-      } else {
-        set((s) => ({
-          openTabs: [...s.openTabs, { path, title, isDirty: false, isPreview: true }],
-        }));
-      }
-    } else {
-      set((s) => ({
-        openTabs: [...s.openTabs, { path, title, isDirty: false, isPreview: false }],
-      }));
-    }
+    // Derived from `s.openTabs` rather than the snapshot taken before
+    // `note_read` awaited: a tab opened during the read would otherwise be the
+    // one replaced.
+    set((s) => ({ openTabs: upsertTab(s.openTabs, { path, title }, preview) }));
     set({ activeTabPath: path });
   },
 
@@ -360,43 +334,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const preview = options?.preview ?? false;
     const path = gardenTabPath(view);
     const title = gardenTabTitle(view);
-    const { openTabs } = get();
-    const alreadyOpen = openTabs.find((t) => t.path === path);
-
-    if (alreadyOpen) {
-      if (alreadyOpen.isPreview && !preview) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t) =>
-            t.path === path ? { ...t, isPreview: false } : t,
-          ),
-        }));
-      }
-    } else if (preview) {
-      const existingIdx = openTabs.findIndex((t) => t.isPreview);
-      if (existingIdx >= 0) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t, i) =>
-            i === existingIdx
-              ? { path, title, isDirty: false, isPreview: true }
-              : t,
-          ),
-        }));
-      } else {
-        set((s) => ({
-          openTabs: [
-            ...s.openTabs,
-            { path, title, isDirty: false, isPreview: true },
-          ],
-        }));
-      }
-    } else {
-      set((s) => ({
-        openTabs: [
-          ...s.openTabs,
-          { path, title, isDirty: false, isPreview: false },
-        ],
-      }));
-    }
+    set((s) => ({ openTabs: upsertTab(s.openTabs, { path, title }, preview) }));
     set({ activeTabPath: path });
   },
 
@@ -404,86 +342,14 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const preview = options?.preview ?? false;
     const path = INSIGHTS_TAB_PATH;
     const title = INSIGHTS_TAB_TITLE;
-    const { openTabs } = get();
-    const alreadyOpen = openTabs.find((t) => t.path === path);
-
-    if (alreadyOpen) {
-      if (alreadyOpen.isPreview && !preview) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t) =>
-            t.path === path ? { ...t, isPreview: false } : t,
-          ),
-        }));
-      }
-    } else if (preview) {
-      const existingIdx = openTabs.findIndex((t) => t.isPreview);
-      if (existingIdx >= 0) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t, i) =>
-            i === existingIdx
-              ? { path, title, isDirty: false, isPreview: true }
-              : t,
-          ),
-        }));
-      } else {
-        set((s) => ({
-          openTabs: [
-            ...s.openTabs,
-            { path, title, isDirty: false, isPreview: true },
-          ],
-        }));
-      }
-    } else {
-      set((s) => ({
-        openTabs: [
-          ...s.openTabs,
-          { path, title, isDirty: false, isPreview: false },
-        ],
-      }));
-    }
+    set((s) => ({ openTabs: upsertTab(s.openTabs, { path, title }, preview) }));
     set({ activeTabPath: path });
   },
 
   openImageTab: (path, options) => {
     const preview = options?.preview ?? false;
-    const { openTabs } = get();
     const title = path.split('/').pop() ?? path;
-    const alreadyOpen = openTabs.find((t) => t.path === path);
-
-    if (alreadyOpen) {
-      if (alreadyOpen.isPreview && !preview) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t) =>
-            t.path === path ? { ...t, isPreview: false } : t,
-          ),
-        }));
-      }
-    } else if (preview) {
-      const existingIdx = openTabs.findIndex((t) => t.isPreview);
-      if (existingIdx >= 0) {
-        set((s) => ({
-          openTabs: s.openTabs.map((t, i) =>
-            i === existingIdx
-              ? { path, title, isDirty: false, isPreview: true }
-              : t,
-          ),
-        }));
-      } else {
-        set((s) => ({
-          openTabs: [
-            ...s.openTabs,
-            { path, title, isDirty: false, isPreview: true },
-          ],
-        }));
-      }
-    } else {
-      set((s) => ({
-        openTabs: [
-          ...s.openTabs,
-          { path, title, isDirty: false, isPreview: false },
-        ],
-      }));
-    }
+    set((s) => ({ openTabs: upsertTab(s.openTabs, { path, title }, preview) }));
     set({ activeTabPath: path });
   },
 

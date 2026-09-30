@@ -146,17 +146,19 @@ pub fn parse_advice(content: &str) -> Option<LlmAdvice> {
     })
 }
 
-/// Chat pricing used for the budget ledger: a cheap-tier model with
-/// generous headroom (USD per million tokens, in/out). Close enough for a
-/// spend ceiling; the ledger is a brake, not an invoice.
-pub fn chat_cost_usd(tokens_in: u64, tokens_out: u64) -> f64 {
-    (tokens_in as f64 * 0.60 + tokens_out as f64 * 2.40) / 1_000_000.0
+/// Chat cost for the budget ledger. The rate follows `model`, which this used
+/// to ignore in favour of one hard-coded cheap tier — see `super::pricing`.
+/// The ledger is a brake, not an invoice, but a brake calibrated for the wrong
+/// model is not much of one.
+pub fn chat_cost_usd(model: &str, tokens_in: u64, tokens_out: u64) -> f64 {
+    super::pricing::chat_cost_usd(model, tokens_in, tokens_out)
 }
 
 /// Worst-case cost estimate for one filing chat call, used for the budget
-/// gate before the request goes out.
-pub fn est_chat_cost_usd(prompt_chars: usize) -> f64 {
-    chat_cost_usd((prompt_chars / 4).max(1) as u64, 500)
+/// gate before the request goes out. 500 output tokens is generous for a few
+/// lines of JSON.
+pub fn est_chat_cost_usd(model: &str, prompt_chars: usize) -> f64 {
+    chat_cost_usd(model, (prompt_chars / 4).max(1) as u64, 500)
 }
 
 /// Best merge targets for one quick note, strongest first, at most `max`.

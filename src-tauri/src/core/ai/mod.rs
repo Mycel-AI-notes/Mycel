@@ -26,6 +26,7 @@ pub mod indexer;
 pub mod insights;
 pub mod keyring;
 pub mod openrouter;
+pub mod pricing;
 pub mod quick_suggest;
 pub mod related;
 pub mod search;

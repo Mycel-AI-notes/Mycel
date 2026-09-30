@@ -147,7 +147,7 @@ pub async fn index_note(
         .iter()
         .map(|(_, t, _)| (t.chars().count() / 4) as u64)
         .sum();
-    let est_cost = estimate_cost_usd(est_tokens);
+    let est_cost = estimate_cost_usd(model, est_tokens);
     if !to_embed.is_empty() {
         budget::check(store, daily_budget_usd, model, est_cost)?;
     }
@@ -178,7 +178,7 @@ pub async fn index_note(
             EMBED_DIM
         );
         let tokens = batch.tokens_in;
-        let cost = estimate_cost_usd(tokens);
+        let cost = estimate_cost_usd(model, tokens);
         (batch.vectors, tokens, cost)
     };
 

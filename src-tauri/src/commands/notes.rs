@@ -632,8 +632,10 @@ async fn llm_filing_advice(
     let folders = vault_folders(vault_root);
     let user = quick_suggest::filing_user_prompt(body, &candidates, &folders);
 
-    let est =
-        quick_suggest::est_chat_cost_usd(quick_suggest::FILING_SYSTEM_PROMPT.len() + user.len());
+    let est = quick_suggest::est_chat_cost_usd(
+        &cfg.chat_model,
+        quick_suggest::FILING_SYSTEM_PROMPT.len() + user.len(),
+    );
     if let Err(e) = budget::check(&ai.store, cfg.daily_budget_usd, &cfg.chat_model, est) {
         eprintln!("quick_note_suggest: chat step skipped: {e:#}");
         return None;
@@ -652,7 +654,7 @@ async fn llm_filing_advice(
         Ok(reply) => {
             let tokens_in = reply.usage.prompt_tokens;
             let tokens_out = reply.usage.total_tokens.saturating_sub(tokens_in);
-            let cost = quick_suggest::chat_cost_usd(tokens_in, tokens_out);
+            let cost = quick_suggest::chat_cost_usd(&cfg.chat_model, tokens_in, tokens_out);
             if let Err(e) = budget::record(&ai.store, &cfg.chat_model, tokens_in, tokens_out, cost)
             {
                 eprintln!("quick_note_suggest: usage record failed: {e:#}");

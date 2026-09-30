@@ -50,7 +50,7 @@ pub async fn semantic_search(
         store,
         daily_budget_usd,
         model,
-        estimate_cost_usd(est_tokens),
+        estimate_cost_usd(model, est_tokens),
     )?;
 
     let batch = embedder.embed(&[trimmed.to_string()]).await?;
@@ -65,7 +65,7 @@ pub async fn semantic_search(
         "query embedding dim mismatch"
     );
 
-    let cost = estimate_cost_usd(batch.tokens_in);
+    let cost = estimate_cost_usd(model, batch.tokens_in);
     budget::record(store, model, batch.tokens_in, 0, cost)?;
 
     // Ask for 3× headroom so dedupe-by-note doesn't return fewer notes
