@@ -1,15 +1,47 @@
 import { EditorView } from '@codemirror/view';
 import { invoke } from '@tauri-apps/api/core';
+import { useVaultStore } from '@/stores/vault';
+import { linkTarget, wikilinkToNotePath } from '@/lib/wikilink-path';
 
 interface NoteSummary {
   path: string;
   title: string;
 }
 
+/**
+ * `notes_list` walks and parses the whole vault, so calling it per click was
+ * a full-vault scan every time the user followed a link. Cache the result and
+ * invalidate it on anything that could change the set of notes: `vaultVersion`
+ * bumps on every save, and the `fileTree` reference changes on create, rename,
+ * delete and refresh.
+ */
+let notesCache: { notes: NoteSummary[]; version: number; tree: unknown } | null =
+  null;
+
+async function listNotes(): Promise<NoteSummary[]> {
+  const { vaultVersion, fileTree } = useVaultStore.getState();
+  if (
+    notesCache &&
+    notesCache.version === vaultVersion &&
+    notesCache.tree === fileTree
+  ) {
+    return notesCache.notes;
+  }
+  const notes = await invoke<NoteSummary[]>('notes_list');
+  notesCache = { notes, version: vaultVersion, tree: fileTree };
+  return notes;
+}
+
+/** Drop the memoized note list. Exported for tests. */
+export function clearWikilinkCache(): void {
+  notesCache = null;
+}
+
 export async function resolveWikilink(target: string): Promise<string | null> {
-  const stem = target.trim().toLowerCase();
+  const stem = linkTarget(target).toLowerCase();
+  if (!stem) return null;
   try {
-    const notes = await invoke<NoteSummary[]>('notes_list');
+    const notes = await listNotes();
     const byFilename = notes.find(
       (n) => n.path.split('/').pop()?.replace(/\.md$/, '').toLowerCase() === stem,
     );
@@ -52,16 +84,26 @@ export function makeWikilinkClickHandler(
       ) as HTMLElement | null;
       if (!el) return false;
 
-      const label = el.textContent?.trim() ?? '';
-      if (!label) return false;
+      // The widget carries the link destination in `data-target`. Its text is
+      // the *alias* for `[[Target|Alias]]`, so resolving that instead would
+      // navigate to the wrong note — and create one named after the alias
+      // when no such note exists.
+      const raw = el.dataset.target ?? el.textContent ?? '';
+      const target = raw.trim();
+      if (!target) return false;
 
       event.preventDefault();
-      void resolveWikilink(label).then((resolved) => {
+      void resolveWikilink(target).then((resolved) => {
         if (resolved) {
           void openNote(resolved);
-        } else {
-          void createNote(`${label}.md`);
+          return;
         }
+        const path = wikilinkToNotePath(target);
+        if (!path) {
+          console.warn('Refusing to create a note for unsafe wikilink:', target);
+          return;
+        }
+        void createNote(path);
       });
       return true;
     },

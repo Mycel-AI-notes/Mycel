@@ -4,7 +4,8 @@ import type { FileEntry, Note, SaveCheckedResult, SaveConflict, Tab } from '@/ty
 import type { GardenView } from '@/types/garden';
 import { reparseBody } from '@/lib/markdown-parse';
 import { displayName } from '@/lib/note-name';
-import { replaceEditorContent } from '@/lib/editor-registry';
+import { remapPath } from '@/lib/path-move';
+import { remapEditorViews, replaceEditorContent } from '@/lib/editor-registry';
 import { gardenTabPath, gardenTabTitle } from '@/lib/garden-tab';
 import { INSIGHTS_TAB_PATH, INSIGHTS_TAB_TITLE } from '@/lib/insights-tab';
 import { useRecentVaults } from './recentVaults';
@@ -680,20 +681,41 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   renameNote: async (oldPath, newPath) => {
     await invoke('note_rename', { oldPath, newPath });
-    const note = get().noteCache.get(oldPath);
     set((s) => {
-      const next = new Map(s.noteCache);
-      next.delete(oldPath);
-      if (note) next.set(newPath, { ...note, path: newPath });
-      const newTitle = displayName(newPath);
+      // Renaming a folder moves every descendant with it, so every cache key
+      // and every open tab at or under `oldPath` has to move too. Leaving a
+      // descendant tab on its old path is not merely cosmetic: the save path
+      // calls `create_dir_all` on the parent, so the next save through that
+      // stale path recreates the old folder and splits the note across both.
+      const next = new Map<string, Note>();
+      for (const [key, note] of s.noteCache) {
+        const moved = remapPath(key, oldPath, newPath);
+        if (moved === null) {
+          next.set(key, note);
+        } else {
+          next.set(moved, { ...note, path: moved });
+        }
+      }
+      const openTabs = s.openTabs.map((t) => {
+        const moved = remapPath(t.path, oldPath, newPath);
+        if (moved === null) return t;
+        // Only the renamed entry itself gets a new display name. A descendant
+        // keeps its file name, and recomputing the title would discard one
+        // that came from frontmatter.
+        const title = t.path === oldPath ? displayName(newPath) : t.title;
+        return { ...t, path: moved, title };
+      });
       return {
         noteCache: next,
-        openTabs: s.openTabs.map((t) =>
-          t.path === oldPath ? { ...t, path: newPath, title: newTitle } : t,
-        ),
-        activeTabPath: s.activeTabPath === oldPath ? newPath : s.activeTabPath,
+        openTabs,
+        activeTabPath: s.activeTabPath
+          ? remapPath(s.activeTabPath, oldPath, newPath) ?? s.activeTabPath
+          : s.activeTabPath,
       };
     });
+    // Editor views are registered by path; re-point them so a later
+    // `replaceEditorContent` (conflict resolution, sync pull) finds the view.
+    remapEditorViews(oldPath, newPath);
     await get().refreshTree();
   },
 

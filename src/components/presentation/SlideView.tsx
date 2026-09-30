@@ -128,6 +128,7 @@ function renderInline(text: string): ReactNode {
         <span
           key={key++}
           className="cm-wikilink"
+          data-target={target}
           role="link"
           tabIndex={0}
           onClick={() => followWikilink(target)}
