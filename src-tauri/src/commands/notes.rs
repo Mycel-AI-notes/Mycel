@@ -1,8 +1,8 @@
 use crate::core::crypto::{self, is_encrypted_path};
 use crate::core::parser::{parse_note, ParsedNote};
 use crate::core::vault::{
-    auto_heading, is_safe_rel_path, read_tree_order, write_tree_order, KNOWLEDGE_BASE_DIR,
-    QUICK_NOTES_DIR,
+    auto_heading, is_safe_rel_path, move_to_trash, read_tree_order, write_tree_order,
+    KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR,
 };
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -93,6 +93,9 @@ pub fn render_html(content: String) -> String {
 
 #[tauri::command]
 pub async fn note_read(path: String, state: State<'_, AppState>) -> Result<Note, String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid note path".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -130,6 +133,9 @@ pub async fn note_save(
     content: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid note path".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -153,6 +159,9 @@ pub async fn note_save_checked(
     expected_disk_hash: String,
     state: State<'_, AppState>,
 ) -> Result<SaveResult, String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid note path".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -214,8 +223,22 @@ async fn write_note(
     Ok(hash_bytes(&bytes))
 }
 
+/// True when `a` and `b` name the same file on disk. Needed because a
+/// case-insensitive filesystem (macOS, Windows) reports `Notes.md` as
+/// existing when only `notes.md` does, and a case-only rename is a legitimate
+/// operation that must not be mistaken for a clobber.
+fn is_same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
 #[tauri::command]
 pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Note, String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid note path".into());
+    }
     let stem = std::path::Path::new(&path)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -223,6 +246,21 @@ pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Not
         // Strip the inner `.md` from `foo.md.age` so the H1 reads sensibly.
         .trim_end_matches(".md")
         .to_string();
+
+    // Refuse to create over an existing note. This used to go straight to
+    // `fs::write`, which truncates: naming a new note the same as one already
+    // in the folder replaced that note's entire contents with a bare heading.
+    {
+        let guard = state.vault.lock().await;
+        let root = guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?;
+        if root.join(&path).exists() {
+            return Err(format!("\"{path}\" already exists"));
+        }
+    }
+
     let initial = format!("{}\n\n", auto_heading(&stem));
     let disk_hash = note_save(path.clone(), initial.clone(), state.clone()).await?;
     let parsed = parse_note(&initial);
@@ -237,6 +275,9 @@ pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Not
 
 #[tauri::command]
 pub async fn folder_create(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    if !is_safe_rel_path(&path) {
+        return Err("Invalid folder path".into());
+    }
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -264,12 +305,10 @@ pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(),
             .map(|v| v.root.clone())
             .ok_or("No vault open")?
     };
-    let abs_path = vault_root.join(&path);
-    if abs_path.is_dir() {
-        std::fs::remove_dir_all(&abs_path).map_err(|e| e.to_string())?;
-    } else {
-        std::fs::remove_file(&abs_path).map_err(|e| e.to_string())?;
-    }
+    // Park it in the vault's trash rather than unlinking. A recursive
+    // `remove_dir_all` behind a single confirmation dialog left no way back
+    // from a mis-click.
+    move_to_trash(&vault_root, &path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -721,6 +760,19 @@ pub async fn note_rename(
     };
     let old_abs = vault_root.join(&old_path);
     let new_abs = vault_root.join(&new_path);
+
+    // `fs::rename` silently replaces its destination on Unix, so a rename or
+    // a drag-and-drop move onto an existing name destroyed that file with no
+    // confirmation and nothing to undo. Dragging one folder's `notes.md` into
+    // another folder that also had a `notes.md` was enough.
+    //
+    // A case-only rename on a case-insensitive filesystem reports the
+    // destination as existing when it is in fact the source, so compare the
+    // canonical paths before refusing.
+    if new_abs.exists() && !is_same_file(&old_abs, &new_abs) {
+        return Err(format!("\"{new_path}\" already exists"));
+    }
+
     if let Some(parent) = new_abs.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

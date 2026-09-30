@@ -4,13 +4,13 @@
 //! delete (Mycel will rebuild on demand).
 //!
 //! Schema:
-//!   - `ai_usage`        daily-budget ledger (MVP-1)
-//!   - `chunks`          one row per indexed text chunk (MVP-2)
-//!   - `chunks_vec`      sqlite-vec virtual table, keyed by `chunks.id`
-//!                       via rowid; carries the embedding vector
-//!   - `semantic_edges`  reserved for MVP-2 graph rendering, written by
-//!                       a follow-up PR but created up front so the
-//!                       schema doesn't churn
+//!
+//! - `ai_usage`        daily-budget ledger (MVP-1)
+//! - `chunks`          one row per indexed text chunk (MVP-2)
+//! - `chunks_vec`      sqlite-vec virtual table, keyed by `chunks.id`
+//!   via rowid; carries the embedding vector
+//! - `semantic_edges`  reserved for MVP-2 graph rendering, written by
+//!   a follow-up PR but created up front so the schema doesn't churn
 //!
 //! Migrations are linear and idempotent — every `CREATE TABLE IF NOT
 //! EXISTS` runs every open, so a downgrade-then-upgrade cycle is a no-op.

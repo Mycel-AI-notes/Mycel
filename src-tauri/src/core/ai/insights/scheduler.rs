@@ -1,16 +1,19 @@
 //! Daily scheduler + ranking pipeline for the Insights engine.
 //!
 //! One tokio task per open vault. It wakes every minute and asks:
-//!   - is the master toggle on?
-//!   - did the configured `HH:MM` already pass today?
-//!   - did we already run today?
+//!
+//! - is the master toggle on?
+//! - did the configured `HH:MM` already pass today?
+//! - did we already run today?
+//!
 //! If all three answer yes, it runs the pipeline.
 //!
 //! The pipeline:
-//!   1. Each enabled detector produces 0..N insights.
-//!   2. Insights whose signature is in active cooldown are dropped.
-//!   3. Survivors are ranked by confidence, with per-kind and total caps.
-//!   4. The top set is persisted and a `shown` event is logged per insight.
+//!
+//! 1. Each enabled detector produces 0..N insights.
+//! 2. Insights whose signature is in active cooldown are dropped.
+//! 3. Survivors are ranked by confidence, with per-kind and total caps.
+//! 4. The top set is persisted and a `shown` event is logged per insight.
 //!
 //! Phase 1 ships an empty detector registry (plus an optional debug-build
 //! mock). The whole pipeline still runs end-to-end so we can ship the UI on

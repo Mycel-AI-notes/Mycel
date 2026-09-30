@@ -179,8 +179,10 @@ mod tests {
     #[test]
     fn round_trip() {
         let dir = TempDir::new().unwrap();
-        let mut s = InsightsSettings::default();
-        s.enabled = true;
+        let mut s = InsightsSettings {
+            enabled: true,
+            ..InsightsSettings::default()
+        };
         s.schedule.time = "09:30".into();
         s.detectors.insert("missing_wikilink".into(), false);
         save(dir.path(), &s).unwrap();

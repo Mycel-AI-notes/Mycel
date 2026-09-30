@@ -151,7 +151,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 pub fn ensure_insights_schema(store: &AiStore) -> Result<()> {
-    store.with_conn(|c| init_schema(c))
+    store.with_conn(init_schema)
 }
 
 /// Persist a freshly-generated insight, or update its body if a detector

@@ -159,6 +159,42 @@ pub fn est_chat_cost_usd(prompt_chars: usize) -> f64 {
     chat_cost_usd((prompt_chars / 4).max(1) as u64, 500)
 }
 
+/// Best merge targets for one quick note, strongest first, at most `max`.
+/// Other quick notes, non-`.md` targets, anything under the similarity
+/// threshold, and targets the note already wikilinks to are never returned.
+pub fn rank_targets(
+    store: &AiStore,
+    quick_path: &str,
+    body: &str,
+    min_similarity: f32,
+    max: usize,
+) -> Result<Vec<TargetHit>> {
+    let linked = wikilink_basenames(body);
+    let hits = find_related(store, quick_path, K)?;
+    let mut out = Vec::new();
+    for hit in hits {
+        if is_quick_path(&hit.note_path) || !hit.note_path.ends_with(".md") {
+            continue;
+        }
+        let sim = similarity(hit.distance);
+        if sim < min_similarity {
+            // Hits arrive ordered by distance: everything after is weaker.
+            break;
+        }
+        if linked.contains(&base_name(&hit.note_path).to_lowercase()) {
+            continue;
+        }
+        out.push(TargetHit {
+            note_path: hit.note_path,
+            similarity: sim,
+        });
+        if out.len() >= max {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,40 +232,4 @@ mod tests {
         assert!(prompt.contains("- Projects"));
         assert!(prompt.contains("обрезать яблони"));
     }
-}
-
-/// Best merge targets for one quick note, strongest first, at most `max`.
-/// Other quick notes, non-`.md` targets, anything under the similarity
-/// threshold, and targets the note already wikilinks to are never returned.
-pub fn rank_targets(
-    store: &AiStore,
-    quick_path: &str,
-    body: &str,
-    min_similarity: f32,
-    max: usize,
-) -> Result<Vec<TargetHit>> {
-    let linked = wikilink_basenames(body);
-    let hits = find_related(store, quick_path, K)?;
-    let mut out = Vec::new();
-    for hit in hits {
-        if is_quick_path(&hit.note_path) || !hit.note_path.ends_with(".md") {
-            continue;
-        }
-        let sim = similarity(hit.distance);
-        if sim < min_similarity {
-            // Hits arrive ordered by distance: everything after is weaker.
-            break;
-        }
-        if linked.contains(&base_name(&hit.note_path).to_lowercase()) {
-            continue;
-        }
-        out.push(TargetHit {
-            note_path: hit.note_path,
-            similarity: sim,
-        });
-        if out.len() >= max {
-            break;
-        }
-    }
-    Ok(out)
 }

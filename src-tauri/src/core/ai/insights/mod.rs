@@ -35,13 +35,14 @@ pub use settings::{InsightsSettings, LimitSettings, ScheduleSettings};
 /// Phase 1. Debug builds get a single mock so developers can see the
 /// pipeline produce a card without having to wait until Phase 2 ships.
 pub fn default_detectors() -> Vec<Box<dyn Detector>> {
-    let mut list: Vec<Box<dyn Detector>> = Vec::new();
-    // Phase 2: the first real detector. Rides on the MVP-2 embedding index;
-    // does nothing until the vault has been indexed.
-    list.push(Box::new(detectors::similar_notes::SimilarNotesDetector));
-    // Quick-note auto-filing (docs/specs/quick-note-filing.md). Also rides
-    // the embedding index; suggestion-only, so it ships enabled.
-    list.push(Box::new(detectors::quick_filing::QuickFilingDetector));
+    let mut list: Vec<Box<dyn Detector>> = vec![
+        // Phase 2: the first real detector. Rides on the MVP-2 embedding
+        // index; does nothing until the vault has been indexed.
+        Box::new(detectors::similar_notes::SimilarNotesDetector),
+        // Quick-note auto-filing (docs/specs/quick-note-filing.md). Also
+        // rides the embedding index; suggestion-only, so it ships enabled.
+        Box::new(detectors::quick_filing::QuickFilingDetector),
+    ];
     // Mock is off by default (see `MockDetector::enabled_by_default`) so even
     // in debug builds nothing happens until a developer flips it on.
     #[cfg(debug_assertions)]

@@ -262,12 +262,11 @@ where
 {
     let files = list_indexable_files(vault_root)?;
     let total = files.len() as u32;
-    let mut done = 0_u32;
     let mut summary = BulkSummary::default();
 
-    for rel in &files {
+    for (idx, rel) in files.iter().enumerate() {
         let result = index_note(store, embedder, vault_root, rel, daily_budget_usd, model).await;
-        done += 1;
+        let done = idx as u32 + 1;
         match result {
             Ok(outcome) => {
                 summary.notes_ok += 1;
