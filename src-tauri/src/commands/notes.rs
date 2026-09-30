@@ -744,7 +744,7 @@ pub async fn note_rename(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<crate::core::links::RewriteSummary, String> {
     if !is_safe_rel_path(&old_path) || !is_safe_rel_path(&new_path) {
         return Err("Invalid note path".into());
     }
@@ -819,7 +819,20 @@ pub async fn note_rename(
         }
     }
     let _ = write_tree_order(&vault_root, &order);
-    Ok(())
+
+    // Point every `[[wikilink]]` at the new name. Without this a rename broke
+    // every inbound reference in the vault — backlinks gone, graph edges gone,
+    // and no way back but finding each link by hand.
+    //
+    // Best-effort on purpose: the file has already moved, and failing the
+    // command here would report a rename that plainly did happen as an error.
+    let summary =
+        crate::core::links::rewrite_links_for_rename(&vault_root, &old_path, &new_path, was_dir)
+            .unwrap_or_else(|e| {
+                eprintln!("note_rename: link rewrite failed: {e:#}");
+                Default::default()
+            });
+    Ok(summary)
 }
 
 /// Persist the user's manual ordering of a folder's children. `parent` is the
