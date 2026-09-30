@@ -30,6 +30,8 @@ import { getEditorView } from '@/lib/editor-registry';
 import { usePresentationStore } from '@/stores/presentation';
 import { PresentationOverlay } from '@/components/presentation/PresentationOverlay';
 import { Logo } from '@/components/brand/Logo';
+import { Toasts } from '@/components/ui/Toasts';
+import { flushAllAutosaves } from '@/lib/autosave';
 import { LockBadge } from '@/components/crypto/LockBadge';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -185,6 +187,43 @@ export default function App() {
     return () => {
       cancelled = true;
       unregister(QUICK_NOTE_SHORTCUT).catch(() => undefined);
+    };
+  }, []);
+
+  // Last line of defence for unsaved work: write everything outstanding
+  // before the window goes. Autosave normally gets there first — this catches
+  // a quit inside the debounce window, which is exactly when the user has just
+  // typed something and is most likely to mind losing it.
+  //
+  // `onCloseRequested` lets us finish the writes before the window closes;
+  // `beforeunload` covers a reload or a webview teardown that does not route
+  // through Tauri.
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    void getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        event.preventDefault();
+        try {
+          await flushAllAutosaves();
+        } catch (e) {
+          console.warn('Flush on close failed:', e);
+        }
+        await getCurrentWindow().destroy();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((e) => console.warn('Close handler registration failed:', e));
+
+    const onBeforeUnload = () => {
+      void flushAllAutosaves();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    return () => {
+      unlisten?.();
+      window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, []);
 
@@ -361,6 +400,9 @@ export default function App() {
 
       {/* Presentation overlay. Self-renders (via portal) only when open. */}
       <PresentationOverlay />
+
+      {/* Transient errors and confirmations. Self-renders from the store. */}
+      <Toasts />
     </div>
   );
 }

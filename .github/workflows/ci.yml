@@ -44,6 +44,9 @@ jobs:
       - name: Typecheck + bundle
         run: npm run build
 
+      - name: Test
+        run: npm test
+
   rust:
     name: Rust (fmt + clippy + test)
     runs-on: ubuntu-latest

@@ -6,6 +6,14 @@ import { reparseBody } from '@/lib/markdown-parse';
 import { displayName } from '@/lib/note-name';
 import { remapPath } from '@/lib/path-move';
 import { remapEditorViews, replaceEditorContent } from '@/lib/editor-registry';
+import {
+  cancelAutosave,
+  configureAutosave,
+  flushAutosave,
+  hasPendingAutosave,
+  remapAutosave,
+} from '@/lib/autosave';
+import { describeError, useToastStore } from './toast';
 import { gardenTabPath, gardenTabTitle } from '@/lib/garden-tab';
 import { INSIGHTS_TAB_PATH, INSIGHTS_TAB_TITLE } from '@/lib/insights-tab';
 import { useRecentVaults } from './recentVaults';
@@ -86,6 +94,50 @@ interface VaultState {
   /** Cancel without saving — leaves the editor dirty so the user can keep
    *  editing or hit save again. */
   dismissConflict: () => void;
+}
+
+/** What `note_rename` reports back about the links it fixed. */
+interface LinkRewriteSummary {
+  notes_changed: number;
+  links_rewritten: number;
+  encrypted_skipped: number;
+  ambiguous_skipped: number;
+}
+
+/**
+ * Tell the user what a rename did to their links. Silent when it did nothing,
+ * which is the common case for a plain move — bare `[[Name]]` links keep
+ * resolving, so there is nothing to report.
+ *
+ * Links left alone because another note still answers to the old name are
+ * worth a word: they still work, but they may no longer point where the author
+ * meant, and only the author can decide.
+ */
+function reportLinkRewrite(summary: LinkRewriteSummary | undefined) {
+  if (!summary) return;
+  const toast = useToastStore.getState();
+  const { links_rewritten, notes_changed, ambiguous_skipped, encrypted_skipped } =
+    summary;
+
+  if (links_rewritten > 0) {
+    const links = links_rewritten === 1 ? '1 link' : `${links_rewritten} links`;
+    const notes = notes_changed === 1 ? '1 note' : `${notes_changed} notes`;
+    toast.success(`Updated ${links} in ${notes}`);
+  }
+  if (ambiguous_skipped > 0) {
+    const n = ambiguous_skipped;
+    toast.info(
+      `${n === 1 ? '1 link was' : `${n} links were`} left as-is — another note ` +
+        `still has that name, so they may now point elsewhere`,
+    );
+  }
+  if (encrypted_skipped > 0) {
+    const n = encrypted_skipped;
+    toast.info(
+      `${n === 1 ? '1 encrypted note was' : `${n} encrypted notes were`} not ` +
+        `checked for links — unlock the vault and rename again to include them`,
+    );
+  }
 }
 
 export const useVaultStore = create<VaultState>((set, get) => ({
@@ -445,6 +497,15 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     const { openTabs, activeTabPath } = get();
     const idx = openTabs.findIndex((t) => t.path === path);
     if (idx === -1) return;
+
+    // Write anything outstanding before the editor goes away. Closing a dirty
+    // tab used to drop the edits with no prompt, and because the unsaved text
+    // stayed in `noteCache` while the tab was recreated clean, reopening it
+    // showed content that looked saved and was not.
+    if (hasPendingAutosave(path)) {
+      void flushAutosave(path);
+    }
+
     const next = openTabs.filter((t) => t.path !== path);
     let newActive = activeTabPath;
     if (activeTabPath === path) {
@@ -453,16 +514,34 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ openTabs: next, activeTabPath: newActive });
   },
 
-  setActiveTab: (path) => set({ activeTabPath: path }),
+  setActiveTab: (path) => {
+    // Leaving a tab is a natural save point, and the editor for the old path
+    // unmounts right after this.
+    const previous = get().activeTabPath;
+    if (previous && previous !== path && hasPendingAutosave(previous)) {
+      void flushAutosave(previous);
+    }
+    set({ activeTabPath: path });
+  },
 
   saveNote: async (path, content) => {
     const cached = get().noteCache.get(path);
     const expectedHash = cached?.disk_hash ?? '';
-    const result = await invoke<SaveCheckedResult>('note_save_checked', {
-      path,
-      content,
-      expectedDiskHash: expectedHash,
-    });
+    let result: SaveCheckedResult;
+    try {
+      result = await invoke<SaveCheckedResult>('note_save_checked', {
+        path,
+        content,
+        expectedDiskHash: expectedHash,
+      });
+    } catch (e) {
+      // The write did not happen. Say so — the tab keeps its dirty marker and
+      // the editor keeps the text, but silence here reads as success.
+      useToastStore
+        .getState()
+        .error(`Could not save ${displayName(path)}: ${describeError(e)}`);
+      throw e;
+    }
 
     if (result.kind === 'conflict') {
       // Don't write. Park the user's content in `pendingConflict` and let the
@@ -674,13 +753,28 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   },
 
   deleteNote: async (path) => {
+    // Drop the timer before the file goes: an autosave firing afterwards would
+    // recreate the note the user just deleted.
+    cancelAutosave(path);
     await invoke('note_delete', { path });
+    set((s) => {
+      const next = new Map(s.noteCache);
+      next.delete(path);
+      return { noteCache: next };
+    });
     get().closeTab(path);
     await get().refreshTree();
   },
 
   renameNote: async (oldPath, newPath) => {
-    await invoke('note_rename', { oldPath, newPath });
+    // Flush before the move so the write lands on the path the editor still
+    // holds, rather than after the file has gone.
+    if (hasPendingAutosave(oldPath)) await flushAutosave(oldPath);
+    const summary = await invoke<LinkRewriteSummary>('note_rename', {
+      oldPath,
+      newPath,
+    });
+    remapAutosave(oldPath, newPath);
     set((s) => {
       // Renaming a folder moves every descendant with it, so every cache key
       // and every open tab at or under `oldPath` has to move too. Leaving a
@@ -717,6 +811,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     // `replaceEditorContent` (conflict resolution, sync pull) finds the view.
     remapEditorViews(oldPath, newPath);
     await get().refreshTree();
+    reportLinkRewrite(summary);
   },
 
   reorderSiblings: async (parent, names) => {
@@ -802,3 +897,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     });
   },
 }));
+
+// The autosave timer writes through the store, so it needs the store's own
+// save path — the one that does conflict detection and error reporting.
+configureAutosave((path, content) => useVaultStore.getState().saveNote(path, content));
