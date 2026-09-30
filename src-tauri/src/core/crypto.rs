@@ -170,7 +170,10 @@ struct Unlocked {
 
 impl Session {
     pub fn is_unlocked(&self) -> bool {
-        self.inner.lock().expect("crypto session poisoned").is_some()
+        self.inner
+            .lock()
+            .expect("crypto session poisoned")
+            .is_some()
     }
 
     pub fn lock(&self) {
@@ -208,17 +211,13 @@ impl Session {
         on_stage("identity");
         let identity = x25519::Identity::from_str(raw.trim())
             .map_err(|e| anyhow!("Failed to parse stored X25519 identity: {e}"))?;
-        *self.inner.lock().expect("crypto session poisoned") =
-            Some(Unlocked { identity, raw });
+        *self.inner.lock().expect("crypto session poisoned") = Some(Unlocked { identity, raw });
         Ok(())
     }
 
     /// Run a closure with a reference to the unwrapped identity. Returns
     /// `Err` if the session is locked.
-    pub fn with_identity<R>(
-        &self,
-        f: impl FnOnce(&x25519::Identity) -> Result<R>,
-    ) -> Result<R> {
+    pub fn with_identity<R>(&self, f: impl FnOnce(&x25519::Identity) -> Result<R>) -> Result<R> {
         let guard = self.inner.lock().expect("crypto session poisoned");
         let unlocked = guard
             .as_ref()
@@ -282,8 +281,9 @@ fn ensure_layout(vault_root: &Path) -> Result<()> {
     let legacy_identity = dir.join(LEGACY_IDENTITY_FILE);
     let new_identity = dir.join(IDENTITY_FILE);
     if legacy_identity.exists() && !new_identity.exists() {
-        std::fs::rename(&legacy_identity, &new_identity)
-            .with_context(|| format!("Failed to migrate {LEGACY_IDENTITY_FILE} → {IDENTITY_FILE}"))?;
+        std::fs::rename(&legacy_identity, &new_identity).with_context(|| {
+            format!("Failed to migrate {LEGACY_IDENTITY_FILE} → {IDENTITY_FILE}")
+        })?;
     }
 
     let legacy_pubkey = dir.join(LEGACY_PUBKEY_FILE);
@@ -462,11 +462,8 @@ pub fn reset(vault_root: &Path, session: &Session) -> Result<()> {
             // vault returns to a clean "no crypto" state.
             let _ = std::fs::remove_file(recipients_path(vault_root));
         } else {
-            std::fs::write(
-                recipients_path(vault_root),
-                remaining.join("\n") + "\n",
-            )
-            .context("Failed to update recipients.txt")?;
+            std::fs::write(recipients_path(vault_root), remaining.join("\n") + "\n")
+                .context("Failed to update recipients.txt")?;
         }
     }
 
@@ -523,11 +520,8 @@ pub fn add_recipient(vault_root: &Path, recipient: &str) -> Result<()> {
         return Ok(()); // idempotent
     }
     current.push(recipient.to_string());
-    std::fs::write(
-        recipients_path(vault_root),
-        current.join("\n") + "\n",
-    )
-    .context("Failed to write recipients.txt")?;
+    std::fs::write(recipients_path(vault_root), current.join("\n") + "\n")
+        .context("Failed to write recipients.txt")?;
     Ok(())
 }
 
@@ -580,8 +574,7 @@ fn encrypt_identity_file(
     };
     on_stage("wrap-keyring");
     let outer = scrypt_wrap_bytes(&inner, kek, true)?;
-    std::fs::write(identity_path(vault_root), outer)
-        .context("Failed to write identity.age")?;
+    std::fs::write(identity_path(vault_root), outer).context("Failed to write identity.age")?;
     Ok(())
 }
 
@@ -609,8 +602,7 @@ fn decrypt_identity_file(
             bail!("This vault is protected with a passphrase. Enter it to unlock.");
         }
         on_stage("passphrase");
-        scrypt_unwrap_bytes(&inner, passphrase, false)
-            .map_err(|_| anyhow!("Wrong passphrase."))?
+        scrypt_unwrap_bytes(&inner, passphrase, false).map_err(|_| anyhow!("Wrong passphrase."))?
     } else {
         // Single-wrap: ignore any passphrase the caller passed and return
         // the raw secret directly.
@@ -628,11 +620,7 @@ fn decrypt_identity_file(
 /// Upgrade a legacy single-wrap identity to double-wrap by adding a
 /// passphrase. The X25519 secret is preserved — existing `.md.age`
 /// notes keep working. Requires the session to be unlocked.
-pub fn set_passphrase(
-    vault_root: &Path,
-    session: &Session,
-    new_passphrase: &str,
-) -> Result<()> {
+pub fn set_passphrase(vault_root: &Path, session: &Session, new_passphrase: &str) -> Result<()> {
     if new_passphrase.len() < 8 {
         bail!("Passphrase must be at least 8 characters.");
     }
@@ -647,15 +635,15 @@ pub fn set_passphrase(
 
 fn scrypt_wrap_bytes(plaintext: &[u8], passphrase: &str, armored: bool) -> Result<Vec<u8>> {
     let recipient = age::scrypt::Recipient::new(SecretString::from(passphrase.to_string()));
-    let encryptor = age::Encryptor::with_recipients(
-        std::iter::once(&recipient as &dyn age::Recipient),
-    )
-    .map_err(|e| anyhow!("Failed to build scrypt encryptor: {e}"))?;
+    let encryptor =
+        age::Encryptor::with_recipients(std::iter::once(&recipient as &dyn age::Recipient))
+            .map_err(|e| anyhow!("Failed to build scrypt encryptor: {e}"))?;
 
     let mut out = Vec::new();
     if armored {
-        let armor = age::armor::ArmoredWriter::wrap_output(&mut out, age::armor::Format::AsciiArmor)
-            .map_err(|e| anyhow!("armor wrap: {e}"))?;
+        let armor =
+            age::armor::ArmoredWriter::wrap_output(&mut out, age::armor::Format::AsciiArmor)
+                .map_err(|e| anyhow!("armor wrap: {e}"))?;
         let mut writer = encryptor
             .wrap_output(armor)
             .map_err(|e| anyhow!("wrap_output: {e}"))?;
@@ -681,19 +669,23 @@ fn scrypt_unwrap_bytes(ciphertext: &[u8], passphrase: &str, armored: bool) -> Re
     let mut out = Vec::new();
     if armored {
         let armor = age::armor::ArmoredReader::new(ciphertext);
-        let decryptor = age::Decryptor::new(armor)
-            .map_err(|e| anyhow!("Failed to read header: {e}"))?;
+        let decryptor =
+            age::Decryptor::new(armor).map_err(|e| anyhow!("Failed to read header: {e}"))?;
         let mut reader = decryptor
             .decrypt(std::iter::once(&identity as &dyn age::Identity))
             .map_err(|e| anyhow!("scrypt decrypt: {e}"))?;
-        reader.read_to_end(&mut out).map_err(|e| anyhow!("read: {e}"))?;
+        reader
+            .read_to_end(&mut out)
+            .map_err(|e| anyhow!("read: {e}"))?;
     } else {
-        let decryptor = age::Decryptor::new(ciphertext)
-            .map_err(|e| anyhow!("Failed to read header: {e}"))?;
+        let decryptor =
+            age::Decryptor::new(ciphertext).map_err(|e| anyhow!("Failed to read header: {e}"))?;
         let mut reader = decryptor
             .decrypt(std::iter::once(&identity as &dyn age::Identity))
             .map_err(|e| anyhow!("scrypt decrypt: {e}"))?;
-        reader.read_to_end(&mut out).map_err(|e| anyhow!("read: {e}"))?;
+        reader
+            .read_to_end(&mut out)
+            .map_err(|e| anyhow!("read: {e}"))?;
     }
     Ok(out)
 }
@@ -712,12 +704,14 @@ pub fn encrypt_note(vault_root: &Path, plaintext: &str) -> Result<Vec<u8>> {
 
     let mut recipients: Vec<Box<dyn age::Recipient + Send>> = Vec::new();
     for r in &recipient_strs {
-        let parsed = x25519::Recipient::from_str(r)
-            .map_err(|e| anyhow!("Invalid recipient '{r}': {e}"))?;
+        let parsed =
+            x25519::Recipient::from_str(r).map_err(|e| anyhow!("Invalid recipient '{r}': {e}"))?;
         recipients.push(Box::new(parsed));
     }
-    let refs: Vec<&dyn age::Recipient> =
-        recipients.iter().map(|r| r.as_ref() as &dyn age::Recipient).collect();
+    let refs: Vec<&dyn age::Recipient> = recipients
+        .iter()
+        .map(|r| r.as_ref() as &dyn age::Recipient)
+        .collect();
 
     let encryptor = age::Encryptor::with_recipients(refs.into_iter())
         .map_err(|e| anyhow!("Failed to build encryptor: {e}"))?;
@@ -731,12 +725,8 @@ pub fn encrypt_note(vault_root: &Path, plaintext: &str) -> Result<Vec<u8>> {
     writer
         .write_all(plaintext.as_bytes())
         .map_err(|e| anyhow!("write plaintext: {e}"))?;
-    let armor = writer
-        .finish()
-        .map_err(|e| anyhow!("finish writer: {e}"))?;
-    armor
-        .finish()
-        .map_err(|e| anyhow!("finish armor: {e}"))?;
+    let armor = writer.finish().map_err(|e| anyhow!("finish writer: {e}"))?;
+    armor.finish().map_err(|e| anyhow!("finish armor: {e}"))?;
     Ok(out)
 }
 
@@ -776,9 +766,7 @@ pub fn reencrypt_all(vault_root: &Path, session: &Session) -> Result<ReencryptRe
         if path.starts_with(&mycel_dir) {
             continue;
         }
-        if !path.is_file()
-            || !path.to_string_lossy().ends_with(ENC_SUFFIX)
-        {
+        if !path.is_file() || !path.to_string_lossy().ends_with(ENC_SUFFIX) {
             continue;
         }
 
@@ -805,16 +793,18 @@ pub fn reencrypt_all(vault_root: &Path, session: &Session) -> Result<ReencryptRe
         // Stage + atomic rename so a crash mid-write can't truncate the
         // original.
         let tmp = path.with_extension("age.tmp");
-        std::fs::write(&tmp, &new_cipher).with_context(|| {
-            format!("Failed to write {}", tmp.display())
-        })?;
-        std::fs::rename(&tmp, path).with_context(|| {
-            format!("Failed to rename {} → {}", tmp.display(), path.display())
-        })?;
+        std::fs::write(&tmp, &new_cipher)
+            .with_context(|| format!("Failed to write {}", tmp.display()))?;
+        std::fs::rename(&tmp, path)
+            .with_context(|| format!("Failed to rename {} → {}", tmp.display(), path.display()))?;
         rewrapped += 1;
     }
 
-    Ok(ReencryptReport { rewrapped, skipped, failed_paths })
+    Ok(ReencryptReport {
+        rewrapped,
+        skipped,
+        failed_paths,
+    })
 }
 
 /// Decrypt armored age bytes using the in-memory identity. Errors if the
@@ -822,8 +812,8 @@ pub fn reencrypt_all(vault_root: &Path, session: &Session) -> Result<ReencryptRe
 pub fn decrypt_note(session: &Session, ciphertext: &[u8]) -> Result<String> {
     session.with_identity(|id| {
         let armor = age::armor::ArmoredReader::new(ciphertext);
-        let decryptor = age::Decryptor::new(armor)
-            .map_err(|e| anyhow!("Failed to read age header: {e}"))?;
+        let decryptor =
+            age::Decryptor::new(armor).map_err(|e| anyhow!("Failed to read age header: {e}"))?;
         let mut reader = decryptor
             .decrypt(std::iter::once(id as &dyn age::Identity))
             .map_err(|e| anyhow!("Decryption failed: {e}"))?;
@@ -856,15 +846,35 @@ mod tests {
         let raw = id.to_string().expose_secret().to_string();
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(CRYPTO_DIR)).unwrap();
-        encrypt_identity_file(dir.path(), &raw, "kek-secret-32-bytes", "correct horse battery", &|_| {}).unwrap();
+        encrypt_identity_file(
+            dir.path(),
+            &raw,
+            "kek-secret-32-bytes",
+            "correct horse battery",
+            &|_| {},
+        )
+        .unwrap();
         // Both factors required: right kek + right passphrase succeeds.
-        let got =
-            decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "correct horse battery", &|_| {}).unwrap();
+        let got = decrypt_identity_file(
+            dir.path(),
+            "kek-secret-32-bytes",
+            "correct horse battery",
+            &|_| {},
+        )
+        .unwrap();
         assert_eq!(got.trim(), raw.trim());
         // Wrong passphrase fails.
-        assert!(decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "wrong", &|_| {}).is_err());
+        assert!(
+            decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "wrong", &|_| {}).is_err()
+        );
         // Wrong KEK fails even with right passphrase — proves outer wrap is real.
-        assert!(decrypt_identity_file(dir.path(), "different-kek", "correct horse battery", &|_| {}).is_err());
+        assert!(decrypt_identity_file(
+            dir.path(),
+            "different-kek",
+            "correct horse battery",
+            &|_| {}
+        )
+        .is_err());
         // Empty passphrase on a passphrase-protected file: rejected with a
         // clear message instead of decoding garbage.
         assert!(decrypt_identity_file(dir.path(), "kek-secret-32-bytes", "", &|_| {}).is_err());

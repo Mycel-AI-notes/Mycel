@@ -36,7 +36,9 @@ pub async fn sync_init(args: InitArgs, state: State<'_, AppState>) -> Result<(),
         remote: args.remote.clone(),
         branch: branch.clone(),
         author_name: args.author_name.unwrap_or_else(|| "Mycel User".into()),
-        author_email: args.author_email.unwrap_or_else(|| "user@mycel.local".into()),
+        author_email: args
+            .author_email
+            .unwrap_or_else(|| "user@mycel.local".into()),
         auto_sync: true,
         debounce_ms: 30_000,
         last_sync_at: None,

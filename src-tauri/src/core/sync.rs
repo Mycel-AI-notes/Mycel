@@ -236,11 +236,7 @@ enum MergeResult {
     Conflicts(Vec<String>),
 }
 
-fn merge_upstream(
-    repo: &Repository,
-    branch: &str,
-    cfg: &SyncConfig,
-) -> Result<MergeResult> {
+fn merge_upstream(repo: &Repository, branch: &str, cfg: &SyncConfig) -> Result<MergeResult> {
     let upstream_ref = format!("refs/remotes/origin/{}", branch);
     let upstream_oid = match repo.refname_to_id(&upstream_ref) {
         Ok(id) => id,
@@ -435,7 +431,11 @@ pub fn sync(vault: &Path, cfg: &SyncConfig, token: Option<&str>) -> Result<SyncO
         }
         push(&repo, &cfg.branch, token).context("push origin after retry")?;
     }
-    let pushed = if local_committed { ahead_before.max(1) } else { ahead_before };
+    let pushed = if local_committed {
+        ahead_before.max(1)
+    } else {
+        ahead_before
+    };
 
     let outcome = match (pulled, pushed) {
         (0, 0) => SyncOutcome::UpToDate,
@@ -505,7 +505,10 @@ mod tests {
             redact_url("https://github.com/o/r.git"),
             "https://github.com/o/r.git"
         );
-        assert_eq!(redact_url("git@github.com:o/r.git"), "git@github.com:o/r.git");
+        assert_eq!(
+            redact_url("git@github.com:o/r.git"),
+            "git@github.com:o/r.git"
+        );
     }
 
     #[test]

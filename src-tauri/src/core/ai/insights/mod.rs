@@ -22,8 +22,8 @@ pub mod store;
 pub use detector::{signature, stable_id, Detector, DetectorContext};
 #[allow(unused_imports)]
 pub use models::{
-    DetectorTelemetry, ExternalRef, Insight, InsightAction, InsightKind, InsightStatus,
-    RunSummary, TelemetryReport,
+    DetectorTelemetry, ExternalRef, Insight, InsightAction, InsightKind, InsightStatus, RunSummary,
+    TelemetryReport,
 };
 pub use scheduler::InsightsEngine;
 #[allow(unused_imports)]

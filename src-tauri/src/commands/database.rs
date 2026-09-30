@@ -500,7 +500,10 @@ pub struct DbSummary {
 pub async fn dbs_list(state: State<'_, AppState>) -> Result<Vec<DbSummary>, String> {
     let root = vault_root(&state).await?;
     let mut out = Vec::new();
-    for entry in walkdir::WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
+    for entry in walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let path = entry.path();
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) => n,

@@ -103,10 +103,7 @@ fn default_kb_database(area_options: Vec<String>) -> Database {
 /// (except the KB's own top-level `index.md`). Returns the rows and the
 /// deduped set of folder names encountered along the way — those names
 /// become the multi-select options for the `area` column.
-fn scan_dir_rows(
-    abs_dir: &Path,
-    dir_rel: &str,
-) -> Result<(Vec<Row>, BTreeSet<String>), String> {
+fn scan_dir_rows(abs_dir: &Path, dir_rel: &str) -> Result<(Vec<Row>, BTreeSet<String>), String> {
     let scanned = scan_kb_files(abs_dir)?;
     let areas: BTreeSet<String> = scanned
         .iter()
@@ -150,12 +147,7 @@ struct ScannedFile {
 }
 
 fn area_to_json(area: &[String]) -> JsonValue {
-    JsonValue::Array(
-        area.iter()
-            .cloned()
-            .map(JsonValue::String)
-            .collect(),
-    )
+    JsonValue::Array(area.iter().cloned().map(JsonValue::String).collect())
 }
 
 fn scan_kb_files(abs_dir: &Path) -> Result<Vec<ScannedFile>, String> {
@@ -165,13 +157,9 @@ fn scan_kb_files(abs_dir: &Path) -> Result<Vec<ScannedFile>, String> {
     Ok(out)
 }
 
-fn walk_kb(
-    cur: &Path,
-    kb_root: &Path,
-    out: &mut Vec<ScannedFile>,
-) -> Result<(), String> {
-    let read = std::fs::read_dir(cur)
-        .map_err(|e| format!("Failed to read {}: {e}", cur.display()))?;
+fn walk_kb(cur: &Path, kb_root: &Path, out: &mut Vec<ScannedFile>) -> Result<(), String> {
+    let read =
+        std::fs::read_dir(cur).map_err(|e| format!("Failed to read {}: {e}", cur.display()))?;
 
     for entry in read.filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -234,7 +222,9 @@ fn index_template(dir_rel: &str, db_path: &str) -> String {
     out.push_str(&format!("# {dir_name}\n\n"));
     out.push_str("> This is a knowledge-base folder page. The table below automatically lists every note in this folder and its subfolders. The **Area** column is filled from each file's path and is read-only — add a subfolder and the tag will appear on its own. Every other column can be edited freely.\n");
     out.push_str(">\n");
-    out.push_str("> You can write plain text below the table; it'll be saved as the folder's own note.\n\n");
+    out.push_str(
+        "> You can write plain text below the table; it'll be saved as the folder's own note.\n\n",
+    );
     out.push_str(&format!("```db\nsource: {source}\nview: default\n```\n\n"));
     out
 }
@@ -316,8 +306,7 @@ pub async fn kb_init(
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let json = serde_json::to_string_pretty(&db).map_err(|e| e.to_string())?;
-        std::fs::write(&abs_db, json)
-            .map_err(|e| format!("Failed to write {db_rel}: {e}"))?;
+        std::fs::write(&abs_db, json).map_err(|e| format!("Failed to write {db_rel}: {e}"))?;
         emit_changed(&app, &db_rel);
     }
 
@@ -379,8 +368,7 @@ pub async fn kb_deinit(
     let _guard = lock.lock().await;
 
     if abs_db.exists() {
-        std::fs::remove_file(&abs_db)
-            .map_err(|e| format!("Failed to delete {db_rel}: {e}"))?;
+        std::fs::remove_file(&abs_db).map_err(|e| format!("Failed to delete {db_rel}: {e}"))?;
         emit_changed(&app, &db_rel);
     }
     if abs_index.exists() {
@@ -429,10 +417,7 @@ pub struct KbRefreshResult {
 /// this in an `async fn` so a very large KB will block one tokio
 /// task during refresh — wrap in `tokio::task::spawn_blocking` if
 /// that ever shows up in profiles.
-pub fn refresh_kb_db(
-    root: &Path,
-    dir_rel_raw: &str,
-) -> Result<KbRefreshResult, String> {
+pub fn refresh_kb_db(root: &Path, dir_rel_raw: &str) -> Result<KbRefreshResult, String> {
     let dir_rel = dir_rel_raw.trim_matches('/').replace('\\', "/");
     if dir_rel.is_empty() {
         return Err("KB path cannot be empty".into());
@@ -447,10 +432,10 @@ pub fn refresh_kb_db(
         return Err(format!("Not a knowledge base: {dir_rel}"));
     }
 
-    let raw = std::fs::read_to_string(&abs_db)
-        .map_err(|e| format!("Failed to read {db_rel}: {e}"))?;
-    let mut db: Database = serde_json::from_str(&raw)
-        .map_err(|e| format!("Cannot parse {db_rel}: {e}"))?;
+    let raw =
+        std::fs::read_to_string(&abs_db).map_err(|e| format!("Failed to read {db_rel}: {e}"))?;
+    let mut db: Database =
+        serde_json::from_str(&raw).map_err(|e| format!("Cannot parse {db_rel}: {e}"))?;
 
     let scanned = scan_kb_files(&abs_dir)?;
 
@@ -471,8 +456,7 @@ pub fn refresh_kb_db(
     // appear somewhere in the middle of the table.
     let mut synced: Vec<Row> = Vec::with_capacity(scanned.len() + db.rows.len());
     let mut detached: Vec<Row> = Vec::new();
-    let mut seen_pages: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen_pages: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut kept: u32 = 0;
     let mut removed: u32 = 0;
     for row in db.rows.drain(..) {
@@ -540,8 +524,7 @@ pub fn refresh_kb_db(
         // Forward migration: existing KBs created before the readonly flag
         // existed get it stamped on every refresh, so their Area column
         // stops accepting manual edits that the next refresh would wipe.
-        col.extra
-            .insert("readonly".into(), JsonValue::Bool(true));
+        col.extra.insert("readonly".into(), JsonValue::Bool(true));
     } else {
         let mut area_extra: HashMap<String, JsonValue> = HashMap::new();
         area_extra.insert("readonly".into(), JsonValue::Bool(true));
@@ -563,8 +546,7 @@ pub fn refresh_kb_db(
     }
 
     let pretty = serde_json::to_string_pretty(&db).map_err(|e| e.to_string())?;
-    std::fs::write(&abs_db, pretty)
-        .map_err(|e| format!("Failed to write {db_rel}: {e}"))?;
+    std::fs::write(&abs_db, pretty).map_err(|e| format!("Failed to write {db_rel}: {e}"))?;
 
     Ok(KbRefreshResult {
         db_path: db_rel,

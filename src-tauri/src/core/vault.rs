@@ -1,7 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 /// Special vault folder where databases and the pages they generate live.
 /// Auto-created on vault open and protected from rename/delete.
@@ -34,7 +34,9 @@ pub fn is_safe_rel_path(rel: &str) -> bool {
         && !rel.starts_with('/')
         && !rel.contains('\\')
         && !rel.contains(':')
-        && rel.split('/').all(|c| !c.is_empty() && c != "." && c != "..")
+        && rel
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..")
 }
 
 /// Registry file under `.mycel/` that remembers the user's manual ordering
@@ -77,7 +79,10 @@ pub struct KbDirsConfig {
 
 impl Default for KbDirsConfig {
     fn default() -> Self {
-        Self { version: 1, dirs: Vec::new() }
+        Self {
+            version: 1,
+            dirs: Vec::new(),
+        }
     }
 }
 

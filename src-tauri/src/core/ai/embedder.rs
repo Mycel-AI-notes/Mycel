@@ -46,7 +46,10 @@ impl OpenRouterEmbedder {
 #[async_trait]
 impl Embedder for OpenRouterEmbedder {
     async fn embed(&self, inputs: &[String]) -> Result<EmbedBatch> {
-        let resp = self.client.embed(&self.api_key, &self.model, inputs).await?;
+        let resp = self
+            .client
+            .embed(&self.api_key, &self.model, inputs)
+            .await?;
         let tokens_in = if resp.usage.prompt_tokens > 0 {
             resp.usage.prompt_tokens
         } else {

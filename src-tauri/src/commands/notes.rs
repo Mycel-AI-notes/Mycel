@@ -399,7 +399,9 @@ pub async fn quick_note_suggest(
         return Ok(out);
     };
     let cfg = ai.config.lock().await.clone();
-    let key = crate::core::ai::keyring::get_key(&vault_root).ok().flatten();
+    let key = crate::core::ai::keyring::get_key(&vault_root)
+        .ok()
+        .flatten();
     let (true, Some(key)) = (cfg.enabled, key) else {
         return Ok(out);
     };
@@ -409,8 +411,10 @@ pub async fn quick_note_suggest(
     // never indexed there is nothing to match against otherwise.
     {
         let _guard = ai.indexing.lock().await;
-        let embedder =
-            crate::core::ai::embedder::OpenRouterEmbedder::new(key.clone(), cfg.embedding_model.clone());
+        let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
+            key.clone(),
+            cfg.embedding_model.clone(),
+        );
         if let Err(e) = crate::core::ai::indexer::bulk_reindex(
             &ai.store,
             &embedder,
@@ -429,9 +433,8 @@ pub async fn quick_note_suggest(
         let s = ai.insights.settings.lock().await;
         (s.quick_filing_min_similarity.min(100) as f32) / 100.0
     };
-    let wide =
-        quick_suggest::rank_targets(&ai.store, &path, &body, LLM_CANDIDATE_FLOOR, 6)
-            .map_err(|e| e.to_string())?;
+    let wide = quick_suggest::rank_targets(&ai.store, &path, &body, LLM_CANDIDATE_FLOOR, 6)
+        .map_err(|e| e.to_string())?;
 
     let advice = llm_filing_advice(&ai, &vault_root, &key, &cfg, &body, &wide).await;
     let advice_for_log = advice.clone();
@@ -479,8 +482,7 @@ pub async fn quick_note_suggest(
                         } else {
                             format!("{folder}/{name}.md")
                         };
-                        let folder_ok =
-                            folder.is_empty() || vault_root.join(&folder).is_dir();
+                        let folder_ok = folder.is_empty() || vault_root.join(&folder).is_dir();
                         if is_safe_rel_path(&rel)
                             && !qf::is_quick_path(&rel)
                             && folder_ok
@@ -591,9 +593,8 @@ async fn llm_filing_advice(
     let folders = vault_folders(vault_root);
     let user = quick_suggest::filing_user_prompt(body, &candidates, &folders);
 
-    let est = quick_suggest::est_chat_cost_usd(
-        quick_suggest::FILING_SYSTEM_PROMPT.len() + user.len(),
-    );
+    let est =
+        quick_suggest::est_chat_cost_usd(quick_suggest::FILING_SYSTEM_PROMPT.len() + user.len());
     if let Err(e) = budget::check(&ai.store, cfg.daily_budget_usd, &cfg.chat_model, est) {
         eprintln!("quick_note_suggest: chat step skipped: {e:#}");
         return None;
@@ -601,15 +602,19 @@ async fn llm_filing_advice(
 
     let client = OpenRouterClient::new();
     match client
-        .chat(key, &cfg.chat_model, quick_suggest::FILING_SYSTEM_PROMPT, &user)
+        .chat(
+            key,
+            &cfg.chat_model,
+            quick_suggest::FILING_SYSTEM_PROMPT,
+            &user,
+        )
         .await
     {
         Ok(reply) => {
             let tokens_in = reply.usage.prompt_tokens;
             let tokens_out = reply.usage.total_tokens.saturating_sub(tokens_in);
             let cost = quick_suggest::chat_cost_usd(tokens_in, tokens_out);
-            if let Err(e) =
-                budget::record(&ai.store, &cfg.chat_model, tokens_in, tokens_out, cost)
+            if let Err(e) = budget::record(&ai.store, &cfg.chat_model, tokens_in, tokens_out, cost)
             {
                 eprintln!("quick_note_suggest: usage record failed: {e:#}");
             }
@@ -696,7 +701,11 @@ async fn refresh_index_after_merge(
 }
 
 #[tauri::command]
-pub async fn note_rename(old_path: String, new_path: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn note_rename(
+    old_path: String,
+    new_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     if !is_safe_rel_path(&old_path) || !is_safe_rel_path(&new_path) {
         return Err("Invalid note path".into());
     }

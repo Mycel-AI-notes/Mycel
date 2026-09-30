@@ -48,9 +48,7 @@ pub(crate) async fn vault_root(state: &State<'_, AppState>) -> Result<PathBuf, S
 /// Settings UI calls it on mount via `ai_get_status`, which materializes
 /// `.mycel/ai/` the moment the dialog opens. Nothing reaches OpenRouter
 /// until the user pastes a key and triggers a call.
-pub(crate) async fn ensure_ai_state(
-    state: &State<'_, AppState>,
-) -> Result<Arc<AiState>, String> {
+pub(crate) async fn ensure_ai_state(state: &State<'_, AppState>) -> Result<Arc<AiState>, String> {
     let root = vault_root(state).await?;
     let mut guard = state.ai.lock().await;
     if let Some(existing) = guard.as_ref() {

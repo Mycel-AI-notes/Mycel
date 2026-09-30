@@ -10,9 +10,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 
 use super::{ensure_ai_state, err, vault_root};
-use crate::core::ai::edges::{
-    self, EdgesStatus, EdgesSummary, RecomputeProgress, SemanticEdge,
-};
+use crate::core::ai::edges::{self, EdgesStatus, EdgesSummary, RecomputeProgress, SemanticEdge};
 use crate::AppState;
 
 const PROGRESS_EVENT: &str = "ai-edges-progress";

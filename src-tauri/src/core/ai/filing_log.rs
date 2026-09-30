@@ -64,7 +64,10 @@ mod tests {
     #[test]
     fn appends_parseable_jsonl_lines() {
         let dir = TempDir::new().unwrap();
-        append(dir.path(), &serde_json::json!({"event": "suggest", "note": "a.md"}));
+        append(
+            dir.path(),
+            &serde_json::json!({"event": "suggest", "note": "a.md"}),
+        );
         outcome(dir.path(), "merge", "quick/x.md", Some("garden.md"));
 
         let raw = std::fs::read_to_string(log_path(dir.path())).unwrap();

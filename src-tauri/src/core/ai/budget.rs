@@ -92,7 +92,13 @@ pub fn today_usage(store: &AiStore) -> Result<DailyUsage> {
                 FROM ai_usage WHERE date = ?1
                 "#,
                 [&today],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, f64>(2)?)),
+                |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, f64>(2)?,
+                    ))
+                },
             )
             .unwrap_or((0, 0, 0.0));
         Ok(DailyUsage {

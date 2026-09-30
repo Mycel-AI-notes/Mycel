@@ -64,8 +64,7 @@ pub fn save(vault_root: &Path, cfg: &AiConfig) -> Result<()> {
             .with_context(|| format!("Failed to create {}", parent.display()))?;
     }
     let json = serde_json::to_string_pretty(cfg)?;
-    std::fs::write(&path, json)
-        .with_context(|| format!("Failed to write {}", path.display()))
+    std::fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))
 }
 
 #[cfg(test)]

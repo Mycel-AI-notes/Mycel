@@ -93,7 +93,11 @@ pub fn filing_user_prompt(
             "- {} ({}% similar): {}\n",
             c.note_path,
             (c.similarity * 100.0).round() as u32,
-            c.snippet.chars().take(240).collect::<String>().replace('\n', " "),
+            c.snippet
+                .chars()
+                .take(240)
+                .collect::<String>()
+                .replace('\n', " "),
         ));
     }
     out.push_str("\nFOLDERS:\n");

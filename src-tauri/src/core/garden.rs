@@ -228,8 +228,7 @@ fn read_or_default<T: Default + for<'de> Deserialize<'de>>(path: &Path) -> Resul
     if raw.trim().is_empty() {
         return Ok(T::default());
     }
-    serde_json::from_str(&raw)
-        .with_context(|| format!("Failed to parse {}", path.display()))
+    serde_json::from_str(&raw).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 fn write_pretty<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -237,8 +236,7 @@ fn write_pretty<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(value)?;
-    std::fs::write(path, json)
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+    std::fs::write(path, json).with_context(|| format!("Failed to write {}", path.display()))?;
     Ok(())
 }
 

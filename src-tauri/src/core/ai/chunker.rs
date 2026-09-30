@@ -95,10 +95,19 @@ mod tests {
 
     #[test]
     fn adjacent_chunks_share_overlap_chars() {
-        let s: String = (0..2000).map(|i| char::from_u32((b'a' as u32) + (i as u32 % 26)).unwrap()).collect();
+        let s: String = (0..2000)
+            .map(|i| char::from_u32((b'a' as u32) + (i as u32 % 26)).unwrap())
+            .collect();
         let chunks = chunk(&s);
         assert!(chunks.len() >= 2);
-        let tail_of_first: String = chunks[0].chars().rev().take(OVERLAP).collect::<Vec<_>>().into_iter().rev().collect();
+        let tail_of_first: String = chunks[0]
+            .chars()
+            .rev()
+            .take(OVERLAP)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         let head_of_second: String = chunks[1].chars().take(OVERLAP).collect();
         assert_eq!(tail_of_first, head_of_second);
     }

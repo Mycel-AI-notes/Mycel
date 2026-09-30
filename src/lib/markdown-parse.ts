@@ -6,7 +6,7 @@ const WIKILINK_RE = /(!?)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 // `[label](url)` markdown links with http/https targets.
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
 // Bare http(s) URLs.
-const BARE_URL_RE = /(?<![("\[])https?:\/\/[^\s<>"')\]]+/g;
+const BARE_URL_RE = /(?<![("[])https?:\/\/[^\s<>"')\]]+/g;
 
 /**
  * Convert each line of the document into a sanitized line for tag/heading

@@ -36,10 +36,7 @@ pub fn links_to(ctx: &DetectorContext<'_>, from: &str, to: &str) -> bool {
 /// File stem without directory or `.md` extension: "Projects/Feast.md" → "Feast".
 pub fn base_name(path: &str) -> String {
     let no_dir = path.rsplit('/').next().unwrap_or(path);
-    no_dir
-        .strip_suffix(".md")
-        .unwrap_or(no_dir)
-        .to_string()
+    no_dir.strip_suffix(".md").unwrap_or(no_dir).to_string()
 }
 
 #[cfg(test)]

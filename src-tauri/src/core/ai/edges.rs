@@ -168,8 +168,7 @@ pub struct EdgesStatus {
 /// never run the pass for this vault).
 pub fn status(store: &AiStore) -> Result<EdgesStatus> {
     store.with_conn(|c| {
-        let total: i64 =
-            c.query_row("SELECT COUNT(*) FROM semantic_edges", [], |r| r.get(0))?;
+        let total: i64 = c.query_row("SELECT COUNT(*) FROM semantic_edges", [], |r| r.get(0))?;
         Ok(EdgesStatus {
             total: total.max(0) as u32,
         })
@@ -334,11 +333,7 @@ mod tests {
         seed(
             dir.path(),
             &store,
-            &[
-                ("a.md", "alpha"),
-                ("b.md", "alpha"),
-                ("c.md", "alpha"),
-            ],
+            &[("a.md", "alpha"), ("b.md", "alpha"), ("c.md", "alpha")],
         )
         .await;
         let _ = recompute(&store, |_| {}).unwrap();

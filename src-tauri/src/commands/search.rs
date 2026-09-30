@@ -50,7 +50,11 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
 
         let stem = if is_enc {
             // Strip `.md.age` cleanly so the switcher shows the bare name.
-            rel.rsplit('/').next().unwrap_or(&rel).trim_end_matches(".md.age").to_string()
+            rel.rsplit('/')
+                .next()
+                .unwrap_or(&rel)
+                .trim_end_matches(".md.age")
+                .to_string()
         } else {
             path.file_stem()
                 .map(|s| s.to_string_lossy().to_string())
@@ -75,7 +79,10 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
 }
 
 #[tauri::command]
-pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<Vec<Backlink>, String> {
+pub async fn backlinks_get(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<Backlink>, String> {
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -161,7 +168,12 @@ pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<V
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            backlinks.push(Backlink { path: rel, title, context, folder });
+            backlinks.push(Backlink {
+                path: rel,
+                title,
+                context,
+                folder,
+            });
         }
     }
 
@@ -170,7 +182,10 @@ pub async fn backlinks_get(path: String, state: State<'_, AppState>) -> Result<V
 }
 
 #[tauri::command]
-pub async fn notes_by_tag(tag: String, state: State<'_, AppState>) -> Result<Vec<NoteSummary>, String> {
+pub async fn notes_by_tag(
+    tag: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<NoteSummary>, String> {
     let vault_root = {
         let guard = state.vault.lock().await;
         guard
@@ -204,11 +219,7 @@ pub async fn notes_by_tag(tag: String, state: State<'_, AppState>) -> Result<Vec
         };
         let parsed = parse_note(&content);
         let in_body = parsed.tags.iter().any(|t| t.to_lowercase() == needle);
-        let in_meta = parsed
-            .meta
-            .tags
-            .iter()
-            .any(|t| t.to_lowercase() == needle);
+        let in_meta = parsed.meta.tags.iter().any(|t| t.to_lowercase() == needle);
         if !in_body && !in_meta {
             continue;
         }
