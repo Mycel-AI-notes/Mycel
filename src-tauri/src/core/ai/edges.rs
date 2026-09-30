@@ -190,10 +190,12 @@ fn read_note_vectors(store: &AiStore, note_path: &str) -> Result<Vec<Vec<f32>>> 
         let vecs: Vec<Vec<f32>> = stmt
             .query_map([note_path], |r| {
                 let bytes: Vec<u8> = r.get(0)?;
-                let mut v = Vec::with_capacity(bytes.len() / 4);
-                for chunk in bytes.chunks_exact(4) {
-                    v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-                }
+                let v = bytes
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| f32::from_le_bytes(*c))
+                    .collect();
                 Ok(v)
             })?
             .filter_map(|r| r.ok())

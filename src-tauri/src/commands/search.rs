@@ -127,7 +127,7 @@ pub async fn backlinks_get(
                 .find(|line| {
                     let lower = line.to_lowercase();
                     lower.contains(&format!("[[{}", target_stem))
-                        || lower.contains(&format!("[[{}", &path))
+                        || lower.contains(&format!("[[{path}"))
                 })
                 .unwrap_or("")
                 .trim()

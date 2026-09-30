@@ -110,11 +110,15 @@ fn read_note_vectors(store: &AiStore, note_path: &str) -> Result<Vec<Vec<f32>>> 
 }
 
 fn bytes_to_f32_le(bytes: &[u8]) -> Vec<f32> {
-    let mut v = Vec::with_capacity(bytes.len() / 4);
-    for chunk in bytes.chunks_exact(4) {
-        v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-    }
-    v
+    // `as_chunks` gives `&[[u8; 4]]` directly, so each element is already the
+    // exact array `from_le_bytes` wants. A trailing partial chunk is dropped,
+    // same as `chunks_exact` did.
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
+        .collect()
 }
 
 fn mean(vecs: &[Vec<f32>]) -> Vec<f32> {
