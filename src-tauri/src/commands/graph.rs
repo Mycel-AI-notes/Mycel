@@ -1,11 +1,12 @@
+use crate::core::links::note_stem;
 use crate::core::parser::parse_note;
+use crate::core::vault::note_paths;
 use crate::AppState;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use tauri::State;
-use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphNote {
@@ -113,28 +114,20 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
     let mut title_to_path: HashMap<String, String> = HashMap::new();
     let mut rel_to_path: HashMap<String, String> = HashMap::new();
 
-    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if !path.extension().map(|e| e == "md").unwrap_or(false) {
+    for rel in note_paths(&vault_root) {
+        // The graph reads note bodies for links and tags, which an encrypted
+        // note does not give up without the vault unlocked. Its node would
+        // then flicker in and out of the graph depending on lock state, so
+        // leave `.md.age` out of the graph entirely for now.
+        if rel.ends_with(".md.age") {
             continue;
         }
-        let rel = path
-            .strip_prefix(&vault_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-        if rel.contains("/.") || rel.starts_with('.') {
-            continue;
-        }
-        let content = match std::fs::read_to_string(path) {
+        let content = match std::fs::read_to_string(vault_root.join(&rel)) {
             Ok(c) => c,
             Err(_) => continue,
         };
         let parsed_meta = parse_note(&content);
-        let stem = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
+        let stem = note_stem(&rel).to_string();
         let title = parsed_meta.meta.title.unwrap_or_else(|| stem.clone());
         let folder = parent_folder(&rel);
         stem_to_path

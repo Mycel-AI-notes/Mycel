@@ -55,6 +55,12 @@ pub struct InsightsEngine {
     pub indexing: Arc<Mutex<()>>,
     /// Date string (`YYYY-MM-DD` in local time) of the last completed run.
     /// Lets the per-minute tick early-out without touching SQL.
+    ///
+    /// Seeded from the run log at construction. It used to start empty on
+    /// every launch, so with catch-up on — the default — opening the app after
+    /// the scheduled time re-ran the whole pipeline, including a full
+    /// `bulk_reindex` that bills embeddings for every changed note. Five
+    /// launches meant five runs.
     pub last_run_date: Arc<Mutex<Option<String>>>,
 }
 
@@ -67,6 +73,7 @@ impl InsightsEngine {
         config: Arc<Mutex<AiConfig>>,
         indexing: Arc<Mutex<()>>,
     ) -> Self {
+        let last_run_date = last_successful_run_date(&store);
         Self {
             vault_root,
             store,
@@ -74,7 +81,7 @@ impl InsightsEngine {
             detectors: Arc::new(detectors),
             config,
             indexing,
-            last_run_date: Arc::new(Mutex::new(None)),
+            last_run_date: Arc::new(Mutex::new(last_run_date)),
         }
     }
 
@@ -378,6 +385,16 @@ pub async fn run_catch_up_if_due(engine: &InsightsEngine) -> Result<Option<RunSu
     Ok(Some(summary))
 }
 
+/// Local-time date of the last successful run, read from the persisted run
+/// log. `None` when the engine has never completed a run on this vault, or
+/// when the log cannot be read — erring towards running is the safe side of
+/// that failure, since a missed run is worse than an extra one.
+fn last_successful_run_date(store: &AiStore) -> Option<String> {
+    let ts = istore::last_successful_run_at(store).ok().flatten()?;
+    let dt = chrono::DateTime::from_timestamp(ts, 0)?;
+    Some(dt.with_timezone(&Local).format("%Y-%m-%d").to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,5 +446,77 @@ mod tests {
             kinds.iter().filter(|k| **k == "missing_wikilink").count(),
             2
         );
+    }
+
+    fn engine_for(root: &std::path::Path) -> InsightsEngine {
+        let store = Arc::new(AiStore::open(root).unwrap());
+        istore::ensure_insights_schema(&store).unwrap();
+        InsightsEngine::new(
+            root.to_path_buf(),
+            store,
+            InsightsSettings::default(),
+            Vec::new(),
+            Arc::new(Mutex::new(AiConfig::default())),
+            Arc::new(Mutex::new(())),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_fresh_vault_has_no_recorded_run() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let engine = engine_for(dir.path());
+        assert_eq!(*engine.last_run_date.lock().await, None);
+    }
+
+    #[tokio::test]
+    async fn a_restart_remembers_today_s_run() {
+        // The regression: `last_run_date` started empty on every launch, so
+        // with catch-up on, opening the app after the scheduled time re-ran
+        // the pipeline — full reindex and all — once per launch.
+        let dir = tempfile::TempDir::new().unwrap();
+        let now = chrono::Utc::now().timestamp();
+
+        let first = engine_for(dir.path());
+        let run_id = istore::start_run(&first.store, now).unwrap();
+        istore::finish_run(&first.store, run_id, now, 0, 0, None).unwrap();
+        drop(first);
+
+        // A new engine over the same vault is what a restart produces.
+        let restarted = engine_for(dir.path());
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        assert_eq!(*restarted.last_run_date.lock().await, Some(today));
+    }
+
+    #[tokio::test]
+    async fn a_run_from_an_earlier_day_does_not_block_today() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let two_days_ago = chrono::Utc::now().timestamp() - 2 * 24 * 60 * 60;
+
+        let seed = engine_for(dir.path());
+        let run_id = istore::start_run(&seed.store, two_days_ago).unwrap();
+        istore::finish_run(&seed.store, run_id, two_days_ago, 0, 0, None).unwrap();
+        drop(seed);
+
+        let engine = engine_for(dir.path());
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        assert_ne!(
+            *engine.last_run_date.lock().await,
+            Some(today),
+            "a stale run must not suppress today's"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_failed_run_does_not_count_as_done() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let now = chrono::Utc::now().timestamp();
+
+        let seed = engine_for(dir.path());
+        let run_id = istore::start_run(&seed.store, now).unwrap();
+        istore::finish_run(&seed.store, run_id, now, 0, 0, Some("boom")).unwrap();
+        drop(seed);
+
+        let engine = engine_for(dir.path());
+        assert_eq!(*engine.last_run_date.lock().await, None);
     }
 }

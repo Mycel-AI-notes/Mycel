@@ -749,8 +749,6 @@ pub struct ReencryptReport {
 }
 
 pub fn reencrypt_all(vault_root: &Path, session: &Session) -> Result<ReencryptReport> {
-    use walkdir::WalkDir;
-
     let recipients_count = read_recipients(vault_root)?.len();
     if recipients_count == 0 {
         bail!("No recipients configured — set up crypto first.");
@@ -760,12 +758,11 @@ pub fn reencrypt_all(vault_root: &Path, session: &Session) -> Result<ReencryptRe
     let mut skipped = 0usize;
     let mut failed_paths = Vec::new();
 
-    let mycel_dir = vault_root.join(".mycel");
-    for entry in WalkDir::new(vault_root).into_iter().filter_map(|e| e.ok()) {
+    // `walk_vault` never descends into dot-directories, which covers both
+    // `.mycel` (nothing there is a note) and `.git`, whose object store held
+    // no `.md.age` files but was walked in full on every re-encrypt.
+    for entry in crate::core::vault::walk_vault(vault_root) {
         let path = entry.path();
-        if path.starts_with(&mycel_dir) {
-            continue;
-        }
         if !path.is_file() || !path.to_string_lossy().ends_with(ENC_SUFFIX) {
             continue;
         }

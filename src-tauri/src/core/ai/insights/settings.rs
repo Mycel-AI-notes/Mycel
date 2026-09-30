@@ -101,11 +101,13 @@ impl Default for InsightsSettings {
                 catch_up: true,
             },
             limits: LimitSettings {
-                // Bumped well above production values so a test run can
-                // surface plenty of cards in one go. TODO: dial back to
-                // 10 / 3 before release.
-                max_per_day: 500,
-                max_per_kind: 200,
+                // The inbox is meant to be read, so these are the intended
+                // production numbers. They were 500 / 200 with a TODO to dial
+                // them back: values raised to make a single test run surface
+                // plenty of cards, which as a shipped default would have
+                // buried the user under a day's worth of suggestions.
+                max_per_day: 10,
+                max_per_kind: 3,
                 default_cooldown_days: 14,
             },
             detectors: BTreeMap::new(),
@@ -173,7 +175,8 @@ mod tests {
         let s = InsightsSettings::default();
         assert!(!s.enabled);
         assert_eq!(s.schedule.time, "07:00");
-        assert_eq!(s.limits.max_per_day, 500);
+        assert_eq!(s.limits.max_per_day, 10);
+        assert_eq!(s.limits.max_per_kind, 3);
     }
 
     #[test]

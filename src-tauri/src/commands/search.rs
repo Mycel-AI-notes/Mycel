@@ -1,8 +1,9 @@
+use crate::core::links::note_stem;
 use crate::core::parser::parse_note;
+use crate::core::vault::note_paths;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NoteSummary {
@@ -31,46 +32,18 @@ pub async fn notes_list(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
     };
 
     let mut notes = Vec::new();
-    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        let rel = path
-            .strip_prefix(&vault_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-        let is_md = path.extension().map(|e| e == "md").unwrap_or(false);
+    for rel in note_paths(&vault_root) {
         let is_enc = rel.ends_with(".md.age");
-        if !(is_md || is_enc) {
-            continue;
-        }
-        // Skip hidden dirs
-        if rel.contains("/.") || rel.starts_with('.') {
-            continue;
-        }
-
-        let stem = if is_enc {
-            // Strip `.md.age` cleanly so the switcher shows the bare name.
-            rel.rsplit('/')
-                .next()
-                .unwrap_or(&rel)
-                .trim_end_matches(".md.age")
-                .to_string()
-        } else {
-            path.file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default()
-        };
-
+        let stem = note_stem(&rel).to_string();
         let title = if is_enc {
             // We can't peek inside without unlocking — use the file stem.
             stem
         } else {
-            std::fs::read_to_string(path)
+            std::fs::read_to_string(vault_root.join(&rel))
                 .ok()
                 .and_then(|content| parse_note(&content).meta.title)
                 .unwrap_or(stem)
         };
-
         notes.push(NoteSummary { path: rel, title });
     }
 
@@ -91,34 +64,35 @@ pub async fn backlinks_get(
             .ok_or("No vault open")?
     };
 
-    // Target name without extension — this is what wikilinks reference
-    let target_stem = std::path::Path::new(&path)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
+    // Target name without extension — this is what wikilinks reference.
+    // `Path::file_stem` is wrong here: for `Note.md.age` it yields `Note.md`,
+    // which matches no wikilink, so an encrypted note never had backlinks.
+    let target_stem = note_stem(&path).to_lowercase();
 
     let mut backlinks = Vec::new();
 
-    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
-        let file_path = entry.path();
-        if !file_path.extension().map(|e| e == "md").unwrap_or(false) {
+    for rel in note_paths(&vault_root) {
+        if rel == path {
             continue;
         }
+        let file_path = vault_root.join(&rel);
 
-        let rel = file_path
-            .strip_prefix(&vault_root)
-            .unwrap_or(file_path)
-            .to_string_lossy()
-            .to_string();
-
-        // Skip hidden, skip the note itself
-        if rel.contains("/.") || rel.starts_with('.') || rel == path {
-            continue;
-        }
-
-        let content = match std::fs::read_to_string(file_path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        // An encrypted note's links are readable only while the vault is
+        // unlocked. Try, and move on quietly when we can't — a locked vault
+        // should show the backlinks it can rather than fail the panel.
+        let content = if rel.ends_with(".md.age") {
+            match std::fs::read(&file_path)
+                .ok()
+                .and_then(|raw| crate::core::crypto::decrypt_note(&state.crypto, &raw).ok())
+            {
+                Some(c) => c,
+                None => continue,
+            }
+        } else {
+            match std::fs::read_to_string(&file_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            }
         };
 
         let parsed = parse_note(&content);
@@ -141,12 +115,10 @@ pub async fn backlinks_get(
         });
 
         if has_link {
-            let title = parsed.meta.title.unwrap_or_else(|| {
-                file_path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default()
-            });
+            let title = parsed
+                .meta
+                .title
+                .unwrap_or_else(|| note_stem(&rel).to_string());
 
             // Find first line mentioning the target for context
             let context = parsed
@@ -200,22 +172,21 @@ pub async fn notes_by_tag(
     }
 
     let mut matches = Vec::new();
-    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if !path.extension().map(|e| e == "md").unwrap_or(false) {
-            continue;
-        }
-        let rel = path
-            .strip_prefix(&vault_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-        if rel.contains("/.") || rel.starts_with('.') {
-            continue;
-        }
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(_) => continue,
+    for rel in note_paths(&vault_root) {
+        // Tags inside an encrypted note are only readable while unlocked.
+        let content = if rel.ends_with(".md.age") {
+            match std::fs::read(vault_root.join(&rel))
+                .ok()
+                .and_then(|raw| crate::core::crypto::decrypt_note(&state.crypto, &raw).ok())
+            {
+                Some(c) => c,
+                None => continue,
+            }
+        } else {
+            match std::fs::read_to_string(vault_root.join(&rel)) {
+                Ok(c) => c,
+                Err(_) => continue,
+            }
         };
         let parsed = parse_note(&content);
         let in_body = parsed.tags.iter().any(|t| t.to_lowercase() == needle);
@@ -223,11 +194,10 @@ pub async fn notes_by_tag(
         if !in_body && !in_meta {
             continue;
         }
-        let stem = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let title = parsed.meta.title.unwrap_or(stem);
+        let title = parsed
+            .meta
+            .title
+            .unwrap_or_else(|| note_stem(&rel).to_string());
         matches.push(NoteSummary { path: rel, title });
     }
     matches.sort_by(|a, b| a.title.cmp(&b.title));

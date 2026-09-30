@@ -403,6 +403,45 @@ fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Walk the vault without descending into dot-directories.
+///
+/// Every full-vault command used a bare `WalkDir::new(root)` and filtered
+/// hidden paths *after* the fact, so each call recursed through `.git` — tens
+/// of thousands of objects on a synced vault — and through `.mycel` before
+/// discarding the results. `notes_list`, `backlinks_get`, `notes_by_tag`,
+/// `graph_data` and `dbs_list` all pay this on every invocation, and the
+/// backlinks panel fires on every save.
+pub fn walk_vault(root: &Path) -> impl Iterator<Item = walkdir::DirEntry> + '_ {
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| {
+            e.depth() == 0
+                || !e
+                    .file_name()
+                    .to_str()
+                    .map(|n| n.starts_with('.'))
+                    .unwrap_or(false)
+        })
+        .filter_map(|e| e.ok())
+}
+
+/// True for a path Mycel treats as a note: `.md`, or `.md.age` when encrypted.
+pub fn is_note_path(rel: &str) -> bool {
+    rel.ends_with(".md") || rel.ends_with(".md.age")
+}
+
+/// Vault-relative paths of every note, dot-directories excluded.
+pub fn note_paths(root: &Path) -> Vec<String> {
+    walk_vault(root)
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| {
+            let rel = e.path().strip_prefix(root).ok()?;
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            is_note_path(&rel).then_some(rel)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +576,52 @@ mod tests {
         assert!(!names.contains(&".hidden"));
         let enc = tree.iter().find(|e| e.name == "secret.md.age").unwrap();
         assert!(enc.is_encrypted);
+    }
+
+    #[test]
+    fn note_paths_lists_both_note_kinds() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "");
+        write(root, "deep/b.md", "");
+        write(root, "secret.md.age", "");
+        write(root, "readme.txt", "");
+
+        let mut got = note_paths(root);
+        got.sort();
+        assert_eq!(got, vec!["a.md", "deep/b.md", "secret.md.age"]);
+    }
+
+    #[test]
+    fn note_paths_never_descends_into_dot_directories() {
+        // The point of the shared walker: `.git` on a synced vault holds tens
+        // of thousands of objects, and every full-vault command used to
+        // recurse through all of them before discarding the results.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "");
+        write(root, ".git/objects/pack/x.md", "");
+        write(root, ".mycel/trash/2026/old.md", "");
+        write(root, ".obsidian/plugins/p.md", "");
+
+        assert_eq!(note_paths(root), vec!["note.md"]);
+    }
+
+    #[test]
+    fn walk_vault_still_yields_the_root() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "note.md", "");
+        // The root itself is `.`-free only by luck of the temp name, so the
+        // filter has to exempt depth 0 or the walk yields nothing.
+        assert!(walk_vault(dir.path()).count() >= 2);
+    }
+
+    #[test]
+    fn is_note_path_recognises_both_extensions() {
+        assert!(is_note_path("a.md"));
+        assert!(is_note_path("a.md.age"));
+        assert!(!is_note_path("a.txt"));
+        assert!(!is_note_path("a.markdown"));
     }
 
     #[test]
