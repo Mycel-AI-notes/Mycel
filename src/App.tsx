@@ -17,6 +17,7 @@ import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
+import { FullTextSearch } from '@/components/search/FullTextSearch';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
@@ -48,6 +49,7 @@ import {
   FolderSearch,
   Share2,
   Settings as SettingsIcon,
+  TextSearch,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
@@ -71,6 +73,7 @@ export default function App() {
   // or the empty state.
   const activeGardenView = gardenEnabled ? parseGardenTabPath(activeTabPath ?? '') : null;
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [fullTextOpen, setFullTextOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
   const autoOpenAttempted = useRef(false);
@@ -94,7 +97,8 @@ export default function App() {
     });
   }, [vaultRoot, openVault]);
 
-  // In-app keyboard shortcuts (Quick Switcher, Garden navigation).
+  // In-app keyboard shortcuts (Quick Switcher, full-text search, Garden
+  // navigation).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -103,6 +107,14 @@ export default function App() {
       if (e.key === 'o' || e.key === 'O') {
         e.preventDefault();
         if (vaultRoot) setQuickSwitcherOpen(true);
+      } else if (e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        // Cmd+Shift+F — full-text search. Plain Cmd+F stays with the
+        // editor's in-note find panel.
+        e.preventDefault();
+        if (vaultRoot) {
+          setQuickSwitcherOpen(false);
+          setFullTextOpen(true);
+        }
       } else if (e.key === 'g' || e.key === 'G') {
         // Plain Cmd+G keeps Graph; Cmd+Shift+G could be reused later.
         if (e.shiftKey) return;
@@ -266,6 +278,7 @@ export default function App() {
   }, [vaultRoot]);
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
+  const closeFullText = useCallback(() => setFullTextOpen(false), []);
 
   if (!vaultRoot) {
     return (
@@ -312,6 +325,14 @@ export default function App() {
 
         <div className="flex items-center gap-1">
           <LockBadge />
+
+          <button
+            onClick={() => setFullTextOpen(true)}
+            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+            title="Search in notes (⌘⇧F)"
+          >
+            <TextSearch size={16} />
+          </button>
 
           <button
             onClick={() => createQuickNote()}
@@ -385,6 +406,9 @@ export default function App() {
 
       {/* Quick Switcher overlay */}
       {quickSwitcherOpen && <QuickSwitcher onClose={closeQuickSwitcher} />}
+
+      {/* Full-text search overlay (⌘⇧F) */}
+      {fullTextOpen && <FullTextSearch onClose={closeFullText} />}
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}
