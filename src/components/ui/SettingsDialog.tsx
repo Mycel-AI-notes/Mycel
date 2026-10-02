@@ -18,6 +18,12 @@ const FEATURE_ROWS: FeatureRow[] = [
     description:
       'Show the Garden section in the sidebar and enable Inbox, Next Actions, Projects, Waiting For, and Someday.',
   },
+  {
+    key: 'cosmic',
+    label: 'Cosmic motion',
+    description:
+      'Interactive starfield on the empty screen, comets when a note opens, a nebula burst when a note or folder is born. Off also respects the system "reduce motion" setting.',
+  },
 ];
 
 type Tab = 'features' | 'ai' | 'insights';
