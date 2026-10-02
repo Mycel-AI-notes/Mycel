@@ -281,11 +281,12 @@ export default function App() {
             onClick={() => setQuickSwitcherOpen(true)}
             className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
           >
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left truncate">
               {vaultRoot.split('/').pop() ?? vaultRoot}
+              <span className="opacity-60"> · search or run a command</span>
             </span>
-          {hotkeyLabel('switcher.open') && (
-            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('switcher.open')}</kbd>
+          {hotkeyLabel('omnibar.open') && (
+            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('omnibar.open')}</kbd>
           )}
           </button>
 

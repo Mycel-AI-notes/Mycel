@@ -105,6 +105,14 @@ export function getAppCommands(): Command[] {
       run: () => useUIStore.getState().setPaletteOpen(true),
     },
     {
+      id: 'omnibar.open',
+      title: 'Search notes and commands',
+      section: 'Navigation',
+      defaultHotkey: 'Mod+K',
+      enabled: vaultOpen,
+      run: () => useUIStore.getState().setQuickSwitcherOpen(true),
+    },
+    {
       id: 'switcher.open',
       title: 'Quick switcher: open note',
       section: 'Navigation',
