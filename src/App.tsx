@@ -55,7 +55,6 @@ import {
   FolderSearch,
   Share2,
   Settings as SettingsIcon,
-  TextSearch,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = QUICK_NOTE_GLOBAL_SHORTCUT;
@@ -260,7 +259,7 @@ export default function App() {
         {!focusMode && (
         <header
           data-tauri-drag-region
-          className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
+          className={`flex items-center pr-3 py-1.5 bg-surface-0 shrink-0 gap-2 ${
             isMac ? 'pl-[78px]' : 'pl-3'
           }`}
         >
@@ -295,18 +294,6 @@ export default function App() {
 
           <div className="flex items-center gap-1">
             <LockBadge />
-
-            <button
-              onClick={() => setFullTextOpen(true)}
-              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-              title={
-                hotkeyLabel('search.fulltext')
-                  ? `Search in notes (${hotkeyLabel('search.fulltext')})`
-                  : 'Search in notes'
-              }
-            >
-              <TextSearch size={16} />
-            </button>
 
             <button
               onClick={() => createQuickNote()}
@@ -362,7 +349,7 @@ export default function App() {
 
         {/* Bottom status bar — vault + theme + settings */}
         {!focusMode && (
-        <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
+        <footer className="flex items-center justify-end gap-1 px-2 py-1 bg-surface-0 text-text-muted text-[11px] shrink-0">
           <button
             onClick={closeVault}
             className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"

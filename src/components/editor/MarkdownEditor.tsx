@@ -396,36 +396,29 @@ export function MarkdownEditor({ path }: Props) {
     <div className="flex flex-col h-full myc-rooted">
       {isEncryptedPath(path) && <EncryptedNoteBanner path={path} />}
       {!focusMode && (
-        <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
-          <span className="text-xs text-text-muted font-mono">{path}</span>
-          <div className="flex items-center gap-1">
+        <div className="group flex items-center justify-between px-4 pt-2 pb-0.5 shrink-0">
+          <Breadcrumb path={path} />
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               onClick={() =>
                 usePresentationStore
                   .getState()
                   .start(viewRef.current?.state.doc.toString() ?? note.content, path)
               }
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
               title="Present"
             >
-              <Play size={12} /> Play
+              <Play size={13} />
             </button>
             <button
               onClick={() => {
                 slashRangeRef.current = null;
                 setPickerOpen(true);
               }}
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
               title="Insert database"
             >
-              <Database size={12} /> DB
-            </button>
-            <button
-              onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-              className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-              title="Save"
-            >
-              Save
+              <Database size={13} />
             </button>
           </div>
         </div>
@@ -462,6 +455,23 @@ export function MarkdownEditor({ path }: Props) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** `folder › sub › Note` — quiet location line above the text. */
+function Breadcrumb({ path }: { path: string }) {
+  const parts = path.split('/');
+  const name = parts.pop()!.replace(/\.md(\.age)?$/, '');
+  return (
+    <div className="flex items-center gap-1 min-w-0 text-[11px] text-text-muted" title={path}>
+      {parts.map((p, i) => (
+        <span key={i} className="flex items-center gap-1 shrink-0">
+          <span className="truncate max-w-[10rem]">{p}</span>
+          <span className="opacity-50">›</span>
+        </span>
+      ))}
+      <span className="truncate text-text-secondary">{name}</span>
     </div>
   );
 }
