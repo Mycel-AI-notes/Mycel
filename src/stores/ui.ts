@@ -42,6 +42,11 @@ interface UIState {
   rightPanelTab: 'backlinks' | 'outline' | 'tags';
   features: FeatureFlags;
   settingsOpen: boolean;
+  /** Transient overlays. Live in the store rather than `App` state so a
+   *  command (see `lib/app-commands.ts`) can open them from anywhere. */
+  paletteOpen: boolean;
+  quickSwitcherOpen: boolean;
+  graphOpen: boolean;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -52,6 +57,9 @@ interface UIState {
   setFeature: (key: keyof FeatureFlags, value: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  setPaletteOpen: (open: boolean) => void;
+  setQuickSwitcherOpen: (open: boolean) => void;
+  setGraphOpen: (open: boolean) => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -68,6 +76,9 @@ export const useUIStore = create<UIState>()(
       rightPanelTab: 'backlinks',
       features: DEFAULT_FEATURES,
       settingsOpen: false,
+      paletteOpen: false,
+      quickSwitcherOpen: false,
+      graphOpen: false,
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -79,6 +90,9 @@ export const useUIStore = create<UIState>()(
         set((s) => ({ features: { ...s.features, [key]: value } })),
       openSettings: () => set({ settingsOpen: true }),
       closeSettings: () => set({ settingsOpen: false }),
+      setPaletteOpen: (open) => set({ paletteOpen: open }),
+      setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
+      setGraphOpen: (open) => set({ graphOpen: open }),
     }),
     {
       name: 'mycel-ui',

@@ -89,6 +89,7 @@ npm run tauri build
 - 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
+- 🎛️ **Command palette** (`⌘/Ctrl+P`) — every action in the app, fuzzy-searchable, with its hotkey shown next to it. Commands and hotkeys come from one registry, so nothing is reachable only by mouse.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
 
 ### Sense-making
@@ -128,10 +129,16 @@ npm run tauri build
 
 | Shortcut | Action |
 |---|---|
+| `⌘/Ctrl + P` | Command palette |
 | `⌘/Ctrl + O` | Quick switcher (fuzzy file finder) |
 | `⌘/Ctrl + Shift + N` | **Quick note** (works globally, even when Mycel is unfocused) |
 | `⌘/Ctrl + G` | Toggle graph view |
 | `⌘/Ctrl + S` | Save current note (also pins a preview tab) |
+| `⌘/Ctrl + Shift + P` | Present the current note |
+| `⌘/Ctrl + ,` | Settings |
+| `⌘/Ctrl + I` | Garden quick capture |
+| `⌘/Ctrl + Shift + A` | Garden: Next Actions |
+| `` ⌘/Ctrl + ` `` | Garden: toggle the sidebar section |
 | `/` in the editor | Slash command menu |
 | `[[` in the editor | Wikilink autocomplete |
 | Double-click a tab | Pin a preview tab |

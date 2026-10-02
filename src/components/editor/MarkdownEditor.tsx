@@ -41,6 +41,7 @@ import { isEncryptedPath } from '@/lib/note-name';
 import { QUICK_NOTES_DIR } from '@/types';
 import { QuickFilingBar } from './QuickFilingBar';
 import { usePresentationStore } from '@/stores/presentation';
+import { SAVE_EVENT } from '@/lib/app-commands';
 import {
   extFromMime,
   insertImageLink,
@@ -189,16 +190,6 @@ export function MarkdownEditor({ path }: Props) {
   useEffect(() => {
     if (!editorRef.current || !note) return;
 
-    const saveKeymap = keymap.of([
-      {
-        key: 'Mod-s',
-        run: (view) => {
-          handleSave(view.state.doc.toString());
-          return true;
-        },
-      },
-    ]);
-
     const state = EditorState.create({
       doc: note.content,
       extensions: [
@@ -207,7 +198,6 @@ export function MarkdownEditor({ path }: Props) {
         highlightActiveLine(),
         highlightActiveLineGutter(),
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
-        saveKeymap,
         search({ top: true, createPanel: mycelSearchPanel }),
         highlightSelectionMatches(),
         markdown({
@@ -266,6 +256,11 @@ export function MarkdownEditor({ path }: Props) {
       setPickerOpen(true);
     };
     view.dom.addEventListener('mycel:open-db-picker', onOpenDbPicker);
+
+    // Save arrives as an event from the `note.save` command rather than a
+    // CodeMirror keymap, so the hotkey is whatever the user bound it to.
+    const onSaveRequest = () => handleSave(view.state.doc.toString());
+    view.dom.addEventListener(SAVE_EVENT, onSaveRequest);
 
     // ── Paste: capture image bytes from clipboard ──────────────────────
     const onPaste = (e: ClipboardEvent) => {
@@ -342,6 +337,7 @@ export function MarkdownEditor({ path }: Props) {
         liveTimerRef.current = null;
       }
       view.dom.removeEventListener('mycel:open-db-picker', onOpenDbPicker);
+      view.dom.removeEventListener(SAVE_EVENT, onSaveRequest);
       view.dom.removeEventListener('paste', onPaste);
       view.dom.removeEventListener('dragover', onDragOver);
       view.dom.removeEventListener('dragleave', onDragLeave);
@@ -383,7 +379,7 @@ export function MarkdownEditor({ path }: Props) {
                 .start(viewRef.current?.state.doc.toString() ?? note.content, path)
             }
             className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Present (⌘/Ctrl+Shift+P)"
+            title="Present"
           >
             <Play size={12} /> Play
           </button>
@@ -400,7 +396,7 @@ export function MarkdownEditor({ path }: Props) {
           <button
             onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
             className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Save (Ctrl/Cmd+S)"
+            title="Save"
           >
             Save
           </button>
