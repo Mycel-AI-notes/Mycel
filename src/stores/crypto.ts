@@ -60,6 +60,22 @@ export const AUTO_LOCK_IDLE_MS = 5 * 60 * 1000;
  */
 let pendingUnlock: { resolve: () => void; reject: (e: Error) => void } | null = null;
 
+/**
+ * Resolve (and clear) any caller awaiting an unlock via `requireUnlock`.
+ * Called from every flow that leaves the vault unlocked — `unlock`, and
+ * also `setup`/`setPassphrase`, both of which auto-unlock in Rust. Without
+ * this, a note-open that popped the panel in *setup* mode would resolve
+ * nothing: the panel's `onDone` closes it, `closePanel` rejects the
+ * pending promise, and `openNote` treats that as a user cancel — so the
+ * note silently never opens.
+ */
+function resolvePendingUnlock() {
+  if (pendingUnlock) {
+    pendingUnlock.resolve();
+    pendingUnlock = null;
+  }
+}
+
 interface CryptoState {
   status: CryptoStatus | null;
   /** Last error from setup/unlock/encrypt/decrypt. UI surfaces this. */
@@ -159,6 +175,10 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       const recipient = await invoke<string>('crypto_setup', { args: { passphrase } });
       set({ setupStage: 'refresh' });
       await get().refresh();
+      // Setup auto-unlocks the vault in Rust, so a note-open that popped
+      // this panel in setup mode should now proceed. Resolve its pending
+      // promise before `onDone`/`closePanel` can reject it as a cancel.
+      if (get().status?.unlocked) resolvePendingUnlock();
       set({ busy: false, setupStage: null });
       return recipient;
     } catch (e) {
@@ -198,10 +218,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       await get().refresh();
       // If somebody was waiting for an unlock (a click on a locked
       // `.md.age` note, for instance), resolve their promise.
-      if (pendingUnlock) {
-        pendingUnlock.resolve();
-        pendingUnlock = null;
-      }
+      resolvePendingUnlock();
       // Close panel and clear busy in a single update so the unlock
       // dialog vanishes without a flash of ManageView or a re-armed
       // Unlock button in between.
@@ -223,6 +240,9 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       invoke<void>('crypto_set_passphrase', { args: { passphrase } }),
     );
     await get().refresh();
+    // set_passphrase requires (and keeps) an unlocked vault, so anyone
+    // awaiting an unlock can proceed — mirrors `setup`.
+    if (get().status?.unlocked) resolvePendingUnlock();
   },
 
   lock: async () => {
