@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { holdSporeAir } from '@/lib/spore-fx';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { clsx } from 'clsx';
@@ -116,7 +117,7 @@ export function GraphView({ onClose }: Props) {
     folders: true,
     semantic: false,
   });
-  const [, force] = useState(0); // tick re-render trigger
+  const [tick, force] = useState(0); // tick re-render trigger
   const { openNote } = useVaultStore();
   const aiStatus = useAiStore((s) => s.status);
   const aiIndex = useAiStore((s) => s.indexStatus);
@@ -134,6 +135,10 @@ export function GraphView({ onClose }: Props) {
     !!aiStatus?.enabled &&
     !!aiStatus?.has_key &&
     (aiIndex?.chunks_indexed ?? 0) > 0;
+
+  // The graph covers the whole window; stop the spore field underneath
+  // from drawing frames nobody can see.
+  useEffect(() => holdSporeAir(), []);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -400,7 +405,21 @@ export function GraphView({ onClose }: Props) {
       // Mild radial pull toward folder centroid keeps groups compact.
       .force('x', forceX<SimNode>(cx).strength(0.04))
       .force('y', forceY<SimNode>(cy).strength(0.04))
-      .alphaDecay(0.035);
+      .alphaDecay(0.035)
+      // Stop once nodes barely move. The default (0.001) spends the last
+      // third of the run re-rendering sub-pixel jitter.
+      .alphaMin(0.01);
+
+    // Lay most of the graph out before the first paint. Every animated
+    // tick re-renders and repaints every node and edge, and the early,
+    // high-energy ticks are the least interesting to watch; running them
+    // synchronously (within a small time budget) means the graph opens
+    // nearly settled and only the last gentle easing is animated.
+    sim.stop();
+    const warmUntil = performance.now() + 150;
+    for (let i = 0; i < 120 && sim.alpha() > 0.05 && performance.now() < warmUntil; i++) {
+      sim.tick();
+    }
 
     simRef.current = sim;
     let raf = 0;
@@ -409,6 +428,8 @@ export function GraphView({ onClose }: Props) {
       raf = requestAnimationFrame(() => force((n) => n + 1));
     };
     sim.on('tick', onTick);
+    force((n) => n + 1);
+    sim.restart();
 
     return () => {
       sim.stop();
@@ -610,17 +631,29 @@ export function GraphView({ onClose }: Props) {
       const syp = s.y! + (dy / dist) * s.r;
       const exp = t.x! - (dx / dist) * t.r;
       const eyp = t.y! - (dy / dist) * t.r;
+      const d = `M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`;
+      // Glow = a wide, faint stroke under the line. An SVG blur filter per
+      // edge looked the same but re-rasterised every edge on every
+      // simulation tick, which is what made big graphs stutter.
       return (
-        <path
-          key={i}
-          d={`M ${sxp.toFixed(2)} ${syp.toFixed(2)} Q ${cxp.toFixed(2)} ${cyp.toFixed(2)} ${exp.toFixed(2)} ${eyp.toFixed(2)}`}
-          className="stroke-accent"
-          strokeOpacity={0.95}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          fill="none"
-          filter="url(#wiki-glow)"
-        />
+        <g key={i}>
+          <path
+            d={d}
+            className="stroke-accent"
+            strokeOpacity={0.22}
+            strokeWidth={5}
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d={d}
+            className="stroke-accent"
+            strokeOpacity={0.95}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </g>
       );
     }
 
@@ -748,7 +781,6 @@ export function GraphView({ onClose }: Props) {
                   ? 'fill-embedding opacity-25'
                   : 'fill-text-primary opacity-15'
             }
-            style={{ filter: 'blur(5px)' }}
           />
         )}
 
@@ -835,6 +867,48 @@ export function GraphView({ onClose }: Props) {
       </g>
     );
   };
+
+  // The graph body depends on node positions (tick), the model and hover —
+  // not on pan or zoom. Memoising it means panning and zooming update one
+  // <g transform> instead of re-rendering every node and edge.
+  const graphLayers = useMemo(
+    () => (
+      <>
+        {/* Three explicit layers so wiki edges sit above the structural
+            hyphae but still below the nodes. */}
+        <g>
+          {links
+            .filter(
+              (l) =>
+                l.kind === 'contain' ||
+                l.kind === 'external' ||
+                l.kind === 'tag',
+            )
+            .map((l, i) => renderLink(l, i))}
+        </g>
+        <g>
+          {links
+            .filter((l) => l.kind === 'wiki')
+            .map((l, i) => renderLink(l, i))}
+        </g>
+        <g>
+          {/* Semantic edges sit between wiki edges and nodes:
+              above the explicit links (per spec) but below the
+              node circles so a node always wins a click. The
+              dashed + low-opacity styling keeps them from
+              outshouting the glowy wiki layer. */}
+          {links
+            .filter((l) => l.kind === 'semantic')
+            .map((l, i) => renderLink(l, i))}
+        </g>
+        <g>{nodes.map((n) => renderNode(n))}</g>
+      </>
+    ),
+    // renderLink / renderNode are recreated every render but only read
+    // what is listed here (plus refs and stable setters).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick, nodes, links, hover],
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-surface-0 flex flex-col">
@@ -1004,45 +1078,8 @@ export function GraphView({ onClose }: Props) {
           onMouseDown={onBgMouseDown}
           style={{ cursor: panState.current ? 'grabbing' : 'grab' }}
         >
-          <defs>
-            {/* Soft glow used by wiki edges so they read as "alive" connections. */}
-            <filter id="wiki-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="1.6" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
-            {/* Three explicit layers so wiki edges sit above the structural
-                hyphae but still below the nodes. */}
-            <g>
-              {links
-                .filter(
-                  (l) =>
-                    l.kind === 'contain' ||
-                    l.kind === 'external' ||
-                    l.kind === 'tag',
-                )
-                .map((l, i) => renderLink(l, i))}
-            </g>
-            <g>
-              {links
-                .filter((l) => l.kind === 'wiki')
-                .map((l, i) => renderLink(l, i))}
-            </g>
-            <g>
-              {/* Semantic edges sit between wiki edges and nodes:
-                  above the explicit links (per spec) but below the
-                  node circles so a node always wins a click. The
-                  dashed + low-opacity styling keeps them from
-                  outshouting the glowy wiki layer. */}
-              {links
-                .filter((l) => l.kind === 'semantic')
-                .map((l, i) => renderLink(l, i))}
-            </g>
-            <g>{nodes.map((n) => renderNode(n))}</g>
+            {graphLayers}
           </g>
         </svg>
 

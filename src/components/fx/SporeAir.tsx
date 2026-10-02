@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { drawSpore, germinate, sporePalette } from '@/lib/spore-fx';
+import { drawSpore, germinate, sporeAirHeld, sporePalette } from '@/lib/spore-fx';
 
 /**
  * Spores on the air, behind the empty editor and the vault picker.
@@ -162,7 +162,8 @@ export function SporeAir() {
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      if (document.hidden) {
+      // Nothing to draw while the window is hidden or an overlay covers us.
+      if (document.hidden || sporeAirHeld()) {
         last = now;
         return;
       }

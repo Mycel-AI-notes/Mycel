@@ -22,6 +22,25 @@ import { BRANCHES_FULL, type Branch } from '@/components/brand/Spore';
 
 // ── Palette & gating ────────────────────────────────────────────────────
 
+/**
+ * Full-screen overlays (the graph) cover the spore field completely; it
+ * should not keep drawing frames nobody can see while the overlay needs
+ * them. Each holder calls `holdSporeAir()` and the returned release.
+ */
+let airHolds = 0;
+export function holdSporeAir(): () => void {
+  airHolds++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    airHolds--;
+  };
+}
+export function sporeAirHeld(): boolean {
+  return airHolds > 0;
+}
+
 const reducedMotion =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-reduced-motion: reduce)')
