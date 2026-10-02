@@ -371,7 +371,7 @@ export function MarkdownEditor({ path }: Props) {
     );
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full myc-rooted">
       {isEncryptedPath(path) && <EncryptedNoteBanner path={path} />}
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
         <span className="text-xs text-text-muted font-mono">{path}</span>

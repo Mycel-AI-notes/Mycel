@@ -18,6 +18,12 @@ const FEATURE_ROWS: FeatureRow[] = [
     description:
       'Show the Garden section in the sidebar and enable Inbox, Next Actions, Projects, Waiting For, and Someday.',
   },
+  {
+    key: 'sporeMotion',
+    label: 'Spore motion',
+    description:
+      'Living animation: spores drifting on the empty screen, a hypha growing into each note you open, new notes and folders germinating into the Mycel mark. Always off when the system asks to reduce motion.',
+  },
 ];
 
 type Tab = 'features' | 'ai' | 'insights';

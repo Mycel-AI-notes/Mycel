@@ -23,10 +23,14 @@ export const SIDEBAR_DEFAULT_WIDTH = 224;
 /// so a user who hides Garden never has to deal with it again.
 export interface FeatureFlags {
   garden: boolean;
+  /** Living motion: drifting spores, hyphae growing, notes and folders
+   *  germinating into the Mycel mark. */
+  sporeMotion: boolean;
 }
 
 const DEFAULT_FEATURES: FeatureFlags = {
   garden: true,
+  sporeMotion: true,
 };
 
 interface UIState {
@@ -84,6 +88,16 @@ export const useUIStore = create<UIState>()(
         palette: s.palette,
         features: s.features,
       }),
+      // Deep-merge feature flags so a flag added after the user's state was
+      // saved picks up its default instead of reading as `undefined`.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<UIState>;
+        return {
+          ...current,
+          ...p,
+          features: { ...DEFAULT_FEATURES, ...(p.features ?? {}) },
+        };
+      },
     },
   ),
 );

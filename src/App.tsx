@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
+import { useSporeMotionRootClass } from '@/hooks/useSporeMotion';
+import { awaken } from '@/lib/spore-fx';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useGardenStore } from '@/stores/garden';
@@ -61,6 +63,7 @@ const isMac =
 export default function App() {
   useTheme();
   useAutoLock();
+  useSporeMotionRootClass();
 
   const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
@@ -277,6 +280,11 @@ export default function App() {
     };
   }, [vaultRoot]);
 
+  // Each time a vault opens, a spore germinates and the workspace grows in.
+  useEffect(() => {
+    if (vaultRoot) awaken();
+  }, [vaultRoot]);
+
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
   const closeFullText = useCallback(() => setFullTextOpen(false), []);
 
@@ -290,119 +298,121 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
-      {/* Top toolbar */}
-      <header
-        data-tauri-drag-region
-        className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
-          isMac ? 'pl-[78px]' : 'pl-3'
-        }`}
-      >
-        <span
-          className="flex items-center text-accent pl-0.5 pr-1"
-          title="Mycel"
+      <div className="flex flex-col flex-1 min-h-0 myc-awaken">
+        {/* Top toolbar */}
+        <header
+          data-tauri-drag-region
+          className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
+            isMac ? 'pl-[78px]' : 'pl-3'
+          }`}
         >
-          <Logo size={20} />
-        </span>
-
-        <button
-          onClick={toggleSidebar}
-          className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-          title="Toggle sidebar"
-        >
-          {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-
-        {/* Quick Switcher trigger */}
-        <button
-          onClick={() => setQuickSwitcherOpen(true)}
-          className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
-        >
-          <span className="flex-1 text-left">
-            {vaultRoot.split('/').pop() ?? vaultRoot}
+          <span
+            className="flex items-center text-accent pl-0.5 pr-1"
+            title="Mycel"
+          >
+            <Logo size={20} />
           </span>
-          <kbd className="text-[10px] bg-surface-2 px-1 rounded">⌘O</kbd>
-        </button>
-
-        <div className="flex items-center gap-1">
-          <LockBadge />
 
           <button
-            onClick={() => setFullTextOpen(true)}
+            onClick={toggleSidebar}
             className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-            title="Search in notes (⌘⇧F)"
+            title="Toggle sidebar"
           >
-            <TextSearch size={16} />
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
 
+          {/* Quick Switcher trigger */}
           <button
-            onClick={() => createQuickNote()}
-            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-            title="Quick note (⌘⇧N — works globally)"
+            onClick={() => setQuickSwitcherOpen(true)}
+            className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
           >
-            <Zap size={16} />
+            <span className="flex-1 text-left">
+              {vaultRoot.split('/').pop() ?? vaultRoot}
+            </span>
+            <kbd className="text-[10px] bg-surface-2 px-1 rounded">⌘O</kbd>
           </button>
 
-          <button
-            onClick={() => setGraphOpen(true)}
-            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-            title="Graph view (⌘G)"
-          >
-            <Share2 size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <LockBadge />
 
-          <button
-            onClick={toggleRightPanel}
-            className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-            title="Toggle right panel"
-          >
-            {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
-          </button>
+            <button
+              onClick={() => setFullTextOpen(true)}
+              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title="Search in notes (⌘⇧F)"
+            >
+              <TextSearch size={16} />
+            </button>
+
+            <button
+              onClick={() => createQuickNote()}
+              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title="Quick note (⌘⇧N — works globally)"
+            >
+              <Zap size={16} />
+            </button>
+
+            <button
+              onClick={() => setGraphOpen(true)}
+              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title="Graph view (⌘G)"
+            >
+              <Share2 size={16} />
+            </button>
+
+            <button
+              onClick={toggleRightPanel}
+              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title="Toggle right panel"
+            >
+              {rightPanelCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
+            </button>
+          </div>
+        </header>
+
+        {/* Main layout */}
+        <div className="flex flex-1 min-h-0">
+          {!sidebarCollapsed && <Sidebar />}
+
+          {/* Editor area — Garden tabs and notes share the same tab strip. */}
+          <main data-spore-target className="flex flex-col flex-1 min-w-0">
+            <EditorTabs />
+            {activeGardenView ? (
+              <GardenView view={activeGardenView} />
+            ) : isInsightsTabPath(activeTabPath) ? (
+              <InsightsView />
+            ) : activeTabPath && isAttachmentPath(activeTabPath) ? (
+              <ImageViewer key={activeTabPath} path={activeTabPath} />
+            ) : activeTabPath &&
+              !isGardenTabPath(activeTabPath) &&
+              !isInsightsTabPath(activeTabPath) ? (
+              <MarkdownEditor key={activeTabPath} path={activeTabPath} />
+            ) : (
+              <EmptyEditor />
+            )}
+          </main>
+
+          {!rightPanelCollapsed && <RightPanel />}
         </div>
-      </header>
 
-      {/* Main layout */}
-      <div className="flex flex-1 min-h-0">
-        {!sidebarCollapsed && <Sidebar />}
-
-        {/* Editor area — Garden tabs and notes share the same tab strip. */}
-        <main className="flex flex-col flex-1 min-w-0">
-          <EditorTabs />
-          {activeGardenView ? (
-            <GardenView view={activeGardenView} />
-          ) : isInsightsTabPath(activeTabPath) ? (
-            <InsightsView />
-          ) : activeTabPath && isAttachmentPath(activeTabPath) ? (
-            <ImageViewer key={activeTabPath} path={activeTabPath} />
-          ) : activeTabPath &&
-            !isGardenTabPath(activeTabPath) &&
-            !isInsightsTabPath(activeTabPath) ? (
-            <MarkdownEditor key={activeTabPath} path={activeTabPath} />
-          ) : (
-            <EmptyEditor />
-          )}
-        </main>
-
-        {!rightPanelCollapsed && <RightPanel />}
+        {/* Bottom status bar — vault + theme + settings */}
+        <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
+          <button
+            onClick={closeVault}
+            className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Manage vaults — back to vault picker"
+          >
+            <FolderSearch size={14} />
+          </button>
+          <button
+            onClick={openSettings}
+            className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
+            title="Settings"
+          >
+            <SettingsIcon size={14} />
+          </button>
+          <PalettePicker />
+        </footer>
       </div>
-
-      {/* Bottom status bar — vault + theme + settings */}
-      <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
-        <button
-          onClick={closeVault}
-          className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
-          title="Manage vaults — back to vault picker"
-        >
-          <FolderSearch size={14} />
-        </button>
-        <button
-          onClick={openSettings}
-          className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
-          title="Settings"
-        >
-          <SettingsIcon size={14} />
-        </button>
-        <PalettePicker />
-      </footer>
 
       {/* Quick Switcher overlay */}
       {quickSwitcherOpen && <QuickSwitcher onClose={closeQuickSwitcher} />}
