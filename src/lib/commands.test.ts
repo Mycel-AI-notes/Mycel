@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkRebind,
   commandForHotkey,
   commandsBoundTo,
   eventToHotkey,
@@ -159,5 +160,32 @@ describe('commandForHotkey', () => {
 
   it('finds nothing for an unbound key', () => {
     expect(commandForHotkey([cmd('a')], { a: null }, 'Mod+K')).toBeUndefined();
+  });
+});
+
+describe('checkRebind', () => {
+  const commands = [
+    cmd('a'),
+    cmd('b', { defaultHotkey: 'Mod+K' }),
+    cmd('quick', { defaultHotkey: 'Mod+Shift+N', global: true }),
+  ];
+  const bindings = { a: null, b: 'Mod+K', quick: 'Mod+Shift+N' };
+
+  it('accepts a free hotkey', () => {
+    expect(checkRebind(commands, bindings, 'a', 'Mod+J')).toEqual({ kind: 'ok' });
+  });
+
+  it('reports the commands already holding it', () => {
+    expect(checkRebind(commands, bindings, 'a', 'Mod+K')).toEqual({ kind: 'conflict', ids: ['b'] });
+  });
+
+  it('re-pressing a command\'s own hotkey is not a conflict', () => {
+    expect(checkRebind(commands, bindings, 'b', 'Mod+K')).toEqual({ kind: 'ok' });
+  });
+
+  it('refuses a global shortcut, editor keys and bare keys', () => {
+    expect(checkRebind(commands, bindings, 'a', 'Mod+Shift+N').kind).toBe('invalid');
+    expect(checkRebind(commands, bindings, 'a', 'Mod+Z').kind).toBe('invalid');
+    expect(checkRebind(commands, bindings, 'a', 'K').kind).toBe('invalid');
   });
 });

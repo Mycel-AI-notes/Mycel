@@ -90,6 +90,7 @@ npm run tauri build
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
 - 🎛️ **Command palette** (`⌘/Ctrl+P`) — every action in the app, fuzzy-searchable, with its hotkey shown next to it. Commands and hotkeys come from one registry, so nothing is reachable only by mouse.
+- ⌨️ **Configurable hotkeys** — Settings → Hotkeys: click a shortcut, press the new keys. Conflicts are caught before they happen (you're asked before a key is taken from another command), Backspace unbinds, one click resets to the default. Bindings follow the physical key, so they keep working on a non-Latin keyboard layout. The global quick-note shortcut is fixed.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
 
 ### Sense-making
@@ -143,6 +144,8 @@ npm run tauri build
 | `[[` in the editor | Wikilink autocomplete |
 | Double-click a tab | Pin a preview tab |
 | Double-click sidebar resize handle | Reset sidebar width |
+
+Every shortcut except the global quick note can be changed in **Settings → Hotkeys**; the table lists the defaults.
 
 ---
 

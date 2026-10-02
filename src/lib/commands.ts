@@ -255,3 +255,56 @@ export function commandForHotkey(
     (c) => !c.global && bindings[c.id] === hotkey && (c.enabled?.() ?? true),
   );
 }
+
+/**
+ * Hotkeys the editor itself depends on (undo, clipboard, find, select-all…).
+ * The window handler runs after CodeMirror sees the key, so binding a command
+ * here would fire both — undo *and* the command. Refused at capture time.
+ */
+export const EDITOR_RESERVED_HOTKEYS: ReadonlySet<string> = new Set([
+  'Mod+Z',
+  'Mod+Shift+Z',
+  'Mod+Y',
+  'Mod+A',
+  'Mod+C',
+  'Mod+V',
+  'Mod+X',
+  'Mod+F',
+  'Mod+D',
+  'Mod+/',
+  'Mod+[',
+  'Mod+]',
+]);
+
+export type RebindCheck =
+  | { kind: 'ok' }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'conflict'; ids: string[] };
+
+/**
+ * May `commandId` take `hotkey`? `conflict` lists the commands currently
+ * holding it — the caller decides whether to take it from them. A global
+ * command's hotkey is never up for grabs: the OS delivers it to the global
+ * handler before the window sees it.
+ */
+export function checkRebind(
+  commands: Command[],
+  bindings: Bindings,
+  commandId: string,
+  hotkey: string,
+): RebindCheck {
+  if (!isAssignableHotkey(hotkey)) {
+    return { kind: 'invalid', reason: 'Needs ⌘/Ctrl or Alt (or a function key)' };
+  }
+  if (EDITOR_RESERVED_HOTKEYS.has(hotkey)) {
+    return { kind: 'invalid', reason: 'Reserved by the editor' };
+  }
+  const holders = commandsBoundTo(bindings, hotkey, commandId);
+  const global = holders.find((id) => commands.find((c) => c.id === id)?.global);
+  if (global) {
+    const title = commands.find((c) => c.id === global)?.title ?? global;
+    return { kind: 'invalid', reason: `Taken by the global shortcut "${title}"` };
+  }
+  if (holders.length > 0) return { kind: 'conflict', ids: holders };
+  return { kind: 'ok' };
+}

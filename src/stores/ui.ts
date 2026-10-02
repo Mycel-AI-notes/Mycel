@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { HotkeyOverrides } from '@/lib/commands';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -47,6 +48,10 @@ interface UIState {
   paletteOpen: boolean;
   quickSwitcherOpen: boolean;
   graphOpen: boolean;
+  /** User hotkey rebinds by command id; `null` is an explicit unbind. Only
+   *  differences from the defaults are stored, so a default changed in a
+   *  later release still reaches users who never touched that command. */
+  hotkeyOverrides: HotkeyOverrides;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -60,6 +65,8 @@ interface UIState {
   setPaletteOpen: (open: boolean) => void;
   setQuickSwitcherOpen: (open: boolean) => void;
   setGraphOpen: (open: boolean) => void;
+  setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
+  resetHotkey: (commandId: string) => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -79,6 +86,7 @@ export const useUIStore = create<UIState>()(
       paletteOpen: false,
       quickSwitcherOpen: false,
       graphOpen: false,
+      hotkeyOverrides: {},
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -93,6 +101,14 @@ export const useUIStore = create<UIState>()(
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
       setGraphOpen: (open) => set({ graphOpen: open }),
+      setHotkeyOverride: (commandId, hotkey) =>
+        set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
+      resetHotkey: (commandId) =>
+        set((s) => {
+          const next = { ...s.hotkeyOverrides };
+          delete next[commandId];
+          return { hotkeyOverrides: next };
+        }),
     }),
     {
       name: 'mycel-ui',
@@ -101,6 +117,7 @@ export const useUIStore = create<UIState>()(
         theme: s.theme,
         palette: s.palette,
         features: s.features,
+        hotkeyOverrides: s.hotkeyOverrides,
       }),
       // Deep-merge feature flags so a flag added after the user's state was
       // saved picks up its default instead of reading as `undefined`.
