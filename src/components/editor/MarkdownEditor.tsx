@@ -19,6 +19,7 @@ import 'katex/dist/katex.min.css';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { focusDim } from '@/lib/codemirror/focus-dim';
+import { ghostLinks } from '@/lib/codemirror/ghost-link';
 import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
@@ -229,6 +230,11 @@ export function MarkdownEditor({ path }: Props) {
           ],
         ),
         focusCompartment.of(useUIStore.getState().focusMode ? focusDim : []),
+        ghostLinks(
+          () =>
+            useVaultStore.getState().noteCache.get(path)?.parsed?.meta?.title ??
+            path.split('/').pop()?.replace(/\.md$/, ''),
+        ),
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
