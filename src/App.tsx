@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useTheme } from '@/hooks/useTheme';
@@ -8,7 +8,6 @@ import { useSporeMotionRootClass } from '@/hooks/useSporeMotion';
 import { awaken } from '@/lib/spore-fx';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
-import { useGardenStore } from '@/stores/garden';
 import { useRecentVaults } from '@/stores/recentVaults';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { EditorTabs } from '@/components/editor/EditorTabs';
@@ -29,8 +28,12 @@ import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { isInsightsTabPath } from '@/lib/insights-tab';
 import { InsightsView } from '@/components/insights/InsightsView';
 import { isAttachmentPath } from '@/lib/note-name';
-import { getEditorView } from '@/lib/editor-registry';
-import { usePresentationStore } from '@/stores/presentation';
+import { CommandPalette } from '@/components/search/CommandPalette';
+import { TemplatePicker } from '@/components/editor/TemplatePicker';
+import { getAppCommands, QUICK_NOTE_GLOBAL_SHORTCUT } from '@/lib/app-commands';
+import { commandForHotkey, eventToHotkey, formatHotkey } from '@/lib/commands';
+import { isMac } from '@/lib/platform';
+import { useHotkeyBindings } from '@/hooks/useHotkeyBindings';
 import { PresentationOverlay } from '@/components/presentation/PresentationOverlay';
 import { Logo } from '@/components/brand/Logo';
 import { Toasts } from '@/components/ui/Toasts';
@@ -54,30 +57,29 @@ import {
   TextSearch,
 } from 'lucide-react';
 
-const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Shift+N';
-
-const isMac =
-  typeof navigator !== 'undefined' &&
-  /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+const QUICK_NOTE_SHORTCUT = QUICK_NOTE_GLOBAL_SHORTCUT;
 
 export default function App() {
   useTheme();
   useAutoLock();
   useSporeMotionRootClass();
 
-  const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
+  const { vaultRoot, activeTabPath, openVault, closeVault } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
   const gardenEnabled = useUIStore((s) => s.features.garden);
   const openSettings = useUIStore((s) => s.openSettings);
-  const openGardenCapture = useGardenStore((s) => s.openCapture);
-  const toggleGardenSection = useGardenStore((s) => s.toggleSection);
+  const paletteOpen = useUIStore((s) => s.paletteOpen);
+  const templatePickerOpen = useUIStore((s) => s.templatePickerOpen);
+  const quickSwitcherOpen = useUIStore((s) => s.quickSwitcherOpen);
+  const setQuickSwitcherOpen = useUIStore((s) => s.setQuickSwitcherOpen);
+  const graphOpen = useUIStore((s) => s.graphOpen);
+  const setGraphOpen = useUIStore((s) => s.setGraphOpen);
+  const fullTextOpen = useUIStore((s) => s.fullTextOpen);
+  const setFullTextOpen = useUIStore((s) => s.setFullTextOpen);
 
   // Determine which view to render in the main area: a Garden tab, a note,
   // or the empty state.
   const activeGardenView = gardenEnabled ? parseGardenTabPath(activeTabPath ?? '') : null;
-  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
-  const [fullTextOpen, setFullTextOpen] = useState(false);
-  const [graphOpen, setGraphOpen] = useState(false);
   const createQuickNote = useQuickNote();
   const autoOpenAttempted = useRef(false);
 
@@ -100,75 +102,22 @@ export default function App() {
     });
   }, [vaultRoot, openVault]);
 
-  // In-app keyboard shortcuts (Quick Switcher, full-text search, Garden
-  // navigation).
+  // In-window hotkeys. Every binding comes from the command registry
+  // (`lib/app-commands.ts`), so this handler, the palette and the settings
+  // screen can never disagree about what a key does.
+  const bindings = useHotkeyBindings();
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-
-      if (e.key === 'o' || e.key === 'O') {
-        e.preventDefault();
-        if (vaultRoot) setQuickSwitcherOpen(true);
-      } else if (e.shiftKey && (e.key === 'f' || e.key === 'F')) {
-        // Cmd+Shift+F — full-text search. Plain Cmd+F stays with the
-        // editor's in-note find panel.
-        e.preventDefault();
-        if (vaultRoot) {
-          setQuickSwitcherOpen(false);
-          setFullTextOpen(true);
-        }
-      } else if (e.key === 'g' || e.key === 'G') {
-        // Plain Cmd+G keeps Graph; Cmd+Shift+G could be reused later.
-        if (e.shiftKey) return;
-        e.preventDefault();
-        if (vaultRoot) setGraphOpen((g) => !g);
-      } else if (gardenEnabled && (e.key === 'i' || e.key === 'I')) {
-        // Cmd+I — Garden quick capture.
-        e.preventDefault();
-        if (vaultRoot) openGardenCapture();
-      } else if (gardenEnabled && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
-        // Cmd+Shift+A — Open Next Actions.
-        e.preventDefault();
-        if (vaultRoot) openGardenTab({ kind: 'actions' }, { preview: true });
-      } else if (e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        // Cmd+Shift+P — Present the active note. When the active tab isn't a
-        // presentable note (Garden / Insights / attachment / empty) fall back
-        // to opening Garden Projects, which historically owned this chord.
-        const path = activeTabPath;
-        const presentable =
-          !!path &&
-          !isGardenTabPath(path) &&
-          !isInsightsTabPath(path) &&
-          !isAttachmentPath(path);
-        if (presentable) {
-          e.preventDefault();
-          const content =
-            getEditorView(path)?.state.doc.toString() ??
-            useVaultStore.getState().noteCache.get(path)?.content ??
-            '';
-          usePresentationStore.getState().start(content, path);
-        } else if (gardenEnabled && vaultRoot) {
-          e.preventDefault();
-          openGardenTab({ kind: 'projects' }, { preview: true });
-        }
-      } else if (e.key === 's' || e.key === 'S') {
-        // Cmd+S on a Garden tab pins it — there's no document to save, but
-        // the user expects the same "promote preview to pinned" gesture.
-        // For note tabs CodeMirror's keymap handles save+pin already.
-        if (activeTabPath && activeTabPath.startsWith('garden:')) {
-          e.preventDefault();
-          pinTab(activeTabPath);
-        }
-      } else if (gardenEnabled && e.key === '`') {
-        // Cmd+` — toggle Garden section in sidebar (Cmd+G is taken by Graph).
-        e.preventDefault();
-        toggleGardenSection();
-      }
+      const hotkey = eventToHotkey(e, isMac);
+      if (!hotkey) return;
+      const cmd = commandForHotkey(getAppCommands(), bindings, hotkey);
+      if (!cmd) return;
+      e.preventDefault();
+      cmd.run();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [vaultRoot, openGardenCapture, openGardenTab, toggleGardenSection, gardenEnabled, activeTabPath, pinTab]);
+  }, [bindings]);
 
   // OS-wide global shortcut for Quick Note — fires even when the app
   // window isn't focused. Brings the window to front, then creates the note.
@@ -285,8 +234,14 @@ export default function App() {
     if (vaultRoot) awaken();
   }, [vaultRoot]);
 
-  const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
-  const closeFullText = useCallback(() => setFullTextOpen(false), []);
+  /** Tooltip / badge text for a command's current hotkey ('' when unbound). */
+  const hotkeyLabel = (id: string) => {
+    const hk = bindings[id];
+    return hk ? formatHotkey(hk, isMac) : '';
+  };
+
+  const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), [setQuickSwitcherOpen]);
+  const closeFullText = useCallback(() => setFullTextOpen(false), [setFullTextOpen]);
 
   if (!vaultRoot) {
     return (
@@ -329,7 +284,9 @@ export default function App() {
             <span className="flex-1 text-left">
               {vaultRoot.split('/').pop() ?? vaultRoot}
             </span>
-            <kbd className="text-[10px] bg-surface-2 px-1 rounded">⌘O</kbd>
+          {hotkeyLabel('switcher.open') && (
+            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('switcher.open')}</kbd>
+          )}
           </button>
 
           <div className="flex items-center gap-1">
@@ -338,7 +295,11 @@ export default function App() {
             <button
               onClick={() => setFullTextOpen(true)}
               className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-              title="Search in notes (⌘⇧F)"
+              title={
+                hotkeyLabel('search.fulltext')
+                  ? `Search in notes (${hotkeyLabel('search.fulltext')})`
+                  : 'Search in notes'
+              }
             >
               <TextSearch size={16} />
             </button>
@@ -346,7 +307,7 @@ export default function App() {
             <button
               onClick={() => createQuickNote()}
               className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-              title="Quick note (⌘⇧N — works globally)"
+            title={`Quick note (${hotkeyLabel('note.quick')} — works globally)`}
             >
               <Zap size={16} />
             </button>
@@ -354,7 +315,7 @@ export default function App() {
             <button
               onClick={() => setGraphOpen(true)}
               className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-              title="Graph view (⌘G)"
+            title={hotkeyLabel('graph.toggle') ? `Graph view (${hotkeyLabel('graph.toggle')})` : 'Graph view'}
             >
               <Share2 size={16} />
             </button>
@@ -417,8 +378,14 @@ export default function App() {
       {/* Quick Switcher overlay */}
       {quickSwitcherOpen && <QuickSwitcher onClose={closeQuickSwitcher} />}
 
-      {/* Full-text search overlay (⌘⇧F) */}
+      {/* Command palette (⌘P) */}
+      {paletteOpen && <CommandPalette />}
+
+      {/* Full-text search overlay */}
       {fullTextOpen && <FullTextSearch onClose={closeFullText} />}
+
+      {/* Template picker — palette "Insert template…" and `/template` */}
+      {templatePickerOpen && <TemplatePicker />}
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}

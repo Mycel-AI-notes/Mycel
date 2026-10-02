@@ -67,7 +67,10 @@ interface VaultState {
   /** Update in-memory cached content + reparsed body so live panels (outline,
    *  tags, wikilinks) reflect what the user is typing without hitting disk. */
   updateNoteLive: (path: string, content: string) => void;
-  createNote: (path: string) => Promise<void>;
+  /** Create a note that does not exist yet and open it. `content` defaults
+   *  to a heading named after the file. Rejects — never overwrites — when
+   *  the path is taken. */
+  createNote: (path: string, content?: string) => Promise<void>;
   createFolder: (path: string) => Promise<void>;
   deleteNote: (path: string) => Promise<void>;
   renameNote: (oldPath: string, newPath: string) => Promise<void>;
@@ -641,8 +644,8 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     set({ pendingConflict: null });
   },
 
-  createNote: async (path) => {
-    const note = await invoke<Note>('note_create', { path });
+  createNote: async (path, content) => {
+    const note = await invoke<Note>('note_create', { path, content: content ?? null });
     set((s) => {
       const next = new Map(s.noteCache);
       next.set(path, note);

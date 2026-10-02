@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Sparkles, SlidersHorizontal, X } from 'lucide-react';
+import { FileText, Keyboard, Sparkles, SlidersHorizontal, X } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
 import type { FeatureFlags } from '@/stores/ui';
 import { AISettings } from '@/components/settings/AISettings';
 import { InsightsSettings } from '@/components/settings/InsightsSettings';
+import { HotkeySettings } from '@/components/settings/HotkeySettings';
+import { NotesSettings } from '@/components/settings/NotesSettings';
 
 interface FeatureRow {
   key: keyof FeatureFlags;
@@ -26,10 +28,12 @@ const FEATURE_ROWS: FeatureRow[] = [
   },
 ];
 
-type Tab = 'features' | 'ai' | 'insights';
+type Tab = 'features' | 'notes' | 'hotkeys' | 'ai' | 'insights';
 
 const TABS: { id: Tab; label: string; icon: typeof Sparkles }[] = [
   { id: 'features', label: 'Features', icon: SlidersHorizontal },
+  { id: 'notes', label: 'Notes', icon: FileText },
+  { id: 'hotkeys', label: 'Hotkeys', icon: Keyboard },
   { id: 'ai', label: 'AI', icon: Sparkles },
   { id: 'insights', label: 'Insights', icon: Sparkles },
 ];
@@ -122,6 +126,10 @@ export function SettingsDialog() {
                 ))}
               </ul>
             )}
+
+            {tab === 'notes' && <NotesSettings />}
+
+            {tab === 'hotkeys' && <HotkeySettings />}
 
             {tab === 'ai' && <AISettings />}
 

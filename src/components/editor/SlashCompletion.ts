@@ -6,6 +6,7 @@ import {
 import type { EditorView } from '@codemirror/view';
 import { insertTableFence } from '@/lib/table/insert';
 import { open } from '@tauri-apps/plugin-dialog';
+import { useUIStore } from '@/stores/ui';
 import {
   insertImageLink,
   saveAttachmentFile,
@@ -81,6 +82,20 @@ const COMMANDS: SlashCommand[] = [
         changes: { from, to, insert: text },
         selection: { anchor: from + 1 },
       });
+    },
+  },
+  {
+    label: 'Template',
+    detail: 'Insert a note from the templates folder',
+    keywords: ['template', 'tpl', 'snippet', 'boilerplate'],
+    run: (view, from, to) => {
+      // Drop the slash trigger and leave the caret where it was: the picker
+      // inserts at the cursor once the user chooses.
+      view.dispatch({
+        changes: { from, to, insert: '' },
+        selection: { anchor: from },
+      });
+      useUIStore.getState().setTemplatePickerOpen(true);
     },
   },
   {

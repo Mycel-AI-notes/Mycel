@@ -26,29 +26,33 @@ function existingStems(tree: FileEntry[], day: string): Set<string> {
   return out;
 }
 
+/** Create a timestamped note under `quick/YYYY-MM-DD/` and open it. Plain
+ *  function (not only a hook) so the command registry and the global
+ *  shortcut can call it without a component in between. */
+export async function createQuickNote(): Promise<void> {
+  const { vaultRoot, fileTree, createNote } = useVaultStore.getState();
+  if (!vaultRoot) return;
+
+  const d = new Date();
+  const day = todayFolder(d);
+  const base = timeStem(d);
+  const taken = existingStems(fileTree, day);
+
+  let stem = base;
+  let suffix = 1;
+  while (taken.has(stem) && suffix < 1000) {
+    stem = `${base}-${suffix}`;
+    suffix++;
+  }
+
+  const path = `${QUICK_NOTES_DIR}/${day}/${stem}.md`;
+  try {
+    await createNote(path);
+  } catch (e) {
+    console.error('Failed to create quick note:', e);
+  }
+}
+
 export function useQuickNote() {
-  const { vaultRoot, createNote } = useVaultStore();
-
-  return useCallback(async () => {
-    if (!vaultRoot) return;
-
-    const d = new Date();
-    const day = todayFolder(d);
-    const base = timeStem(d);
-    const taken = existingStems(useVaultStore.getState().fileTree, day);
-
-    let stem = base;
-    let suffix = 1;
-    while (taken.has(stem) && suffix < 1000) {
-      stem = `${base}-${suffix}`;
-      suffix++;
-    }
-
-    const path = `${QUICK_NOTES_DIR}/${day}/${stem}.md`;
-    try {
-      await createNote(path);
-    } catch (e) {
-      console.error('Failed to create quick note:', e);
-    }
-  }, [vaultRoot, createNote]);
+  return useCallback(() => createQuickNote(), []);
 }

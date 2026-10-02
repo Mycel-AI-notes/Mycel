@@ -6,6 +6,7 @@ import { useVaultStore } from '@/stores/vault';
 import { useAiStore } from '@/stores/ai';
 import { DisconnectedSpore } from '@/components/brand/Spore';
 import { reciprocalRankFusion, type FusedItem } from '@/lib/rrf';
+import { fuzzyMatch, fuzzyScore } from '@/lib/fuzzy';
 
 interface NoteSummary {
   path: string;
@@ -30,26 +31,6 @@ const SEMANTIC_DEBOUNCE_MS = 250;
 // Max notes to show. Spec calls for 10 — small enough to scan, big
 // enough that semantic hits past the keyword top still surface.
 const RESULT_LIMIT = 10;
-
-function fuzzyMatch(query: string, text: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < t.length && qi < q.length; i++) {
-    if (t[i] === q[qi]) qi++;
-  }
-  return qi === q.length;
-}
-
-function fuzzyScore(query: string, text: string): number {
-  if (!query) return 0;
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  if (t.startsWith(q)) return 100;
-  if (t.includes(q)) return 50;
-  return 10;
-}
 
 interface ResultRow {
   path: string;

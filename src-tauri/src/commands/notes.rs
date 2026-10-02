@@ -237,8 +237,25 @@ fn is_same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
     }
 }
 
+/// What a freshly created note contains: the caller's text when it supplied
+/// some (a daily note rendered from its template), otherwise a heading named
+/// after the file.
+fn initial_note_content(stem: &str, content: Option<String>) -> String {
+    match content {
+        Some(text) => text,
+        None => format!("{}\n\n", auto_heading(stem)),
+    }
+}
+
+/// Create a note that does not exist yet. `content` is optional; without it
+/// the note starts as a bare heading. Either way an existing file is never
+/// touched — see the guard below.
 #[tauri::command]
-pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Note, String> {
+pub async fn note_create(
+    path: String,
+    content: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Note, String> {
     if !is_safe_rel_path(&path) {
         return Err("Invalid note path".into());
     }
@@ -264,7 +281,7 @@ pub async fn note_create(path: String, state: State<'_, AppState>) -> Result<Not
         }
     }
 
-    let initial = format!("{}\n\n", auto_heading(&stem));
+    let initial = initial_note_content(&stem, content);
     let disk_hash = note_save(path.clone(), initial.clone(), state.clone()).await?;
     let parsed = parse_note(&initial);
     Ok(Note {
@@ -883,6 +900,19 @@ mod tests {
     }
 
     // ---- path helpers -----------------------------------------------------
+
+    #[test]
+    fn a_new_note_without_content_starts_with_its_heading() {
+        assert_eq!(initial_note_content("2026-10-02", None), "# 2026-10-02\n\n");
+    }
+
+    #[test]
+    fn a_new_note_keeps_supplied_content_verbatim() {
+        // A daily note rendered from its template must land exactly as
+        // rendered — no heading prepended on top of the template's own.
+        let text = "---\ntags: [daily]\n---\n# Friday\n".to_string();
+        assert_eq!(initial_note_content("2026-10-02", Some(text.clone())), text);
+    }
 
     #[test]
     fn rel_parent_and_name_split_a_path() {

@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { HotkeyOverrides } from '@/lib/commands';
+import { DEFAULT_TEMPLATES_FOLDER } from '@/lib/templates';
+import { DEFAULT_DAILY_FOLDER } from '@/lib/daily-notes';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -42,6 +45,24 @@ interface UIState {
   rightPanelTab: 'backlinks' | 'outline' | 'tags';
   features: FeatureFlags;
   settingsOpen: boolean;
+  /** Transient overlays. Live in the store rather than `App` state so a
+   *  command (see `lib/app-commands.ts`) can open them from anywhere. */
+  paletteOpen: boolean;
+  quickSwitcherOpen: boolean;
+  fullTextOpen: boolean;
+  graphOpen: boolean;
+  /** User hotkey rebinds by command id; `null` is an explicit unbind. Only
+   *  differences from the defaults are stored, so a default changed in a
+   *  later release still reaches users who never touched that command. */
+  hotkeyOverrides: HotkeyOverrides;
+  /** Vault-relative folder whose `.md` files are offered as templates. */
+  templatesFolder: string;
+  templatePickerOpen: boolean;
+  /** Vault-relative folder holding `YYYY-MM-DD.md` daily notes. */
+  dailyFolder: string;
+  /** Template path for new daily notes; empty means "a template named
+   *  `daily` in the templates folder, if there is one". */
+  dailyTemplate: string;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -52,6 +73,16 @@ interface UIState {
   setFeature: (key: keyof FeatureFlags, value: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  setPaletteOpen: (open: boolean) => void;
+  setQuickSwitcherOpen: (open: boolean) => void;
+  setFullTextOpen: (open: boolean) => void;
+  setGraphOpen: (open: boolean) => void;
+  setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
+  resetHotkey: (commandId: string) => void;
+  setTemplatesFolder: (folder: string) => void;
+  setTemplatePickerOpen: (open: boolean) => void;
+  setDailyFolder: (folder: string) => void;
+  setDailyTemplate: (path: string) => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -68,6 +99,15 @@ export const useUIStore = create<UIState>()(
       rightPanelTab: 'backlinks',
       features: DEFAULT_FEATURES,
       settingsOpen: false,
+      paletteOpen: false,
+      quickSwitcherOpen: false,
+      fullTextOpen: false,
+      graphOpen: false,
+      hotkeyOverrides: {},
+      templatesFolder: DEFAULT_TEMPLATES_FOLDER,
+      templatePickerOpen: false,
+      dailyFolder: DEFAULT_DAILY_FOLDER,
+      dailyTemplate: '',
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -79,6 +119,22 @@ export const useUIStore = create<UIState>()(
         set((s) => ({ features: { ...s.features, [key]: value } })),
       openSettings: () => set({ settingsOpen: true }),
       closeSettings: () => set({ settingsOpen: false }),
+      setPaletteOpen: (open) => set({ paletteOpen: open }),
+      setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
+      setFullTextOpen: (open) => set({ fullTextOpen: open }),
+      setGraphOpen: (open) => set({ graphOpen: open }),
+      setHotkeyOverride: (commandId, hotkey) =>
+        set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
+      setTemplatesFolder: (folder) => set({ templatesFolder: folder }),
+      setTemplatePickerOpen: (open) => set({ templatePickerOpen: open }),
+      setDailyFolder: (folder) => set({ dailyFolder: folder }),
+      setDailyTemplate: (path) => set({ dailyTemplate: path }),
+      resetHotkey: (commandId) =>
+        set((s) => {
+          const next = { ...s.hotkeyOverrides };
+          delete next[commandId];
+          return { hotkeyOverrides: next };
+        }),
     }),
     {
       name: 'mycel-ui',
@@ -87,6 +143,10 @@ export const useUIStore = create<UIState>()(
         theme: s.theme,
         palette: s.palette,
         features: s.features,
+        hotkeyOverrides: s.hotkeyOverrides,
+        templatesFolder: s.templatesFolder,
+        dailyFolder: s.dailyFolder,
+        dailyTemplate: s.dailyTemplate,
       }),
       // Deep-merge feature flags so a flag added after the user's state was
       // saved picks up its default instead of reading as `undefined`.

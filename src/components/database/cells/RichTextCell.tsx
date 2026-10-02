@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useVaultStore } from '@/stores/vault';
+import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
 
 interface Props {
   value: string;
@@ -50,16 +51,12 @@ export function RichTextCell({ value, editing, onChange, onCommit }: Props) {
   }, [editing, value]);
 
   async function resolveAndOpen(target: string): Promise<string | null> {
-    const stem = target.toLowerCase();
-    const notes = await import('@tauri-apps/api/core').then((m) =>
-      m.invoke<{ path: string; title: string }[]>('notes_list'),
-    );
-    const found =
-      notes.find((n) => n.path.split('/').pop()?.replace(/\.md$/, '').toLowerCase() === stem) ??
-      notes.find((n) => n.title.toLowerCase() === stem);
+    // Same resolver as editor links, so a cell link and a note link to the
+    // same name always land on the same note (aliases included).
+    const found = await resolveWikilink(target);
     if (found) {
-      await openNote(found.path);
-      return found.path;
+      await openNote(found);
+      return found;
     }
     await createNote(`${target}.md`);
     return null;

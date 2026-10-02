@@ -84,12 +84,18 @@ npm run tauri build
 
 - ✍️  **CodeMirror 6 editor** with Markdown syntax, inline preview decorations, fenced code blocks with per-language highlighting, and autocomplete.
 - 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you. Renaming a note **rewrites every link to it** across the vault — aliases, anchors, embeds and folder paths included — so a rename never leaves a trail of broken references.
+- 🪟 **Embeds** — `![[Note]]` shows the note right in the editor as a read-only card; `![[Note#Heading]]` shows just that section, and `![[pic.png]]` shows the picture wherever it lives in the vault. Click the card's title to open the note. Embeds go one level deep (a nested `![[…]]` renders as a link), so notes embedding each other can't loop, and they count as links in backlinks.
+- 🏷️ **Aliases** — `aliases: [ML, Machine learning]` in frontmatter (a YAML list or a single string works too) lets `[[ML]]` reach the note. Aliases show up in `[[` autocomplete and count in backlinks and the graph. A note actually *named* `ML` still wins — aliases never steal links.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
+- 📅 **Daily notes** (`⌘/Ctrl+Shift+D`) — opens today's `daily/YYYY-MM-DD.md`, creating it from your daily template when it doesn't exist yet (an existing note is never overwritten). *Previous / Next daily note* in the palette step through the days you actually wrote. Folder and template are set in Settings → Notes.
+- 🧩 **Templates** — drop `.md` files in `templates/` (folder configurable in Settings → Notes), then `/template` or *Insert template…* in the palette inserts one at the cursor. Variables: `{{title}}`, `{{date}}`, `{{time}}`, and `{{date:DD.MM.YYYY HH:mm}}` with the tokens `YYYY MM DD HH mm`.
 - 📊 **Editable GFM tables** rendered as styled blocks; inline Markdown (links, wikilinks, bold) renders *inside* cells and stays clickable.
 - 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
 - 🔎 **Full-text search** (`⌘/Ctrl+Shift+F`) — search the *contents* of every note, as you type, fully offline and without an AI key. A local SQLite FTS5 index (`.mycel/search.db`) kept fresh by the file watcher; Cyrillic and Latin alike, accent- and `ё`/`е`-insensitive, prefix matching. Operators: `"exact phrase"`, `-exclude`, `a OR b`, plus `path:`, `file:` and `tag:` filters. Results are grouped by note with highlighted snippets; `Enter` jumps straight to the matching line. Encrypted notes are never indexed.
+- 🎛️ **Command palette** (`⌘/Ctrl+P`) — every action in the app, fuzzy-searchable, with its hotkey shown next to it. Commands and hotkeys come from one registry, so nothing is reachable only by mouse.
+- ⌨️ **Configurable hotkeys** — Settings → Hotkeys: click a shortcut, press the new keys. Conflicts are caught before they happen (you're asked before a key is taken from another command), Backspace unbinds, one click resets to the default. Bindings follow the physical key, so they keep working on a non-Latin keyboard layout. The global quick-note shortcut is fixed.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
 
 ### Sense-making
@@ -129,15 +135,24 @@ npm run tauri build
 
 | Shortcut | Action |
 |---|---|
+| `⌘/Ctrl + P` | Command palette |
 | `⌘/Ctrl + O` | Quick switcher (fuzzy file finder) |
 | `⌘/Ctrl + Shift + F` | Full-text search across note contents |
 | `⌘/Ctrl + Shift + N` | **Quick note** (works globally, even when Mycel is unfocused) |
 | `⌘/Ctrl + G` | Toggle graph view |
 | `⌘/Ctrl + S` | Save current note (also pins a preview tab) |
-| `/` in the editor | Slash command menu |
+| `⌘/Ctrl + Shift + P` | Present the current note |
+| `⌘/Ctrl + Shift + D` | Open today's daily note |
+| `⌘/Ctrl + ,` | Settings |
+| `⌘/Ctrl + I` | Garden quick capture |
+| `⌘/Ctrl + Shift + A` | Garden: Next Actions |
+| `` ⌘/Ctrl + ` `` | Garden: toggle the sidebar section |
+| `/` in the editor | Slash command menu (`/template` inserts a template) |
 | `[[` in the editor | Wikilink autocomplete |
 | Double-click a tab | Pin a preview tab |
 | Double-click sidebar resize handle | Reset sidebar width |
+
+Every shortcut except the global quick note can be changed in **Settings → Hotkeys**; the table lists the defaults.
 
 ---
 
