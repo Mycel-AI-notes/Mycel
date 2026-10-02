@@ -446,26 +446,23 @@ pub async fn quick_note_suggest(
     };
     out.ai_available = true;
 
-    // Freshen the whole index, not just this note: on a vault that was
-    // never indexed there is nothing to match against otherwise.
+    // Index this note so it can be matched at all. Only a vault that has
+    // never been indexed gets the full walk — see `freshen_for_suggest`.
     {
         let _guard = ai.indexing.lock().await;
         let embedder = crate::core::ai::embedder::OpenRouterEmbedder::new(
             key.clone(),
             cfg.embedding_model.clone(),
         );
-        if let Err(e) = crate::core::ai::indexer::bulk_reindex(
+        crate::core::ai::indexer::freshen_for_suggest(
             &ai.store,
             &embedder,
             &vault_root,
+            &path,
             cfg.daily_budget_usd,
             &cfg.embedding_model,
-            |_p| {},
         )
-        .await
-        {
-            eprintln!("quick_note_suggest: reindex failed: {e:#}");
-        }
+        .await;
     }
 
     let min_similarity = {
@@ -858,4 +855,147 @@ pub async fn tree_reorder(
     order.insert(parent, names);
     write_tree_order(&vault_root, &order).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write(root: &std::path::Path, rel: &str, body: &str) {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+
+    // ---- path helpers -----------------------------------------------------
+
+    #[test]
+    fn rel_parent_and_name_split_a_path() {
+        assert_eq!(rel_parent("a/b/c.md"), "a/b");
+        assert_eq!(rel_name("a/b/c.md"), "c.md");
+    }
+
+    #[test]
+    fn a_top_level_entry_has_an_empty_parent() {
+        // `""` is the key the tree-order registry uses for the vault root.
+        assert_eq!(rel_parent("note.md"), "");
+        assert_eq!(rel_name("note.md"), "note.md");
+    }
+
+    #[test]
+    fn the_managed_folders_are_protected() {
+        assert!(is_protected(KNOWLEDGE_BASE_DIR));
+        assert!(is_protected(QUICK_NOTES_DIR));
+        // Only the roots themselves — a note inside them is ordinary.
+        assert!(!is_protected("quick/2026-09-30/10-00-00.md"));
+        assert!(!is_protected("Knowledge Base/page.md"));
+        assert!(!is_protected("notes.md"));
+    }
+
+    // ---- hashing ----------------------------------------------------------
+
+    #[test]
+    fn hash_is_stable_and_hex() {
+        let h = hash_bytes(b"hello");
+        assert_eq!(h.len(), 64, "sha-256 is 32 bytes, hex-encoded");
+        assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(h, hash_bytes(b"hello"));
+    }
+
+    #[test]
+    fn hash_distinguishes_content() {
+        // This is what the save path compares to detect an outside change, so
+        // a one-byte difference has to register.
+        assert_ne!(hash_bytes(b"hello"), hash_bytes(b"hello "));
+        assert_ne!(hash_bytes(b""), hash_bytes(b"\n"));
+    }
+
+    // ---- is_same_file -----------------------------------------------------
+
+    #[test]
+    fn a_file_is_the_same_as_itself() {
+        // Why it exists: on a case-insensitive filesystem `Notes.md` reports as
+        // existing when only `notes.md` does, and a case-only rename must not
+        // be mistaken for overwriting another file.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "x");
+
+        assert!(is_same_file(&root.join("note.md"), &root.join("note.md")));
+    }
+
+    #[test]
+    fn two_different_files_are_not_the_same() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "x");
+        write(root, "b.md", "x");
+
+        assert!(!is_same_file(&root.join("a.md"), &root.join("b.md")));
+    }
+
+    #[test]
+    fn a_missing_path_is_never_the_same_file() {
+        // `canonicalize` fails on a path that does not exist, and the guard
+        // must read that as "not the same" rather than as a match.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "x");
+
+        assert!(!is_same_file(&root.join("a.md"), &root.join("gone.md")));
+        assert!(!is_same_file(&root.join("gone.md"), &root.join("gone.md")));
+    }
+
+    // ---- vault_folders ----------------------------------------------------
+
+    #[test]
+    fn vault_folders_lists_folders_to_depth_two() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("projects/active")).unwrap();
+        std::fs::create_dir_all(root.join("areas")).unwrap();
+        std::fs::create_dir_all(root.join("a/b/c")).unwrap();
+
+        let folders = vault_folders(root);
+
+        assert!(folders.contains(&"projects".to_string()));
+        assert!(folders.contains(&"projects/active".to_string()));
+        assert!(folders.contains(&"areas".to_string()));
+        assert!(
+            !folders.contains(&"a/b/c".to_string()),
+            "depth 3 is past the limit"
+        );
+    }
+
+    #[test]
+    fn vault_folders_excludes_quick_capture_and_dot_dirs() {
+        // The LLM may propose a folder for a brand-new note; offering it the
+        // capture folder would defeat the point of filing.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(QUICK_NOTES_DIR).join("2026-09-30")).unwrap();
+        std::fs::create_dir_all(root.join(".mycel/ai")).unwrap();
+        std::fs::create_dir_all(root.join("keep")).unwrap();
+
+        let folders = vault_folders(root);
+
+        assert!(folders.contains(&"keep".to_string()));
+        assert!(!folders.iter().any(|f| f.starts_with(QUICK_NOTES_DIR)));
+        assert!(!folders.iter().any(|f| f.starts_with('.')));
+    }
+
+    #[test]
+    fn vault_folders_is_sorted() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        for name in ["zebra", "apple", "mango"] {
+            std::fs::create_dir_all(root.join(name)).unwrap();
+        }
+
+        let folders = vault_folders(root);
+        let mut sorted = folders.clone();
+        sorted.sort();
+        assert_eq!(folders, sorted);
+    }
 }

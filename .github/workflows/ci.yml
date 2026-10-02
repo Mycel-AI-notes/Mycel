@@ -56,9 +56,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # No setup action: `rust-toolchain.toml` at the repo root is the single
+      # source of truth, and rustup (preinstalled on the runner) installs and
+      # selects it on the first cargo call. Naming a version here too would be
+      # a second place to forget to update.
+      - name: Show toolchain
+        run: rustup show active-toolchain && cargo --version && cargo clippy --version
 
       # Keep this list in sync with the Linux prerequisites in the README.
       - name: Install Tauri system dependencies
