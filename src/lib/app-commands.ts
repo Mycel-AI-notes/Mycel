@@ -105,6 +105,14 @@ export function getAppCommands(): Command[] {
       run: () => useUIStore.getState().setPaletteOpen(true),
     },
     {
+      id: 'omnibar.open',
+      title: 'Search notes and commands',
+      section: 'Navigation',
+      defaultHotkey: 'Mod+K',
+      enabled: vaultOpen,
+      run: () => useUIStore.getState().setQuickSwitcherOpen(true),
+    },
+    {
       id: 'switcher.open',
       title: 'Quick switcher: open note',
       section: 'Navigation',
@@ -119,11 +127,8 @@ export function getAppCommands(): Command[] {
       // Plain Mod+F stays with the editor's in-note find panel.
       defaultHotkey: 'Mod+Shift+F',
       enabled: vaultOpen,
-      run: () => {
-        const ui = useUIStore.getState();
-        ui.setQuickSwitcherOpen(false);
-        ui.setFullTextOpen(true);
-      },
+      // Same box as ⌘K — it searches inside notes too.
+      run: () => useUIStore.getState().setQuickSwitcherOpen(true),
     },
     {
       id: 'note.quick',
@@ -251,6 +256,23 @@ export function getAppCommands(): Command[] {
       section: 'View',
       enabled: vaultOpen,
       run: () => useUIStore.getState().toggleRightPanel(),
+    },
+    {
+      id: 'view.focus',
+      title: 'Toggle focus mode',
+      section: 'View',
+      defaultHotkey: 'Mod+.',
+      enabled: () => !!activeNotePath() || useUIStore.getState().focusMode,
+      run: () => useUIStore.getState().toggleFocusMode(),
+    },
+    {
+      id: 'view.readableWidth',
+      title: 'Toggle readable line width',
+      section: 'View',
+      run: () => {
+        const ui = useUIStore.getState();
+        ui.setFeature('readableWidth', !ui.features.readableWidth);
+      },
     },
     {
       id: 'view.toggleTheme',

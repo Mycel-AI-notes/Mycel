@@ -40,7 +40,7 @@ export function EditorTabs() {
   if (openTabs.length === 0) return null;
 
   return (
-    <div className="flex items-center border-b border-border bg-surface-0 overflow-x-auto shrink-0">
+    <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 bg-surface-1 overflow-x-auto shrink-0">
       {openTabs.map((tab) => {
         const SyntheticIcon = syntheticTabIcon(tab.path);
         return (
@@ -50,10 +50,10 @@ export function EditorTabs() {
           onDoubleClick={() => pinTab(tab.path)}
           title={tab.isPreview ? 'Preview tab — double-click or save to pin' : tab.path}
           className={clsx(
-            'flex items-center gap-1.5 px-3 py-1.5 text-sm border-r border-border shrink-0 max-w-[180px] group',
+            'flex items-center gap-1.5 pl-3 pr-1.5 py-1 text-[13px] rounded-md shrink-0 max-w-[200px] group transition-colors',
             tab.path === activeTabPath
-              ? 'bg-surface-1 text-text-primary'
-              : 'text-text-muted hover:text-text-secondary hover:bg-surface-1/50',
+              ? 'bg-surface-hover text-text-primary'
+              : 'text-text-muted hover:text-text-secondary hover:bg-surface-2',
             tab.isPreview && 'italic',
           )}
         >
@@ -82,7 +82,7 @@ export function EditorTabs() {
               closeTab(tab.path);
             }}
             className={clsx(
-              'p-0.5 rounded hover:bg-surface-hover shrink-0',
+              'p-0.5 rounded-full hover:bg-surface-2 shrink-0',
               tab.isDirty
                 ? 'opacity-100'
                 : 'opacity-0 group-hover:opacity-100',

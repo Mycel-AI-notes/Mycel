@@ -9,8 +9,6 @@ import { BRANCHES_FULL, type Branch } from '@/components/brand/Spore';
  *   germinate  → a spore sprouts the Mycel mark: the same asymmetric hyphae,
  *                mid-buds, Y-fork and terminal spores as the logo, grown
  *                live (a vault opening, a note or folder being born, a click)
- *   reach      → a single hypha grows from one place to another and roots
- *                where it lands (a note travelling from the tree to the editor)
  *
  * Rules, so none of it gets in the way of writing:
  *   - the canvas never takes pointer events;
@@ -459,87 +457,6 @@ export function germinate(x: number, y: number, opts: GerminateOptions = {}) {
 export function germinateAt(el: Element, opts?: GerminateOptions) {
   const { x, y } = centerOf(iconOf(el));
   germinate(x, y, opts);
-}
-
-/**
- * A single hypha grows from `from` to `to`, budding on the way, and roots
- * into a small mark where it lands. Resolves on arrival.
- */
-export function reach(from: Element, to: Element): Promise<void> {
-  if (!sporeMotionEnabled() || !ensureCanvas()) return Promise.resolve();
-  const { x: x0, y: y0 } = centerOf(iconOf(from));
-  // Land where the note's first line will appear (below tabs + path bar).
-  const tr = to.getBoundingClientRect();
-  const x1 = tr.left + Math.min(72, tr.width / 2);
-  const y1 = tr.top + Math.min(110, tr.height / 2);
-  const dist = Math.hypot(x1 - x0, y1 - y0);
-  // Hyphae wander: bow the path, a little differently each time.
-  const bow = (Math.random() < 0.5 ? -1 : 1) * Math.max(30, dist * 0.16);
-  const nx = -(y1 - y0) / (dist || 1);
-  const ny = (x1 - x0) / (dist || 1);
-  const q: Quad = {
-    x0,
-    y0,
-    cx: (x0 + x1) / 2 + nx * bow,
-    cy: (y0 + y1) / 2 + ny * bow,
-    x1,
-    y1,
-  };
-  const grow = Math.min(0.5, 0.26 + dist / 3000);
-
-  // Side buds along the way: short lateral hyphae branching off as the
-  // main one passes.
-  for (const at of [0.32, 0.58, 0.8]) {
-    const [bx, by] = quadAt(q, at);
-    const [ax, ay] = quadAt(q, at + 0.01);
-    const along = Math.atan2(ay - by, ax - bx);
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const ang = along + side * rad(40 + Math.random() * 25);
-    const l = 8 + Math.random() * 8;
-    alive.push({
-      kind: 'hypha',
-      q: {
-        x0: bx,
-        y0: by,
-        cx: bx + Math.cos(ang) * l * 0.5 + Math.cos(along) * 3,
-        cy: by + Math.sin(ang) * l * 0.5 + Math.sin(along) * 3,
-        x1: bx + Math.cos(ang) * l,
-        y1: by + Math.sin(ang) * l,
-      },
-      width: 1,
-      delay: grow * easeInOutInverse(at),
-      grow: 0.14,
-      hold: 0.25,
-      fade: 0.3,
-      age: 0,
-      tip: 1.2,
-    });
-  }
-
-  return new Promise((resolve) => {
-    alive.push({
-      kind: 'hypha',
-      q,
-      width: 1.4,
-      delay: 0,
-      grow,
-      hold: 0.25,
-      fade: 0.35,
-      age: 0,
-      tip: 0,
-      onTip: () => {
-        germinate(x1, y1, { size: 14, spores: true, hold: 0.15 });
-        resolve();
-      },
-    });
-    start();
-  });
-}
-
-/** Rough inverse of the hypha growth easing, to time buds to the tip. */
-function easeInOutInverse(p: number): number {
-  // easeOut(g) = p  →  g = 1 - (1 - p)^(1/3)
-  return 1 - Math.cbrt(1 - p);
 }
 
 /**
