@@ -10,6 +10,7 @@ import {
   FileText,
   Folder,
   Link as LinkIcon,
+  Layers,
   Link2,
   Sparkles,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
 import { displayName, isEncryptedPath } from '@/lib/note-name';
 import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
+import { isImageEmbed } from '@/lib/embed';
 
 interface Backlink {
   path: string;
@@ -120,15 +122,19 @@ export function RightPanel() {
     : [];
 
   const outgoingWikilinks = useMemo(() => {
-    if (!note) return [] as { target: string; alias?: string }[];
+    type Outgoing = { target: string; alias?: string; embed: boolean };
+    if (!note) return [] as Outgoing[];
     const seen = new Set<string>();
-    const out: { target: string; alias?: string }[] = [];
+    const out: Outgoing[] = [];
     for (const wl of note.parsed.wikilinks) {
-      if (wl.is_embed) continue;
+      // A note embed depends on its target just like a link does, so it is
+      // listed (and counted as a backlink on the other side). Picture embeds
+      // are attachments, not notes — nothing to navigate to here.
+      if (wl.is_embed && isImageEmbed(wl.target)) continue;
       const key = wl.target.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ target: wl.target, alias: wl.alias });
+      out.push({ target: wl.target, alias: wl.alias, embed: wl.is_embed });
     }
     return out;
   }, [note]);
@@ -248,9 +254,13 @@ export function RightPanel() {
                       key={wl.target}
                       onClick={() => openWikilink(wl.target)}
                       className="w-full text-left group flex items-center gap-1.5 text-text-secondary hover:text-text-primary"
-                      title={wl.target}
+                      title={wl.embed ? `${wl.target} (embedded)` : wl.target}
                     >
-                      <LinkIcon size={11} className="shrink-0 text-text-muted" />
+                      {wl.embed ? (
+                        <Layers size={11} className="shrink-0 text-text-muted" />
+                      ) : (
+                        <LinkIcon size={11} className="shrink-0 text-text-muted" />
+                      )}
                       <span className="text-xs truncate">
                         {wl.alias ?? wl.target}
                       </span>

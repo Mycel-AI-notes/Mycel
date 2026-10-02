@@ -30,6 +30,11 @@ import {
   mathDecorationTheme,
 } from './decorations/MathDecoration';
 import { imageDecorationField, imageDecorationTheme } from './decorations/ImageDecoration';
+import {
+  embedDecorationField,
+  embedDecorationTheme,
+  embedHostPath,
+} from './decorations/EmbedDecoration';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
@@ -213,6 +218,9 @@ export function MarkdownEditor({ path }: Props) {
         mathDecorationTheme,
         imageDecorationField,
         imageDecorationTheme,
+        embedHostPath.of(path),
+        embedDecorationField,
+        embedDecorationTheme,
         editableTableWidgetPlugin(),
         editableTableWidgetTheme,
         databaseWidgetPlugin(path),

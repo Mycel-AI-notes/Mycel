@@ -84,6 +84,7 @@ npm run tauri build
 
 - ✍️  **CodeMirror 6 editor** with Markdown syntax, inline preview decorations, fenced code blocks with per-language highlighting, and autocomplete.
 - 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you. Renaming a note **rewrites every link to it** across the vault — aliases, anchors, embeds and folder paths included — so a rename never leaves a trail of broken references.
+- 🪟 **Embeds** — `![[Note]]` shows the note right in the editor as a read-only card; `![[Note#Heading]]` shows just that section, and `![[pic.png]]` shows the picture wherever it lives in the vault. Click the card's title to open the note. Embeds go one level deep (a nested `![[…]]` renders as a link), so notes embedding each other can't loop, and they count as links in backlinks.
 - 🏷️ **Aliases** — `aliases: [ML, Machine learning]` in frontmatter (a YAML list or a single string works too) lets `[[ML]]` reach the note. Aliases show up in `[[` autocomplete and count in backlinks and the graph. A note actually *named* `ML` still wins — aliases never steal links.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
 - 📅 **Daily notes** (`⌘/Ctrl+Shift+D`) — opens today's `daily/YYYY-MM-DD.md`, creating it from your daily template when it doesn't exist yet (an existing note is never overwritten). *Previous / Next daily note* in the palette step through the days you actually wrote. Folder and template are set in Settings → Notes.
