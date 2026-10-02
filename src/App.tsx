@@ -4,8 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
-import { useCosmicRootClass } from '@/hooks/useCosmicMotion';
-import { warp } from '@/lib/cosmic-fx';
+import { useSporeMotionRootClass } from '@/hooks/useSporeMotion';
+import { awaken } from '@/lib/spore-fx';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useGardenStore } from '@/stores/garden';
@@ -61,7 +61,7 @@ const isMac =
 export default function App() {
   useTheme();
   useAutoLock();
-  useCosmicRootClass();
+  useSporeMotionRootClass();
 
   const { vaultRoot, activeTabPath, openVault, closeVault, openGardenTab, pinTab } = useVaultStore();
   const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useUIStore();
@@ -268,9 +268,9 @@ export default function App() {
     };
   }, [vaultRoot]);
 
-  // Drop out of hyperspace each time a vault opens.
+  // Each time a vault opens, a spore germinates and the workspace grows in.
   useEffect(() => {
-    if (vaultRoot) warp();
+    if (vaultRoot) awaken();
   }, [vaultRoot]);
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), []);
@@ -285,7 +285,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
-      <div className="flex flex-col flex-1 min-h-0 cosmic-arrive">
+      <div className="flex flex-col flex-1 min-h-0 myc-awaken">
         {/* Top toolbar */}
         <header
           data-tauri-drag-region
@@ -353,7 +353,7 @@ export default function App() {
           {!sidebarCollapsed && <Sidebar />}
 
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
-          <main data-cosmic-target className="flex flex-col flex-1 min-w-0">
+          <main data-spore-target className="flex flex-col flex-1 min-w-0">
             <EditorTabs />
             {activeGardenView ? (
               <GardenView view={activeGardenView} />

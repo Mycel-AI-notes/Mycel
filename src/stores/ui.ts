@@ -23,13 +23,14 @@ export const SIDEBAR_DEFAULT_WIDTH = 224;
 /// so a user who hides Garden never has to deal with it again.
 export interface FeatureFlags {
   garden: boolean;
-  /** Space-themed motion: starfield, comets, nebula bursts, warp. */
-  cosmic: boolean;
+  /** Living motion: drifting spores, hyphae growing, notes and folders
+   *  germinating into the Mycel mark. */
+  sporeMotion: boolean;
 }
 
 const DEFAULT_FEATURES: FeatureFlags = {
   garden: true,
-  cosmic: true,
+  sporeMotion: true,
 };
 
 interface UIState {

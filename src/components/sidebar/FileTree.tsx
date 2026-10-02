@@ -26,7 +26,7 @@ import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
 import { useInsightsStore } from '@/stores/insights';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
-import { celebrateBirth, comet } from '@/lib/cosmic-fx';
+import { reach, sproutRow } from '@/lib/spore-fx';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
 const DRAG_MIME = 'application/x-mycel-path';
@@ -202,10 +202,10 @@ function FileTreeNode({
       openImageTab(entry.path, { preview: true });
       return;
     }
-    // A comet carries the note from its row into the editor.
-    const target = document.querySelector('[data-cosmic-target]');
+    // A hypha grows from the row into the editor and roots the note there.
+    const target = document.querySelector('[data-spore-target]');
     if (rowRef.current && target && activeTabPath !== entry.path) {
-      void comet(rowRef.current, target);
+      void reach(rowRef.current, target);
     }
     openNote(entry.path, { preview: true });
   }, [entry, isKbDir, openNote, openImageTab, toggleExpand, activeTabPath]);
@@ -613,7 +613,10 @@ function FileTreeNode({
       </div>
 
       {entry.is_dir && isOpen && (
-        <div className="cosmic-unfold">
+        <div
+          className="myc-grow"
+          style={{ '--myc-guide': `${depth * 12 + 14}px` } as React.CSSProperties}
+        >
           {creating && creating.parent === entry.path && (
             <div
               className="py-0.5"
@@ -629,7 +632,7 @@ function FileTreeNode({
                   if (e.key === 'Escape') cancelCreate();
                 }}
                 placeholder={creating.type === 'note' ? 'Note name…' : 'Folder name…'}
-                className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none cosmic-input"
+                className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none myc-input"
               />
             </div>
           )}
@@ -856,11 +859,11 @@ export function FileTree() {
         const name = `${trimmed.replace(/\.md$/, '')}.md`;
         const path = joinPath(state.parent, name);
         await createNote(path);
-        celebrateBirth(path);
+        sproutRow(path);
       } else {
         const path = joinPath(state.parent, trimmed);
         await createFolder(path);
-        celebrateBirth(path);
+        sproutRow(path);
       }
     } catch (e) {
       // The backend now refuses to create over an existing note instead of
@@ -1017,7 +1020,7 @@ export function FileTree() {
                 if (e.key === 'Escape') cancelCreate();
               }}
               placeholder={creating.type === 'note' ? 'Note name…' : 'Folder name…'}
-              className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none cosmic-input"
+              className="w-full bg-surface-0 border border-accent rounded px-1 py-0.5 text-sm text-text-primary outline-none myc-input"
             />
           </div>
         )}

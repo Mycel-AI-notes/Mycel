@@ -4,8 +4,8 @@ import { Folder, FolderOpen, GitBranch, X, Plus } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { useRecentVaults, vaultDisplayName } from '@/stores/recentVaults';
 import { SporeField } from '@/components/brand/SporeField';
-import { Starfield } from '@/components/fx/Starfield';
-import { useCosmicMotion } from '@/hooks/useCosmicMotion';
+import { SporeAir } from '@/components/fx/SporeAir';
+import { useSporeMotion } from '@/hooks/useSporeMotion';
 import { Logo } from '@/components/brand/Logo';
 import { CloneVaultDialog } from '@/components/sync/CloneVaultDialog';
 
@@ -16,7 +16,7 @@ export function VaultPicker() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cloneOpen, setCloneOpen] = useState(false);
-  const cosmic = useCosmicMotion();
+  const sporeMotion = useSporeMotion();
 
   const handleOpen = useCallback(
     async (path: string) => {
@@ -47,7 +47,7 @@ export function VaultPicker() {
 
   return (
     <div className="relative h-full overflow-hidden bg-surface-1">
-      {cosmic && <Starfield />}
+      {sporeMotion && <SporeAir />}
       <SporeField />
 
       <div

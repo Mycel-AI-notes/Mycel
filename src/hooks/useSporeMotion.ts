@@ -14,23 +14,23 @@ function reducedSnapshot() {
 }
 
 /**
- * Whether cosmic motion should play: the user's "Cosmic motion" setting,
+ * Whether spore motion should play: the user's "Spore motion" setting,
  * overridden by the OS reduced-motion preference.
  */
-export function useCosmicMotion(): boolean {
-  const enabled = useUIStore((s) => s.features.cosmic !== false);
+export function useSporeMotion(): boolean {
+  const enabled = useUIStore((s) => s.features.sporeMotion !== false);
   const reduced = useSyncExternalStore(subscribeReduced, reducedSnapshot, () => false);
   return enabled && !reduced;
 }
 
 /**
- * Mirrors the flag onto `<html class="cosmic-off">` so the CSS-only
- * flourishes (note materialise, row birth, folder unfold) switch off too.
+ * Mirrors the flag onto `<html class="myc-still">` so the CSS-only
+ * flourishes (note rooting, row sprouting, folder growth) switch off too.
  * Mount once, near the root.
  */
-export function useCosmicRootClass() {
-  const on = useCosmicMotion();
+export function useSporeMotionRootClass() {
+  const on = useSporeMotion();
   useEffect(() => {
-    document.documentElement.classList.toggle('cosmic-off', !on);
+    document.documentElement.classList.toggle('myc-still', !on);
   }, [on]);
 }

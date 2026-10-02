@@ -558,14 +558,18 @@ body {
   }
 }
 
-/* ── Cosmic motion ──────────────────────────────────────────────────────
- * Short, GPU-cheap flourishes on top of the brand motion. Every one ends in
- * `none` (transform/filter), so nothing lingers that would change stacking
- * or containing blocks for CodeMirror's fixed-position tooltips.
- * Switched off by `html.cosmic-off` (Settings → Cosmic motion) and by the
- * OS reduced-motion preference. */
+/* ── Spore motion ───────────────────────────────────────────────────────
+ * The workspace's motion is one metaphor: the life cycle of the mycelium
+ * the logo draws. Spores drift, germinate into the mark, hyphae grow from
+ * one place to another and root there. Canvas effects live in
+ * lib/spore-fx.ts; these are the CSS-only parts.
+ *
+ * Every animation ends in `none` (transform/filter), so nothing lingers
+ * that would change stacking or containing blocks for CodeMirror's
+ * fixed-position tooltips. Switched off by `html.myc-still` (Settings →
+ * Spore motion) and by the OS reduced-motion preference. */
 
-.cosmic-fx-layer {
+.myc-fx-layer {
   position: fixed;
   inset: 0;
   width: 100vw;
@@ -574,135 +578,145 @@ body {
   z-index: 90;
 }
 
-/* Vault opened — the workspace drops out of hyperspace. */
-@keyframes cosmic-arrive {
-  from { opacity: 0; transform: scale(1.035); filter: blur(6px) brightness(1.4); }
-  60%  { opacity: 1; }
+/* Vault opened — the workspace grows in behind the germinating spore. */
+@keyframes myc-awaken {
+  from { opacity: 0; transform: scale(0.985); filter: blur(4px); }
   to   { opacity: 1; transform: none; filter: none; }
 }
-.cosmic-arrive { animation: cosmic-arrive 650ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.myc-awaken { animation: myc-awaken 700ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-/* Note opened — text condenses out of a haze, a beam of light scans the top. */
-@keyframes cosmic-materialize {
-  from { opacity: 0; transform: translateY(6px); filter: blur(5px); }
+/* Note opened — the hypha that reached it roots: the text condenses in
+ * while a hypha grows along the top edge, its living tip leading. */
+@keyframes myc-rooted {
+  from { opacity: 0; transform: translateY(5px); filter: blur(4px); }
   to   { opacity: 1; transform: none; filter: none; }
 }
-@keyframes cosmic-beam {
-  0%   { transform: translateX(-100%); opacity: 0; }
-  15%  { opacity: 1; }
-  100% { transform: translateX(100%); opacity: 0; }
+@keyframes myc-hypha-run {
+  0%   { clip-path: inset(0 100% 0 0); opacity: 1; }
+  60%  { clip-path: inset(0 0 0 0);    opacity: 1; }
+  100% { clip-path: inset(0 0 0 0);    opacity: 0; }
 }
-.cosmic-materialize {
+.myc-rooted {
   position: relative;
-  animation: cosmic-materialize 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: myc-rooted 340ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-.cosmic-materialize::before {
+.myc-rooted::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 5px;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      transparent,
+      color-mix(in srgb, var(--color-accent) 70%, transparent) 30%,
+      var(--color-accent-bright))
+      center / 100% 1px no-repeat;
+  filter: drop-shadow(0 0 3px var(--color-accent-bright));
+  animation: myc-hypha-run 750ms ease-out both;
+}
+
+/* Row born (new note / folder) — the row swells as its spore germinates. */
+@keyframes myc-sprouted {
+  0%   { background-color: color-mix(in srgb, var(--color-accent-bright) 22%, transparent);
+         box-shadow: inset 0 0 12px color-mix(in srgb, var(--color-accent-bright) 35%, transparent);
+         transform: scale(0.97); }
+  35%  { transform: scale(1.01); }
+  100% { background-color: transparent; box-shadow: none; transform: none; }
+}
+.myc-sprouted { animation: myc-sprouted 900ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* Folder expanded — a hypha grows down the guide line and the children
+ * bud off it one after another. `--myc-guide` is the x of the guide. */
+@keyframes myc-bud {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes myc-guide-grow {
+  0%   { transform: scaleY(0); opacity: 1; }
+  55%  { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 0; }
+}
+.myc-grow { position: relative; }
+.myc-grow::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  z-index: 5;
+  bottom: 4px;
+  left: var(--myc-guide, 14px);
+  width: 1px;
   pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-accent-bright) 45%,
-    #fff 50%,
-    var(--color-accent-bright) 55%,
-    transparent
-  );
-  box-shadow: 0 0 10px var(--color-accent-bright);
-  animation: cosmic-beam 650ms ease-out both;
+  transform-origin: top;
+  background: linear-gradient(var(--color-accent-bright), color-mix(in srgb, var(--color-accent) 30%, transparent));
+  box-shadow: 0 0 4px var(--color-accent-bright);
+  animation: myc-guide-grow 520ms ease-out both;
 }
+.myc-grow > * { animation: myc-bud 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.myc-grow > :nth-child(2) { animation-delay: 30ms; }
+.myc-grow > :nth-child(3) { animation-delay: 60ms; }
+.myc-grow > :nth-child(4) { animation-delay: 90ms; }
+.myc-grow > :nth-child(5) { animation-delay: 120ms; }
+.myc-grow > :nth-child(n+6) { animation-delay: 150ms; }
 
-/* Row born (new note / folder) — a pulsing accretion ring. */
-@keyframes cosmic-born {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-bright) 70%, transparent),
-                     inset 0 0 12px color-mix(in srgb, var(--color-accent-bright) 45%, transparent);
-         background-color: color-mix(in srgb, var(--color-accent-bright) 22%, transparent);
-         transform: scale(0.96); }
-  35%  { transform: scale(1.015); }
-  100% { box-shadow: 0 0 0 10px transparent, inset 0 0 0 transparent;
-         background-color: transparent;
-         transform: none; }
+/* Empty editor — the mark sheds spores that drift off and fade. Each
+ * grain carries its own direction in --dx/--dy. */
+@keyframes myc-shed {
+  0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1); opacity: 0; }
 }
-.cosmic-born { animation: cosmic-born 900ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-
-/* Folder expanded — children unfold from the parent. */
-@keyframes cosmic-unfold {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: none; }
+.myc-shed {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
-.cosmic-unfold { animation: cosmic-unfold 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.cosmic-unfold > :nth-child(2) { animation: cosmic-unfold 220ms 20ms both; }
-.cosmic-unfold > :nth-child(3) { animation: cosmic-unfold 220ms 40ms both; }
-.cosmic-unfold > :nth-child(4) { animation: cosmic-unfold 220ms 60ms both; }
-.cosmic-unfold > :nth-child(5) { animation: cosmic-unfold 220ms 80ms both; }
-
-/* Empty editor — a thin orbit with one moon around the logo. */
-@keyframes cosmic-orbit {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
-}
-.cosmic-orbit {
+.myc-shed > i {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 168px;
-  height: 168px;
-  border-radius: 9999px;
-  border: 1px dashed color-mix(in srgb, var(--color-accent) 28%, transparent);
-  animation: cosmic-orbit 22s linear infinite;
-  pointer-events: none;
-}
-.cosmic-orbit-moon {
-  position: absolute;
-  top: -3px;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
+  width: 4px;
+  height: 4px;
   border-radius: 9999px;
   background: var(--color-accent-bright);
-  box-shadow: 0 0 10px var(--color-accent-bright), 0 0 2px #fff;
+  box-shadow: 0 0 6px var(--color-accent-bright);
+  animation: myc-shed 5.5s ease-out infinite both;
 }
 
-@keyframes cosmic-fade-in {
+@keyframes myc-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.cosmic-fade-in { animation: cosmic-fade-in 900ms ease-out both; }
+.myc-fade-in { animation: myc-fade-in 900ms ease-out both; }
 
-/* New-item input — a slow shimmer along the border while you name it. */
-@keyframes cosmic-shimmer {
+/* New-item input — breathes while you name the thing about to sprout. */
+@keyframes myc-breathe-ring {
   0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent),
                          0 0 6px color-mix(in srgb, var(--color-accent-bright) 15%, transparent); }
   50%      { box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-bright) 70%, transparent),
                          0 0 14px color-mix(in srgb, var(--color-accent-bright) 35%, transparent); }
 }
-.cosmic-input { animation: cosmic-shimmer 2.4s ease-in-out infinite; }
+.myc-input { animation: myc-breathe-ring 2.4s ease-in-out infinite; }
 
-:root.cosmic-off .cosmic-arrive,
-:root.cosmic-off .cosmic-materialize,
-:root.cosmic-off .cosmic-materialize::before,
-:root.cosmic-off .cosmic-born,
-:root.cosmic-off .cosmic-unfold,
-:root.cosmic-off .cosmic-unfold > *,
-:root.cosmic-off .cosmic-orbit,
-:root.cosmic-off .cosmic-input {
+:root.myc-still .myc-awaken,
+:root.myc-still .myc-rooted,
+:root.myc-still .myc-sprouted,
+:root.myc-still .myc-grow > *,
+:root.myc-still .myc-input {
   animation: none;
 }
-:root.cosmic-off .cosmic-materialize::before { display: none; }
+:root.myc-still .myc-rooted::before,
+:root.myc-still .myc-grow::before,
+:root.myc-still .myc-shed { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .cosmic-arrive, .cosmic-materialize, .cosmic-materialize::before,
-  .cosmic-born, .cosmic-unfold, .cosmic-unfold > *, .cosmic-orbit,
-  .cosmic-input, .cosmic-fade-in {
+  .myc-awaken, .myc-rooted, .myc-sprouted, .myc-grow > *,
+  .myc-input, .myc-fade-in {
     animation: none;
   }
-  .cosmic-materialize::before { display: none; }
+  .myc-rooted::before, .myc-grow::before, .myc-shed { display: none; }
 }
 
 /* Hide gutter (line numbers + active-line tint) for lines under a database

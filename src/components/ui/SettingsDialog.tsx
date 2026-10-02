@@ -19,10 +19,10 @@ const FEATURE_ROWS: FeatureRow[] = [
       'Show the Garden section in the sidebar and enable Inbox, Next Actions, Projects, Waiting For, and Someday.',
   },
   {
-    key: 'cosmic',
-    label: 'Cosmic motion',
+    key: 'sporeMotion',
+    label: 'Spore motion',
     description:
-      'Interactive starfield on the empty screen, comets when a note opens, a nebula burst when a note or folder is born. Off also respects the system "reduce motion" setting.',
+      'Living animation: spores drifting on the empty screen, a hypha growing into each note you open, new notes and folders germinating into the Mycel mark. Always off when the system asks to reduce motion.',
   },
 ];
 
