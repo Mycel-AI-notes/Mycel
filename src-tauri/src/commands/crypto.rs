@@ -161,6 +161,9 @@ pub async fn note_encrypt(
     if src != dst {
         std::fs::remove_file(&src).map_err(|e| e.to_string())?;
     }
+    // The plaintext is gone from disk; it must not survive in the search
+    // index either.
+    crate::commands::fulltext::fts_purge(&state, &root, &path);
     Ok(EncryptResult { path: new_rel })
 }
 
@@ -188,6 +191,7 @@ pub async fn note_decrypt(
     if src != dst {
         std::fs::remove_file(&src).map_err(|e| e.to_string())?;
     }
+    crate::commands::fulltext::fts_touch(&state, &root, &[&new_rel]);
     Ok(EncryptResult { path: new_rel })
 }
 

@@ -16,6 +16,11 @@ pub struct AppState {
     /// loaded `AiConfig`. Lazily materialized on the first AI command so
     /// vaults that never use AI never open the DB.
     pub ai: Arc<Mutex<Option<Arc<core::ai::AiState>>>>,
+    /// Full-text index for the open vault (`.mycel/search.db`). Opened on
+    /// vault open and shared with the file watcher, which keeps it fresh.
+    /// A std mutex because it is also reached from the watcher's plain
+    /// thread; it is never held across an `.await`.
+    pub fts: Arc<StdMutex<Option<Arc<core::fts::FtsIndex>>>>,
     /// Per-file mutexes for database operations. Every db_* command that
     /// does read-modify-write on a .db.json acquires the lock for its path
     /// before reading; without this, two near-simultaneous commands (e.g.
@@ -45,6 +50,7 @@ impl Default for AppState {
             watcher: Arc::new(Mutex::new(None)),
             crypto: Arc::new(core::crypto::Session::default()),
             ai: Arc::new(Mutex::new(None)),
+            fts: Arc::new(StdMutex::new(None)),
             db_locks: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
@@ -81,6 +87,8 @@ pub fn run() {
             commands::search::notes_list,
             commands::search::backlinks_get,
             commands::search::notes_by_tag,
+            commands::fulltext::search_fulltext,
+            commands::fulltext::search_reindex,
             commands::graph::graph_data,
             commands::database::db_read,
             commands::database::db_write,

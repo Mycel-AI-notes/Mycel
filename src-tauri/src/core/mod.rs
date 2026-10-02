@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod crypto;
+pub mod fts;
 pub mod garden;
 pub mod links;
 pub mod parser;

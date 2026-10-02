@@ -1,10 +1,11 @@
+use crate::core::fts::FtsIndex;
 use crate::core::vault::read_kb_dirs;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
@@ -24,7 +25,15 @@ pub struct VaultWatcher {
     _watcher: RecommendedWatcher,
 }
 
-pub fn start_watcher(app: AppHandle, root: PathBuf) -> Option<VaultWatcher> {
+/// `fts` is the vault's full-text index, updated for every changed path —
+/// edits from other apps, `git pull`, Finder moves. The watcher holds it
+/// directly rather than going through `AppState` so a watcher left over from
+/// a previous vault can never write into the next vault's index.
+pub fn start_watcher(
+    app: AppHandle,
+    root: PathBuf,
+    fts: Option<Arc<FtsIndex>>,
+) -> Option<VaultWatcher> {
     let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
 
     let mut watcher: RecommendedWatcher = match RecommendedWatcher::new(
@@ -71,6 +80,16 @@ pub fn start_watcher(app: AppHandle, root: PathBuf) -> Option<VaultWatcher> {
                     Ok(r) => r.to_string_lossy().replace('\\', "/"),
                     Err(_) => continue,
                 };
+
+                // Not debounced: `update_path` hash-checks, so a burst of
+                // events for one save costs reads, not index writes. Hidden
+                // paths (including our own `.mycel/search.db`) are ignored
+                // inside, which is what keeps this from feeding on itself.
+                if let Some(idx) = &fts {
+                    if let Err(e) = idx.update_path(&rel) {
+                        eprintln!("fts: watcher update of {rel} failed: {e:#}");
+                    }
+                }
 
                 if is_db_file(&path) {
                     let now = Instant::now();

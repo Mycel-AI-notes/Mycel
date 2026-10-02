@@ -144,7 +144,9 @@ pub async fn note_save(
             .ok_or("No vault open")?
     };
 
-    write_note(&vault_root, &path, &content).await
+    let hash = write_note(&vault_root, &path, &content).await?;
+    crate::commands::fulltext::fts_touch(&state, &vault_root, &[&path]);
+    Ok(hash)
 }
 
 /// Write `content` only if the file on disk still hashes to
@@ -202,6 +204,7 @@ pub async fn note_save_checked(
     }
 
     let disk_hash = write_note(&vault_root, &path, &content).await?;
+    crate::commands::fulltext::fts_touch(&state, &vault_root, &[&path]);
     Ok(SaveResult::Saved { disk_hash })
 }
 
@@ -309,6 +312,8 @@ pub async fn note_delete(path: String, state: State<'_, AppState>) -> Result<(),
     // `remove_dir_all` behind a single confirmation dialog left no way back
     // from a mis-click.
     move_to_trash(&vault_root, &path).map_err(|e| e.to_string())?;
+    // A folder takes every indexed note under it along.
+    crate::commands::fulltext::fts_touch(&state, &vault_root, &[&path]);
     Ok(())
 }
 
@@ -348,6 +353,7 @@ pub async fn quick_note_merge(
         section_title.as_deref(),
     )
     .map_err(|e| e.to_string())?;
+    crate::commands::fulltext::fts_touch(&state, &vault_root, &[&source, &target]);
 
     crate::core::ai::filing_log::append(
         &vault_root,
@@ -831,6 +837,14 @@ pub async fn note_rename(
                 eprintln!("note_rename: link rewrite failed: {e:#}");
                 Default::default()
             });
+
+    // Old side out (with every note under it, for a folder), new side in.
+    // Notes whose links were rewritten are spread across the vault; let the
+    // next search re-walk for them instead of listing them here.
+    crate::commands::fulltext::fts_touch(&state, &vault_root, &[&old_path, &new_path]);
+    if summary.notes_changed > 0 {
+        crate::commands::fulltext::fts_invalidate(&state, &vault_root);
+    }
     Ok(summary)
 }
 
