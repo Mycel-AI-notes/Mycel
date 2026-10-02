@@ -46,6 +46,7 @@ import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
 import { QUICK_NOTES_DIR } from '@/types';
 import { QuickFilingBar } from './QuickFilingBar';
+import { MyceliumMargin } from './MyceliumMargin';
 import { usePresentationStore } from '@/stores/presentation';
 import { SAVE_EVENT } from '@/lib/app-commands';
 import {
@@ -168,6 +169,16 @@ export function MarkdownEditor({ path }: Props) {
 
   const note = noteCache.get(path);
   const focusMode = useUIStore((s) => s.focusMode);
+  // Edit subscribers outside React state, so a keystroke doesn't re-render
+  // this component (the margin debounces on them).
+  const editListeners = useRef(new Set<() => void>());
+  const getView = useCallback(() => viewRef.current, []);
+  const onEdit = useCallback((fn: () => void) => {
+    editListeners.current.add(fn);
+    return () => {
+      editListeners.current.delete(fn);
+    };
+  }, []);
   const readableWidth = useUIStore((s) => s.features.readableWidth !== false);
 
   // Bumped after every successful save of a quick note; the filing bar
@@ -238,6 +249,7 @@ export function MarkdownEditor({ path }: Props) {
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
+            editListeners.current.forEach((fn) => fn());
             // Edits reach disk on their own now. Cmd+S still works and is
             // still the way to pin a preview tab, but it is no longer the
             // only thing standing between a thought and losing it.
@@ -423,6 +435,8 @@ export function MarkdownEditor({ path }: Props) {
         ref={editorRef}
         className={`flex-1 overflow-hidden${readableWidth || focusMode ? ' myc-readable' : ''}${focusMode ? ' myc-focus' : ''}`}
       />
+
+      {!focusMode && <MyceliumMargin path={path} view={getView} onEdit={onEdit} />}
 
       {isQuickNote && <QuickFilingBar path={path} saveTick={saveTick} />}
 
