@@ -6,9 +6,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::ai::insights::models::{
-    Insight, InsightStatus, RunSummary, TelemetryReport,
-};
+use crate::core::ai::insights::models::{Insight, InsightStatus, RunSummary, TelemetryReport};
 use crate::core::ai::insights::{settings as isettings, store as istore, InsightsSettings};
 use crate::AppState;
 
@@ -74,10 +72,7 @@ pub async fn insights_dismiss(
 }
 
 #[tauri::command]
-pub async fn insights_act(
-    insight_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn insights_act(insight_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let ai = ensure_ai_state(&state).await?;
     istore::mark_acted(&ai.store, &insight_id).map_err(err)?;
     let now = chrono::Utc::now().timestamp();
@@ -96,9 +91,7 @@ pub struct InsightsStatus {
 }
 
 #[tauri::command]
-pub async fn insights_settings_get(
-    state: State<'_, AppState>,
-) -> Result<InsightsStatus, String> {
+pub async fn insights_settings_get(state: State<'_, AppState>) -> Result<InsightsStatus, String> {
     let ai = ensure_ai_state(&state).await?;
     let settings = ai.insights.settings.lock().await.clone();
     let pending =

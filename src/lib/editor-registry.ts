@@ -1,4 +1,5 @@
 import { EditorView } from '@codemirror/view';
+import { remapPath } from './path-move';
 
 /**
  * Module-level map of mounted Codemirror views keyed by note path. Used by
@@ -21,6 +22,24 @@ export function unregisterEditorView(path: string, view: EditorView) {
 
 export function getEditorView(path: string): EditorView | undefined {
   return views.get(path);
+}
+
+/**
+ * Re-key registered views after a rename or move. `MarkdownEditor` is mounted
+ * with `key={path}`, so a renamed *note* remounts and re-registers itself —
+ * but a renamed *folder* leaves its descendants' editors mounted under their
+ * old keys, and every path-addressed helper here would then miss them.
+ */
+export function remapEditorViews(oldPath: string, newPath: string) {
+  const moves: Array<[string, string, EditorView]> = [];
+  for (const [key, view] of views) {
+    const moved = remapPath(key, oldPath, newPath);
+    if (moved !== null) moves.push([key, moved, view]);
+  }
+  for (const [from, to, view] of moves) {
+    views.delete(from);
+    views.set(to, view);
+  }
 }
 
 /** Move the cursor to the start of `line` (0-based) and scroll it into view. */

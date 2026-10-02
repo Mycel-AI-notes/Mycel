@@ -147,7 +147,7 @@ pub async fn index_note(
         .iter()
         .map(|(_, t, _)| (t.chars().count() / 4) as u64)
         .sum();
-    let est_cost = estimate_cost_usd(est_tokens);
+    let est_cost = estimate_cost_usd(model, est_tokens);
     if !to_embed.is_empty() {
         budget::check(store, daily_budget_usd, model, est_cost)?;
     }
@@ -178,7 +178,7 @@ pub async fn index_note(
             EMBED_DIM
         );
         let tokens = batch.tokens_in;
-        let cost = estimate_cost_usd(tokens);
+        let cost = estimate_cost_usd(model, tokens);
         (batch.vectors, tokens, cost)
     };
 
@@ -262,12 +262,11 @@ where
 {
     let files = list_indexable_files(vault_root)?;
     let total = files.len() as u32;
-    let mut done = 0_u32;
     let mut summary = BulkSummary::default();
 
-    for rel in &files {
+    for (idx, rel) in files.iter().enumerate() {
         let result = index_note(store, embedder, vault_root, rel, daily_budget_usd, model).await;
-        done += 1;
+        let done = idx as u32 + 1;
         match result {
             Ok(outcome) => {
                 summary.notes_ok += 1;
@@ -350,13 +349,11 @@ pub struct IndexStatus {
 
 pub fn status(store: &AiStore) -> Result<IndexStatus> {
     store.with_conn(|c| {
-        let chunks_indexed: i64 =
-            c.query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
-        let notes_indexed: i64 = c.query_row(
-            "SELECT COUNT(DISTINCT note_path) FROM chunks",
-            [],
-            |r| r.get(0),
-        )?;
+        let chunks_indexed: i64 = c.query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
+        let notes_indexed: i64 =
+            c.query_row("SELECT COUNT(DISTINCT note_path) FROM chunks", [], |r| {
+                r.get(0)
+            })?;
         Ok(IndexStatus {
             notes_indexed: notes_indexed.max(0) as u32,
             chunks_indexed: chunks_indexed.max(0) as u32,
@@ -388,11 +385,14 @@ type ExistingChunks = std::collections::HashMap<i64, (i64, String)>;
 
 fn load_existing(store: &AiStore, rel_path: &str) -> Result<ExistingChunks> {
     store.with_conn(|c| {
-        let mut stmt =
-            c.prepare("SELECT chunk_idx, id, hash FROM chunks WHERE note_path = ?1")?;
+        let mut stmt = c.prepare("SELECT chunk_idx, id, hash FROM chunks WHERE note_path = ?1")?;
         let rows = stmt
             .query_map([rel_path], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
             })?
             .filter_map(|r| r.ok());
         let mut map: ExistingChunks = std::collections::HashMap::new();
@@ -501,8 +501,12 @@ mod tests {
         let store = AiStore::open(&root).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
 
-        let _ = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
-        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let _ = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
+        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
         assert_eq!(second.chunks_embedded, 0);
         assert_eq!(second.chunks_kept, 1);
         assert_eq!(second.tokens_in, 0);
@@ -521,13 +525,23 @@ mod tests {
         let store = AiStore::open(&root).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
 
-        let first = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let first = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
         assert!(first.chunks_total >= 2);
 
         write(&root, "a.md", &format!("{head}{tail_v2}"));
-        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
-        assert!(second.chunks_kept >= 1, "first chunk should have been reused");
-        assert!(second.chunks_embedded >= 1, "tail chunk should have been re-embedded");
+        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
+        assert!(
+            second.chunks_kept >= 1,
+            "first chunk should have been reused"
+        );
+        assert!(
+            second.chunks_embedded >= 1,
+            "tail chunk should have been re-embedded"
+        );
     }
 
     #[tokio::test]
@@ -537,11 +551,15 @@ mod tests {
         let store = AiStore::open(&root).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
 
-        let first = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let first = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
         assert!(first.chunks_total > 1);
 
         write(&root, "a.md", "tiny");
-        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let second = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
         assert_eq!(second.chunks_total, 1);
         assert!(second.chunks_removed >= 1);
         assert_eq!(status(&store).unwrap().chunks_indexed, 1);
@@ -553,10 +571,14 @@ mod tests {
         write(&root, "a.md", "content");
         let store = AiStore::open(&root).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
-        let _ = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let _ = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
 
         std::fs::remove_file(root.join("a.md")).unwrap();
-        let outcome = index_note(&store, &embedder, &root, "a.md", 10.0, "m").await.unwrap();
+        let outcome = index_note(&store, &embedder, &root, "a.md", 10.0, "m")
+            .await
+            .unwrap();
         assert_eq!(outcome.chunks_total, 0);
         assert_eq!(status(&store).unwrap().chunks_indexed, 0);
     }
@@ -608,11 +630,15 @@ mod tests {
 
         let store = AiStore::open(&root).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
-        let _ = bulk_reindex(&store, &embedder, &root, 10.0, "m", |_| {}).await.unwrap();
+        let _ = bulk_reindex(&store, &embedder, &root, 10.0, "m", |_| {})
+            .await
+            .unwrap();
         assert_eq!(status(&store).unwrap().notes_indexed, 2);
 
         std::fs::remove_file(root.join("a.md")).unwrap();
-        let _ = bulk_reindex(&store, &embedder, &root, 10.0, "m", |_| {}).await.unwrap();
+        let _ = bulk_reindex(&store, &embedder, &root, 10.0, "m", |_| {})
+            .await
+            .unwrap();
         assert_eq!(status(&store).unwrap().notes_indexed, 1);
     }
 
@@ -630,7 +656,9 @@ mod tests {
         budget::record(&store, "m", 0, 0, 1.5).unwrap();
         let embedder = StubEmbedder::new(EMBED_DIM);
 
-        let summary = bulk_reindex(&store, &embedder, &root, 1.0, "m", |_| {}).await.unwrap();
+        let summary = bulk_reindex(&store, &embedder, &root, 1.0, "m", |_| {})
+            .await
+            .unwrap();
         assert!(summary.notes_failed >= 1);
         assert!(summary.notes_ok < 3);
     }

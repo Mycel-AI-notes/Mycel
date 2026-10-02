@@ -101,9 +101,7 @@ pub async fn crypto_reset(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn crypto_list_recipients(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+pub async fn crypto_list_recipients(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let root = vault_root(&state).await?;
     crypto::read_recipients(&root).map_err(err)
 }
@@ -148,8 +146,8 @@ pub async fn note_encrypt(
     }
     let root = vault_root(&state).await?;
     let src = root.join(&path);
-    let plaintext = std::fs::read_to_string(&src)
-        .map_err(|e| format!("Failed to read {path}: {e}"))?;
+    let plaintext =
+        std::fs::read_to_string(&src).map_err(|e| format!("Failed to read {path}: {e}"))?;
     let cipher = crypto::encrypt_note(&root, &plaintext).map_err(err)?;
 
     let new_rel = encrypted_path_for(&path);

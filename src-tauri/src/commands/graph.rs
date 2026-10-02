@@ -1,11 +1,12 @@
+use crate::core::links::note_stem;
 use crate::core::parser::parse_note;
+use crate::core::vault::note_paths;
 use crate::AppState;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use tauri::State;
-use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphNote {
@@ -113,31 +114,25 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
     let mut title_to_path: HashMap<String, String> = HashMap::new();
     let mut rel_to_path: HashMap<String, String> = HashMap::new();
 
-    for entry in WalkDir::new(&vault_root).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if !path.extension().map(|e| e == "md").unwrap_or(false) {
+    for rel in note_paths(&vault_root) {
+        // The graph reads note bodies for links and tags, which an encrypted
+        // note does not give up without the vault unlocked. Its node would
+        // then flicker in and out of the graph depending on lock state, so
+        // leave `.md.age` out of the graph entirely for now.
+        if rel.ends_with(".md.age") {
             continue;
         }
-        let rel = path
-            .strip_prefix(&vault_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-        if rel.contains("/.") || rel.starts_with('.') {
-            continue;
-        }
-        let content = match std::fs::read_to_string(path) {
+        let content = match std::fs::read_to_string(vault_root.join(&rel)) {
             Ok(c) => c,
             Err(_) => continue,
         };
         let parsed_meta = parse_note(&content);
-        let stem = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
+        let stem = note_stem(&rel).to_string();
         let title = parsed_meta.meta.title.unwrap_or_else(|| stem.clone());
         let folder = parent_folder(&rel);
-        stem_to_path.entry(stem.to_lowercase()).or_insert_with(|| rel.clone());
+        stem_to_path
+            .entry(stem.to_lowercase())
+            .or_insert_with(|| rel.clone());
         title_to_path
             .entry(title.to_lowercase())
             .or_insert_with(|| rel.clone());
@@ -148,8 +143,15 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             .strip_suffix(".md")
             .map(|s| s.to_string())
             .unwrap_or_else(|| rel.clone());
-        rel_to_path.entry(rel_no_ext.to_lowercase()).or_insert_with(|| rel.clone());
-        loaded.push(Loaded { path: rel, title, folder, content });
+        rel_to_path
+            .entry(rel_no_ext.to_lowercase())
+            .or_insert_with(|| rel.clone());
+        loaded.push(Loaded {
+            path: rel,
+            title,
+            folder,
+            content,
+        });
     }
 
     // Pass 2: build edges + collect folder paths + domain counts.
@@ -220,7 +222,11 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
         // External URLs — count per-(note, domain).
         for cap in url_re().captures_iter(&note.content) {
             let raw_host = &cap[1];
-            let host = raw_host.split(':').next().unwrap_or(raw_host).to_lowercase();
+            let host = raw_host
+                .split(':')
+                .next()
+                .unwrap_or(raw_host)
+                .to_lowercase();
             let host = host.trim_start_matches("www.").to_string();
             if host.is_empty() {
                 continue;
@@ -267,7 +273,11 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             } else {
                 Some(parent_folder(&p))
             };
-            GraphFolder { path: p, name, parent }
+            GraphFolder {
+                path: p,
+                name,
+                parent,
+            }
         })
         .collect();
     folders_out.sort_by(|a, b| a.path.cmp(&b.path));
@@ -280,7 +290,11 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
 
     let external_edges: Vec<ExternalEdge> = external_counts
         .into_iter()
-        .map(|((from, domain), count)| ExternalEdge { from, domain, count })
+        .map(|((from, domain), count)| ExternalEdge {
+            from,
+            domain,
+            count,
+        })
         .collect();
 
     let mut tags_out: Vec<GraphTag> = tag_counts

@@ -11,12 +11,24 @@ import { RangeSetBuilder, EditorSelection } from '@codemirror/state';
 // ── Widgets ───────────────────────────────────────────────────────────────────
 
 class WikilinkWidget extends WidgetType {
-  constructor(private label: string) { super(); }
-  eq(other: WikilinkWidget) { return this.label === other.label; }
+  /**
+   * `label` is what the reader sees — the alias for `[[Target|Alias]]`, the
+   * target itself otherwise. `target` is always the link destination.
+   *
+   * They have to be carried separately: the click handler resolves the
+   * destination, and reading it back off the DOM text would resolve the
+   * *alias* instead. That used to send an aliased click to a note named
+   * after the alias — and, finding none, create one.
+   */
+  constructor(private label: string, private target: string) { super(); }
+  eq(other: WikilinkWidget) {
+    return this.label === other.label && this.target === other.target;
+  }
   toDOM() {
     const span = document.createElement('span');
     span.className = 'cm-wikilink';
     span.textContent = this.label;
+    span.dataset.target = this.target;
     return span;
   }
   ignoreEvent() { return false; }
@@ -279,8 +291,13 @@ function buildDecorations(view: EditorView): DecorationSet {
         const mt = mf + m[0].length;
         if (inCode(mf, mt)) continue;
         if (!cursorInSpan(sel, mf, mt)) {
+          const target = m[1].trim();
           const label = (m[2] ?? m[1]).trim();
-          spanDecos.push({ from: mf, to: mt, deco: Decoration.replace({ widget: new WikilinkWidget(label) }) });
+          spanDecos.push({
+            from: mf,
+            to: mt,
+            deco: Decoration.replace({ widget: new WikilinkWidget(label, target) }),
+          });
         }
       }
 

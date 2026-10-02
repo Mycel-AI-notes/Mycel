@@ -13,6 +13,13 @@ export default defineConfig(async () => ({
     },
   },
   clearScreen: false,
+  // Unit tests for the pure logic the app leans on hardest: link resolution,
+  // path safety, tab bookkeeping. No jsdom — everything covered here is
+  // deliberately free of DOM and of the Tauri IPC bridge.
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+  },
   server: {
     port: 1420,
     strictPort: true,

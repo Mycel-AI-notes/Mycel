@@ -33,6 +33,7 @@ import { imageDecorationField, imageDecorationTheme } from './decorations/ImageD
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
+import { flushAutosave, scheduleAutosave } from '@/lib/autosave';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
 import { insertDbFence } from '@/lib/database/insert';
 import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
@@ -177,8 +178,9 @@ export function MarkdownEditor({ path }: Props) {
       try {
         await saveNote(path, content);
         if (isQuickNote) setSaveTick((t) => t + 1);
-      } catch (e) {
-        console.error('Save failed:', e);
+      } catch {
+        // `saveNote` raises a toast; the tab stays dirty and the autosave
+        // timer keeps the path pending so the next flush retries.
       }
     },
     [path, saveNote, isQuickNote],
@@ -238,6 +240,10 @@ export function MarkdownEditor({ path }: Props) {
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
+            // Edits reach disk on their own now. Cmd+S still works and is
+            // still the way to pin a preview tab, but it is no longer the
+            // only thing standing between a thought and losing it.
+            scheduleAutosave(path);
             if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
             liveTimerRef.current = setTimeout(() => {
               updateNoteLive(path, update.state.doc.toString());
@@ -327,6 +333,10 @@ export function MarkdownEditor({ path }: Props) {
     view.dom.addEventListener('drop', onDrop);
 
     return () => {
+      // Last chance to write: after this the view is destroyed and its text is
+      // gone. The autosave timer reads from the live view, so it cannot run
+      // once we are past here.
+      void flushAutosave(path);
       if (liveTimerRef.current) {
         clearTimeout(liveTimerRef.current);
         liveTimerRef.current = null;

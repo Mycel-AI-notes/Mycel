@@ -142,9 +142,7 @@ pub async fn attachment_save_bytes(
 /// attachment manager; in v1 it powers a "find orphans" path the user can
 /// trigger manually.
 #[tauri::command]
-pub async fn attachment_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<AttachmentMeta>, String> {
+pub async fn attachment_list(state: State<'_, AppState>) -> Result<Vec<AttachmentMeta>, String> {
     let vault = vault_root(&state).await?;
     let dir = vault.join(ATTACHMENTS_DIR);
     if !dir.is_dir() {
@@ -214,10 +212,12 @@ pub async fn attachment_delete(
 fn find_references(vault_root: &Path, filename: &str) -> std::io::Result<Vec<String>> {
     let needle = filename.to_string();
     let mut hits = Vec::new();
-    let walker = walkdir::WalkDir::new(vault_root).into_iter().filter_entry(|e| {
-        let n = e.file_name().to_string_lossy();
-        !n.starts_with('.')
-    });
+    let walker = walkdir::WalkDir::new(vault_root)
+        .into_iter()
+        .filter_entry(|e| {
+            let n = e.file_name().to_string_lossy();
+            !n.starts_with('.')
+        });
     for entry in walker.filter_map(|e| e.ok()) {
         let path = entry.path();
         if !path.is_file() {

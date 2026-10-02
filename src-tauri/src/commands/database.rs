@@ -500,7 +500,7 @@ pub struct DbSummary {
 pub async fn dbs_list(state: State<'_, AppState>) -> Result<Vec<DbSummary>, String> {
     let root = vault_root(&state).await?;
     let mut out = Vec::new();
-    for entry in walkdir::WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
+    for entry in crate::core::vault::walk_vault(&root) {
         let path = entry.path();
         let name = match path.file_name().and_then(|n| n.to_str()) {
             Some(n) => n,
@@ -535,7 +535,7 @@ pub async fn dbs_list(state: State<'_, AppState>) -> Result<Vec<DbSummary>, Stri
             views,
         });
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 

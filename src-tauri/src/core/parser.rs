@@ -74,7 +74,11 @@ fn extract_wikilinks(text: &str) -> Vec<WikiLink> {
             let is_embed = &cap[1] == "!";
             let target = cap[2].trim().to_string();
             let alias = cap.get(3).map(|m| m.as_str().trim().to_string());
-            WikiLink { target, alias, is_embed }
+            WikiLink {
+                target,
+                alias,
+                is_embed,
+            }
         })
         .collect()
 }
@@ -105,7 +109,10 @@ fn extract_headings(text: &str) -> Vec<Heading> {
             }
             Event::End(TagEnd::Heading(_)) => {
                 if let Some(level) = current_level.take() {
-                    headings.push(Heading { level, text: buf.clone() });
+                    headings.push(Heading {
+                        level,
+                        text: buf.clone(),
+                    });
                 }
             }
             _ => {}

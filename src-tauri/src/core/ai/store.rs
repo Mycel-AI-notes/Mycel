@@ -4,13 +4,13 @@
 //! delete (Mycel will rebuild on demand).
 //!
 //! Schema:
-//!   - `ai_usage`        daily-budget ledger (MVP-1)
-//!   - `chunks`          one row per indexed text chunk (MVP-2)
-//!   - `chunks_vec`      sqlite-vec virtual table, keyed by `chunks.id`
-//!                       via rowid; carries the embedding vector
-//!   - `semantic_edges`  reserved for MVP-2 graph rendering, written by
-//!                       a follow-up PR but created up front so the
-//!                       schema doesn't churn
+//!
+//! - `ai_usage`        daily-budget ledger (MVP-1)
+//! - `chunks`          one row per indexed text chunk (MVP-2)
+//! - `chunks_vec`      sqlite-vec virtual table, keyed by `chunks.id`
+//!   via rowid; carries the embedding vector
+//! - `semantic_edges`  reserved for MVP-2 graph rendering, written by
+//!   a follow-up PR but created up front so the schema doesn't churn
 //!
 //! Migrations are linear and idempotent — every `CREATE TABLE IF NOT
 //! EXISTS` runs every open, so a downgrade-then-upgrade cycle is a no-op.
@@ -106,8 +106,7 @@ fn ensure_vec_extension_registered() {
             *const ffi::sqlite3_api_routines,
         ) -> std::ffi::c_int;
         unsafe {
-            let init: AutoExtCb =
-                std::mem::transmute(sqlite_vec::sqlite3_vec_init as *const ());
+            let init: AutoExtCb = std::mem::transmute(sqlite_vec::sqlite3_vec_init as *const ());
             ffi::sqlite3_auto_extension(Some(init));
         }
     });
@@ -165,8 +164,7 @@ mod tests {
         let store = AiStore::open_in_memory().unwrap();
         store
             .with_conn(|c| {
-                let count: i64 =
-                    c.query_row("SELECT COUNT(*) FROM ai_usage", [], |r| r.get(0))?;
+                let count: i64 = c.query_row("SELECT COUNT(*) FROM ai_usage", [], |r| r.get(0))?;
                 assert_eq!(count, 0);
                 Ok(())
             })
@@ -177,7 +175,12 @@ mod tests {
     fn open_creates_directory() {
         let dir = tempfile::TempDir::new().unwrap();
         let _store = AiStore::open(dir.path()).unwrap();
-        assert!(dir.path().join(".mycel").join("ai").join("index.db").exists());
+        assert!(dir
+            .path()
+            .join(".mycel")
+            .join("ai")
+            .join("index.db")
+            .exists());
     }
 
     #[test]

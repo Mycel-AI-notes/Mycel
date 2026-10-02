@@ -40,10 +40,8 @@ impl Detector for QuickFilingDetector {
     }
 
     async fn run(&self, ctx: &DetectorContext<'_>) -> anyhow::Result<Vec<Insight>> {
-        let min_similarity =
-            (ctx.settings.quick_filing_min_similarity.min(100) as f32) / 100.0;
-        let min_age =
-            Duration::from_secs(ctx.settings.quick_filing_min_age_minutes as u64 * 60);
+        let min_similarity = (ctx.settings.quick_filing_min_similarity.min(100) as f32) / 100.0;
+        let min_age = Duration::from_secs(ctx.settings.quick_filing_min_age_minutes as u64 * 60);
         let now = SystemTime::now();
 
         let mut out = Vec::new();
@@ -61,15 +59,10 @@ impl Detector for QuickFilingDetector {
 
             // Same ranking the in-editor bar uses; the daily card only ever
             // shows the single best target.
-            let Some(top) = quick_suggest::rank_targets(
-                &ctx.store,
-                &cand.path,
-                &cand.body,
-                min_similarity,
-                1,
-            )?
-            .into_iter()
-            .next()
+            let Some(top) =
+                quick_suggest::rank_targets(&ctx.store, &cand.path, &cand.body, min_similarity, 1)?
+                    .into_iter()
+                    .next()
             else {
                 continue;
             };
@@ -77,10 +70,13 @@ impl Detector for QuickFilingDetector {
 
             let quick_path = cand.path;
             let preview: String = cand.body.chars().take(PREVIEW_CHARS).collect();
-            let ellipsis =
-                if cand.body.chars().count() > PREVIEW_CHARS { "…" } else { "" };
-            let captured = qf::capture_timestamp(&quick_path)
-                .unwrap_or_else(|| "earlier".to_string());
+            let ellipsis = if cand.body.chars().count() > PREVIEW_CHARS {
+                "…"
+            } else {
+                ""
+            };
+            let captured =
+                qf::capture_timestamp(&quick_path).unwrap_or_else(|| "earlier".to_string());
 
             let target_base = base_name(&target);
             let note_paths = vec![quick_path.clone(), target.clone()];
@@ -123,11 +119,7 @@ struct Candidate {
 
 /// Quick notes eligible for filing: plain `.md` under `quick/`, old enough,
 /// not marked `filed_to:`, and with a non-empty body.
-fn candidates(
-    ctx: &DetectorContext<'_>,
-    now: SystemTime,
-    min_age: Duration,
-) -> Vec<Candidate> {
+fn candidates(ctx: &DetectorContext<'_>, now: SystemTime, min_age: Duration) -> Vec<Candidate> {
     let quick_root = ctx.vault_root.join(QUICK_NOTES_DIR);
     let mut out = Vec::new();
     for entry in WalkDir::new(&quick_root)
@@ -291,7 +283,10 @@ mod tests {
         assert_eq!(got.len(), 1, "expected one filing card");
         let ins = &got[0];
         assert_eq!(ins.kind, InsightKind::QuickNoteFiling);
-        assert_eq!(ins.note_paths, vec![QUICK.to_string(), "orchard.md".to_string()]);
+        assert_eq!(
+            ins.note_paths,
+            vec![QUICK.to_string(), "orchard.md".to_string()]
+        );
         assert!(ins.confidence > 0.9, "identical text → high confidence");
         assert!(matches!(
             &ins.actions[0],
@@ -345,7 +340,10 @@ mod tests {
             .run(&ctx(&store, dir.path(), &settings))
             .await
             .unwrap();
-        assert!(got.is_empty(), "already-linked target must not be suggested");
+        assert!(
+            got.is_empty(),
+            "already-linked target must not be suggested"
+        );
     }
 
     #[tokio::test]
@@ -353,13 +351,21 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());
         let settings = test_settings();
-        seed(dir.path(), &store, &[("orchard.md", "prune the apple trees")]).await;
+        seed(
+            dir.path(),
+            &store,
+            &[("orchard.md", "prune the apple trees")],
+        )
+        .await;
 
         // Kept-after-merge note: marker in frontmatter.
         seed(
             dir.path(),
             &store,
-            &[(QUICK, "---\nfiled_to: orchard.md\n---\nprune the apple trees")],
+            &[(
+                QUICK,
+                "---\nfiled_to: orchard.md\n---\nprune the apple trees",
+            )],
         )
         .await;
         // Untouched capture: auto heading only.

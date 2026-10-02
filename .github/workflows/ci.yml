@@ -1,0 +1,89 @@
+# The four checks the pull-request template asks contributors to run, plus a
+# release-build smoke test. Nothing here was enforced before, so every one of
+# these had drifted: `npm run lint` had no config at all and `cargo fmt
+# --check` was failing across 38 files.
+#
+# The Rust job needs GTK/WebKit development headers — Tauri links against
+# them even for `cargo test`, and without them the build fails at `gdk-sys`
+# with a pkg-config error that looks nothing like a missing system package.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A force-push to a pull request should cancel the run it superseded rather
+# than queue behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  frontend:
+    name: Frontend (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` is `tsc && vite build`, so this covers the typecheck
+      # and the bundle in one step.
+      - name: Typecheck + bundle
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  rust:
+    name: Rust (fmt + clippy + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Keep this list in sync with the Linux prerequisites in the README.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Formatting first: it needs no build, so a fmt-only failure reports in
+      # seconds instead of after the whole dependency tree compiles.
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test

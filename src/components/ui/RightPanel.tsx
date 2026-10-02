@@ -55,9 +55,22 @@ export function RightPanel() {
 
   const tabs = ['outline', 'backlinks', 'tags'] as const;
 
-  // Re-fetch backlinks on tab open, on note switch, and after any save in the
+  // Re-fetch backlinks on tab open, on note switch, and after saves in the
   // vault (vaultVersion bumps). Edits-in-progress don't trigger it — backlinks
   // only become valid once the linking note is persisted to disk.
+  //
+  // The `vaultVersion` leg is debounced because `backlinks_get` reads and
+  // parses every note in the vault, and it used to run on every single save.
+  // Now that autosave writes roughly once a typing pause, an undebounced
+  // refetch would put a full-vault scan behind every pause. A note switch
+  // still refetches immediately — that one is a direct response to the user.
+  const [settledVersion, setSettledVersion] = useState(vaultVersion);
+  useEffect(() => {
+    if (settledVersion === vaultVersion) return;
+    const t = setTimeout(() => setSettledVersion(vaultVersion), 1500);
+    return () => clearTimeout(t);
+  }, [vaultVersion, settledVersion]);
+
   useEffect(() => {
     if (!activeTabPath || rightPanelTab !== 'backlinks') return;
     let cancelled = false;
@@ -69,7 +82,7 @@ export function RightPanel() {
     return () => {
       cancelled = true;
     };
-  }, [activeTabPath, rightPanelTab, vaultVersion]);
+  }, [activeTabPath, rightPanelTab, settledVersion]);
 
   // Related neighbors. Refetch on note switch and when the backlinks
   // tab opens. We deliberately don't subscribe to `vaultVersion`: the

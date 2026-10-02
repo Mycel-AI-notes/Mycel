@@ -33,11 +33,7 @@ pub struct RelatedHit {
     pub distance: f32,
 }
 
-pub fn find_related(
-    store: &AiStore,
-    note_path: &str,
-    k: usize,
-) -> Result<Vec<RelatedHit>> {
+pub fn find_related(store: &AiStore, note_path: &str, k: usize) -> Result<Vec<RelatedHit>> {
     let vecs = read_note_vectors(store, note_path)?;
     if vecs.is_empty() {
         // Note isn't indexed (encrypted, brand-new, or AI was off when
@@ -65,10 +61,7 @@ pub fn find_related(
         )?;
         let rows = stmt
             .query_map(rusqlite::params![json, chunk_k as i64], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, f64>(1)? as f32,
-                ))
+                Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)? as f32))
             })?
             .filter_map(|r| r.ok())
             .collect::<Vec<_>>();
@@ -117,11 +110,15 @@ fn read_note_vectors(store: &AiStore, note_path: &str) -> Result<Vec<Vec<f32>>> 
 }
 
 fn bytes_to_f32_le(bytes: &[u8]) -> Vec<f32> {
-    let mut v = Vec::with_capacity(bytes.len() / 4);
-    for chunk in bytes.chunks_exact(4) {
-        v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-    }
-    v
+    // `as_chunks` gives `&[[u8; 4]]` directly, so each element is already the
+    // exact array `from_le_bytes` wants. A trailing partial chunk is dropped,
+    // same as `chunks_exact` did.
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
+        .collect()
 }
 
 fn mean(vecs: &[Vec<f32>]) -> Vec<f32> {
@@ -230,8 +227,7 @@ mod tests {
         .await;
 
         let hits = find_related(&store, "source.md", 5).unwrap();
-        let unique: std::collections::HashSet<_> =
-            hits.iter().map(|h| &h.note_path).collect();
+        let unique: std::collections::HashSet<_> = hits.iter().map(|h| &h.note_path).collect();
         assert_eq!(unique.len(), hits.len(), "duplicates in results");
     }
 
@@ -262,7 +258,7 @@ mod tests {
             &[
                 ("src.md", "alpha beta gamma"),
                 ("near.md", "alpha beta delta"),
-                ("far.md",  "xyz qrs tuv"),
+                ("far.md", "xyz qrs tuv"),
             ],
         )
         .await;
@@ -287,10 +283,7 @@ mod tests {
     #[test]
     fn bytes_round_trip_through_le_f32() {
         let expected = [0.5_f32, -1.25, 7.0, 0.0];
-        let bytes: Vec<u8> = expected
-            .iter()
-            .flat_map(|f| f.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = expected.iter().flat_map(|f| f.to_le_bytes()).collect();
         assert_eq!(bytes_to_f32_le(&bytes), expected.to_vec());
     }
 }

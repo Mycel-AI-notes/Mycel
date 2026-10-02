@@ -1,10 +1,11 @@
 //! Mycel AI: local semantic layer over the vault.
 //!
 //! Everything lives under `.mycel/ai/`:
-//!   - `config.json`     user-tunable knobs (enabled flag, budget, model)
-//!   - `insights.json`   Insights Phase 1 — daily inbox settings, schedule
-//!   - `index.db`        SQLite. `ai_usage`, the `chunks` / `chunks_vec`
-//!                       embedding tables, and the four `insights_*` tables.
+//!
+//! - `config.json`     user-tunable knobs (enabled flag, budget, model)
+//! - `insights.json`   Insights Phase 1 — daily inbox settings, schedule
+//! - `index.db`        SQLite. `ai_usage`, the `chunks` / `chunks_vec`
+//!   embedding tables, and the four `insights_*` tables.
 //!
 //! The OpenRouter API key lives in the OS keyring (same pattern as the sync
 //! PAT), never in a file.
@@ -25,6 +26,7 @@ pub mod indexer;
 pub mod insights;
 pub mod keyring;
 pub mod openrouter;
+pub mod pricing;
 pub mod quick_suggest;
 pub mod related;
 pub mod search;

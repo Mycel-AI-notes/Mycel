@@ -102,10 +102,7 @@ pub fn start_watcher(app: AppHandle, root: PathBuf) -> Option<VaultWatcher> {
                         }
                         guard.insert(kb_dir.clone(), now);
                     }
-                    let _ = app.emit(
-                        "kb:dir-changed",
-                        KbDirChangedPayload { path: kb_dir },
-                    );
+                    let _ = app.emit("kb:dir-changed", KbDirChangedPayload { path: kb_dir });
                 }
             }
         }

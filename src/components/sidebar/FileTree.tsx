@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirm } from '@tauri-apps/plugin-dialog';
+import { describeError, useToastStore } from '@/stores/toast';
 import type { FileEntry } from '@/types';
 import { KNOWLEDGE_BASE_DIR, QUICK_NOTES_DIR } from '@/types';
 import { useVaultStore } from '@/stores/vault';
@@ -236,8 +237,21 @@ function FileTreeNode({
   const handleDelete = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation();
-      const ok = await confirm(`Delete "${entry.name}"?`, { title: 'Delete', kind: 'warning' });
-      if (ok) deleteNote(entry.path);
+      const ok = await confirm(
+        `Move "${entry.name}" to the vault trash?`,
+        { title: 'Delete', kind: 'warning' },
+      );
+      if (!ok) return;
+      try {
+        await deleteNote(entry.path);
+        // Deletes are recoverable now, so say where it went — otherwise the
+        // wording above is the only hint the trash exists.
+        useToastStore
+          .getState()
+          .info(`Moved "${entry.name}" to .mycel/trash`);
+      } catch (err) {
+        useToastStore.getState().error(describeError(err));
+      }
     },
     [entry, deleteNote],
   );
@@ -289,7 +303,9 @@ function FileTreeNode({
       const ext = entry.is_dir ? '' : isEnc ? '.md.age' : '.md';
       const base = stripNoteExt(trimmed);
       const newPath = joinPath(dir, `${base}${ext}`);
-      renameNote(entry.path, newPath);
+      renameNote(entry.path, newPath).catch((e) =>
+        useToastStore.getState().error(describeError(e)),
+      );
     }
     setRenaming(false);
   }, [renameValue, entry, renameNote, isEnc]);
@@ -836,7 +852,9 @@ export function FileTree() {
         await createFolder(joinPath(state.parent, trimmed));
       }
     } catch (e) {
-      console.error(e);
+      // The backend now refuses to create over an existing note instead of
+      // truncating it, so this is a message the user needs to read.
+      useToastStore.getState().error(describeError(e));
     }
   }, [newName, creating, createNote, createFolder]);
 
@@ -870,7 +888,15 @@ export function FileTree() {
 
       const moving = parentOf(src) !== destParent;
       if (moving) {
-        await renameNote(src, joinPath(destParent, srcName));
+        try {
+          await renameNote(src, joinPath(destParent, srcName));
+        } catch (e) {
+          // Dropping onto a folder that already has a file of this name is
+          // now refused rather than silently overwriting it. Without a message
+          // the drop would just appear not to have happened.
+          useToastStore.getState().error(describeError(e));
+          return;
+        }
         if (pos === 'inside') {
           setExpanded((s) => new Set(s).add(target.path));
           return;
@@ -916,7 +942,9 @@ export function FileTree() {
       if (!src) return;
       if (parentOf(src) === '') return; // already at vault root
       const name = src.split('/').pop()!;
-      renameNote(src, name);
+      renameNote(src, name).catch((e) =>
+        useToastStore.getState().error(describeError(e)),
+      );
     },
     [renameNote],
   );

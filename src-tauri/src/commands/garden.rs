@@ -19,9 +19,7 @@ fn map_err<T>(r: anyhow::Result<T>) -> Result<T, String> {
 // ---------- Inbox ----------
 
 #[tauri::command]
-pub async fn garden_inbox_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<g::InboxItem>, String> {
+pub async fn garden_inbox_list(state: State<'_, AppState>) -> Result<Vec<g::InboxItem>, String> {
     let root = vault_root(&state).await?;
     let f = map_err(g::read_inbox(&root))?;
     Ok(f.items)
@@ -47,10 +45,7 @@ pub async fn garden_inbox_update(
 }
 
 #[tauri::command]
-pub async fn garden_inbox_delete(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn garden_inbox_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_inbox(&root, &id))
 }
@@ -201,9 +196,7 @@ pub async fn garden_inbox_process(
 // ---------- Actions ----------
 
 #[tauri::command]
-pub async fn garden_actions_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<g::ActionItem>, String> {
+pub async fn garden_actions_list(state: State<'_, AppState>) -> Result<Vec<g::ActionItem>, String> {
     let root = vault_root(&state).await?;
     let f = map_err(g::read_actions(&root))?;
     Ok(f.items)
@@ -239,18 +232,13 @@ pub async fn garden_action_complete(
 }
 
 #[tauri::command]
-pub async fn garden_action_delete(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn garden_action_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_action(&root, &id))
 }
 
 #[tauri::command]
-pub async fn garden_actions_clear_completed(
-    state: State<'_, AppState>,
-) -> Result<usize, String> {
+pub async fn garden_actions_clear_completed(state: State<'_, AppState>) -> Result<usize, String> {
     let root = vault_root(&state).await?;
     map_err(g::clear_completed_actions(&root))
 }
@@ -286,10 +274,7 @@ pub async fn garden_project_update(
 }
 
 #[tauri::command]
-pub async fn garden_project_delete(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn garden_project_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_project(&root, &id))
 }
@@ -372,18 +357,13 @@ pub async fn garden_waiting_complete(
 }
 
 #[tauri::command]
-pub async fn garden_waiting_delete(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn garden_waiting_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_waiting(&root, &id))
 }
 
 #[tauri::command]
-pub async fn garden_waiting_clear_completed(
-    state: State<'_, AppState>,
-) -> Result<usize, String> {
+pub async fn garden_waiting_clear_completed(state: State<'_, AppState>) -> Result<usize, String> {
     let root = vault_root(&state).await?;
     map_err(g::clear_completed_waiting(&root))
 }
@@ -419,10 +399,7 @@ pub async fn garden_someday_update(
 }
 
 #[tauri::command]
-pub async fn garden_someday_delete(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn garden_someday_delete(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let root = vault_root(&state).await?;
     map_err(g::delete_someday(&root, &id))
 }
@@ -430,9 +407,7 @@ pub async fn garden_someday_delete(
 // ---------- Config / Counts ----------
 
 #[tauri::command]
-pub async fn garden_config_get(
-    state: State<'_, AppState>,
-) -> Result<GardenConfig, String> {
+pub async fn garden_config_get(state: State<'_, AppState>) -> Result<GardenConfig, String> {
     let root = vault_root(&state).await?;
     map_err(g::read_config(&root))
 }

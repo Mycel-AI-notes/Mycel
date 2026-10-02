@@ -14,9 +14,7 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 
 use super::detector::signature;
-use super::models::{
-    DetectorTelemetry, Insight, InsightKind, InsightStatus, TelemetryReport,
-};
+use super::models::{DetectorTelemetry, Insight, InsightKind, InsightStatus, TelemetryReport};
 use crate::core::ai::store::AiStore;
 
 /// Per-call cooldown override. Most call sites use the user's configured
@@ -153,7 +151,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 pub fn ensure_insights_schema(store: &AiStore) -> Result<()> {
-    store.with_conn(|c| init_schema(c))
+    store.with_conn(init_schema)
 }
 
 /// Persist a freshly-generated insight, or update its body if a detector
@@ -237,8 +235,7 @@ pub fn list_insights(
         let mut stmt = conn.prepare(sql)?;
         let mapper = |r: &rusqlite::Row<'_>| -> rusqlite::Result<Insight> {
             let kind_str: String = r.get(1)?;
-            let kind = parse_kind(&kind_str)
-                .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+            let kind = parse_kind(&kind_str).ok_or_else(|| rusqlite::Error::InvalidQuery)?;
             let note_paths: Vec<String> =
                 serde_json::from_str::<Vec<String>>(&r.get::<_, String>(5)?)
                     .map_err(|_| rusqlite::Error::InvalidQuery)?;
@@ -291,9 +288,8 @@ pub fn filter_against_dismissed(
         return Ok(insights);
     }
     let dead: std::collections::HashSet<String> = store.with_conn(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT signature FROM dismissed_insights WHERE cooldown_until > ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT signature FROM dismissed_insights WHERE cooldown_until > ?1")?;
         let rows = stmt
             .query_map(params![now], |r| r.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -520,11 +516,19 @@ mod tests {
         log_telemetry(&s, "det_b", "dismissed", "i3", 1004).unwrap();
 
         let report = telemetry_report(&s, 30, 1_000_000).unwrap();
-        let a = report.rows.iter().find(|r| r.detector_name == "det_a").unwrap();
+        let a = report
+            .rows
+            .iter()
+            .find(|r| r.detector_name == "det_a")
+            .unwrap();
         assert_eq!(a.shown, 2);
         assert_eq!(a.acted, 1);
         assert_eq!(a.dismissed, 0);
-        let b = report.rows.iter().find(|r| r.detector_name == "det_b").unwrap();
+        let b = report
+            .rows
+            .iter()
+            .find(|r| r.detector_name == "det_b")
+            .unwrap();
         assert_eq!(b.shown, 1);
         assert_eq!(b.dismissed, 1);
     }

@@ -117,18 +117,14 @@ pub async fn ai_test_key(state: State<'_, AppState>) -> Result<TestKeyResult, St
     // Record actual tokens reported by the response. Cost is unknown at this
     // layer (OpenRouter doesn't return USD), so we charge a flat penny — the
     // exact pricing table comes in MVP-2 when we batch real chunks.
-    budget::record(
-        &ai.store,
-        &model,
-        resp.usage.prompt_tokens,
-        0,
-        0.0,
-    )
-    .map_err(err)?;
+    budget::record(&ai.store, &model, resp.usage.prompt_tokens, 0, 0.0).map_err(err)?;
 
     Ok(TestKeyResult {
         ok: true,
-        model: if resp.model.is_empty() { model } else { resp.model },
+        model: if resp.model.is_empty() {
+            model
+        } else {
+            resp.model
+        },
     })
 }
-

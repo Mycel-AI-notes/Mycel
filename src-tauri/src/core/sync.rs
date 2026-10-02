@@ -12,7 +12,19 @@ use serde::{Deserialize, Serialize};
 use crate::core::sync_keyring;
 
 const SYNC_CONFIG_REL: &str = ".mycel/sync.json";
-const DEFAULT_GITIGNORE: &str = "# Mycel sync\n.DS_Store\nThumbs.db\n*.swp\n*.swo\n";
+/// Patterns the vault's `.gitignore` must carry for sync to be safe. Each is
+/// ensured independently so a vault that already has its own `.gitignore`
+/// still picks up a pattern added in a later version.
+///
+/// `.mycel/` is the important one. Without it `index.add_all(["."])` committed
+/// Mycel's own working directory to the user's remote — including
+/// `ai/index.db`, a SQLite file holding every indexed note's text in the
+/// clear, rewritten on every reindex, and `ai/quick_filing_log.jsonl`, which
+/// stores note bodies verbatim. The code assumed otherwise: `filing_log.rs`
+/// says "we assume the user will gitignore `.mycel/`", and the README tells
+/// users to add it when syncing the vault with Git *separately* — but Mycel's
+/// own sync never did.
+const REQUIRED_IGNORES: &[&str] = &[".mycel/", ".DS_Store", "Thumbs.db", "*.swp", "*.swo"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
@@ -130,22 +142,61 @@ fn signature(cfg: &SyncConfig) -> Result<Signature<'static>> {
     Signature::now(&cfg.author_name, &cfg.author_email).context("build signature")
 }
 
+/// Add any missing `REQUIRED_IGNORES` entry to the vault's `.gitignore`,
+/// preserving whatever the user already put there.
+///
+/// This used to bail out entirely when the file already mentioned
+/// `.DS_Store`, treating one pattern as proof the whole set was present. A
+/// vault whose `.gitignore` predated a new requirement never got it.
 fn ensure_gitignore(vault: &Path) -> Result<()> {
     let p = vault.join(".gitignore");
-    if p.exists() {
-        let existing = std::fs::read_to_string(&p).unwrap_or_default();
-        if !existing.contains(".DS_Store") {
-            let mut merged = existing;
-            if !merged.ends_with('\n') {
-                merged.push('\n');
-            }
-            merged.push_str(DEFAULT_GITIGNORE);
-            std::fs::write(&p, merged).context("update .gitignore")?;
-        }
-    } else {
-        std::fs::write(&p, DEFAULT_GITIGNORE).context("write .gitignore")?;
+    let existing = std::fs::read_to_string(&p).unwrap_or_default();
+    let present: Vec<&str> = existing.lines().map(str::trim).collect();
+    let missing: Vec<&str> = REQUIRED_IGNORES
+        .iter()
+        .copied()
+        .filter(|want| !present.contains(want))
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
     }
+
+    let mut out = existing;
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("\n# Mycel sync\n");
+    for m in missing {
+        out.push_str(m);
+        out.push('\n');
+    }
+    std::fs::write(&p, out).context("write .gitignore")?;
     Ok(())
+}
+
+/// Drop `.mycel/` from the index without touching the working tree, so a
+/// vault that already committed it stops sending updates upstream.
+///
+/// Newly ignored paths stay tracked once committed — `.gitignore` only affects
+/// untracked files — so ensuring the pattern is not enough on its own. This
+/// cannot rewrite history: anything already pushed is still in the remote's
+/// past, and the user has to deal with that themselves.
+fn untrack_mycel_dir(repo: &Repository) -> Result<bool> {
+    let mut index = repo.index()?;
+    let tracked: Vec<Vec<u8>> = index
+        .iter()
+        .map(|e| e.path.clone())
+        .filter(|p| p.starts_with(b".mycel/"))
+        .collect();
+    if tracked.is_empty() {
+        return Ok(false);
+    }
+    for path in &tracked {
+        let rel = String::from_utf8_lossy(path).into_owned();
+        index.remove_path(Path::new(&rel))?;
+    }
+    index.write()?;
+    Ok(true)
 }
 
 fn working_tree_dirty(repo: &Repository) -> Result<bool> {
@@ -236,11 +287,7 @@ enum MergeResult {
     Conflicts(Vec<String>),
 }
 
-fn merge_upstream(
-    repo: &Repository,
-    branch: &str,
-    cfg: &SyncConfig,
-) -> Result<MergeResult> {
+fn merge_upstream(repo: &Repository, branch: &str, cfg: &SyncConfig) -> Result<MergeResult> {
     let upstream_ref = format!("refs/remotes/origin/{}", branch);
     let upstream_oid = match repo.refname_to_id(&upstream_ref) {
         Ok(id) => id,
@@ -384,14 +431,11 @@ pub fn init(
 
     // Try fetch — if remote branch exists, merge it in before push.
     if fetch(&repo, branch, token).is_ok() {
-        match merge_upstream(&repo, branch, cfg)? {
-            MergeResult::Conflicts(files) => {
-                return Err(anyhow!(
-                    "Initial sync produced conflicts in: {}. Resolve manually and re-run Sync.",
-                    files.join(", ")
-                ));
-            }
-            _ => {}
+        if let MergeResult::Conflicts(files) = merge_upstream(&repo, branch, cfg)? {
+            return Err(anyhow!(
+                "Initial sync produced conflicts in: {}. Resolve manually and re-run Sync.",
+                files.join(", ")
+            ));
         }
     }
 
@@ -407,6 +451,12 @@ fn current_branch_name(repo: &Repository) -> Option<String> {
 /// Run a full sync cycle: commit local changes, fetch, merge, push.
 pub fn sync(vault: &Path, cfg: &SyncConfig, token: Option<&str>) -> Result<SyncOutcome> {
     let repo = Repository::open(vault).context("open repo")?;
+
+    // Repair vaults configured before `.mycel/` was ignored: `init` is the
+    // only other caller, so without this a vault set up by an earlier version
+    // would keep pushing its AI index forever.
+    ensure_gitignore(vault)?;
+    untrack_mycel_dir(&repo)?;
 
     let local_committed = stage_and_commit_all(&repo, cfg)?;
 
@@ -435,7 +485,11 @@ pub fn sync(vault: &Path, cfg: &SyncConfig, token: Option<&str>) -> Result<SyncO
         }
         push(&repo, &cfg.branch, token).context("push origin after retry")?;
     }
-    let pushed = if local_committed { ahead_before.max(1) } else { ahead_before };
+    let pushed = if local_committed {
+        ahead_before.max(1)
+    } else {
+        ahead_before
+    };
 
     let outcome = match (pulled, pushed) {
         (0, 0) => SyncOutcome::UpToDate,
@@ -505,7 +559,10 @@ mod tests {
             redact_url("https://github.com/o/r.git"),
             "https://github.com/o/r.git"
         );
-        assert_eq!(redact_url("git@github.com:o/r.git"), "git@github.com:o/r.git");
+        assert_eq!(
+            redact_url("git@github.com:o/r.git"),
+            "git@github.com:o/r.git"
+        );
     }
 
     #[test]
@@ -525,6 +582,132 @@ mod tests {
         let back = read_config(&dir).unwrap().unwrap();
         assert_eq!(back.remote, cfg.remote);
         assert_eq!(back.branch, cfg.branch);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gitignore_is_created_with_every_required_pattern() {
+        let dir = tempdir();
+        ensure_gitignore(&dir).unwrap();
+
+        let body = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        for want in REQUIRED_IGNORES {
+            assert!(body.lines().any(|l| l.trim() == *want), "missing {want}");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gitignore_keeps_mycel_out_of_the_remote() {
+        // The regression that mattered: the AI index holds every note's text
+        // in the clear, and sync was committing it.
+        let dir = tempdir();
+        ensure_gitignore(&dir).unwrap();
+        let body = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(body.lines().any(|l| l.trim() == ".mycel/"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gitignore_preserves_user_content_and_adds_what_is_missing() {
+        let dir = tempdir();
+        std::fs::write(dir.join(".gitignore"), "# mine\nbuild/\n").unwrap();
+
+        ensure_gitignore(&dir).unwrap();
+
+        let body = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(body.contains("# mine"), "user lines must survive");
+        assert!(body.lines().any(|l| l.trim() == "build/"));
+        assert!(body.lines().any(|l| l.trim() == ".mycel/"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gitignore_tops_up_a_file_that_already_has_some_patterns() {
+        // This is what used to break: one recognised pattern made the whole
+        // top-up a no-op, so a vault from an earlier version never got
+        // `.mycel/`.
+        let dir = tempdir();
+        std::fs::write(dir.join(".gitignore"), ".DS_Store\n").unwrap();
+
+        ensure_gitignore(&dir).unwrap();
+
+        let body = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(body.lines().any(|l| l.trim() == ".mycel/"));
+        assert_eq!(
+            body.lines().filter(|l| l.trim() == ".DS_Store").count(),
+            1,
+            "an already-present pattern must not be duplicated"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gitignore_is_idempotent() {
+        let dir = tempdir();
+        ensure_gitignore(&dir).unwrap();
+        let once = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        ensure_gitignore(&dir).unwrap();
+        let twice = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(once, twice);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn untrack_removes_already_committed_mycel_files() {
+        let dir = tempdir();
+        let repo = Repository::init(&dir).unwrap();
+        std::fs::create_dir_all(dir.join(".mycel/ai")).unwrap();
+        std::fs::write(dir.join(".mycel/ai/index.db"), "sqlite").unwrap();
+        std::fs::write(dir.join("note.md"), "hello").unwrap();
+
+        // Simulate a vault synced by a version that committed .mycel/.
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["."].iter(), git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        assert!(repo
+            .index()
+            .unwrap()
+            .get_path(Path::new(".mycel/ai/index.db"), 0)
+            .is_some());
+
+        let changed = untrack_mycel_dir(&repo).unwrap();
+
+        assert!(changed);
+        let index = repo.index().unwrap();
+        assert!(
+            index.get_path(Path::new(".mycel/ai/index.db"), 0).is_none(),
+            "the AI index must stop being tracked"
+        );
+        assert!(
+            index.get_path(Path::new("note.md"), 0).is_some(),
+            "notes must stay tracked"
+        );
+        assert!(
+            dir.join(".mycel/ai/index.db").exists(),
+            "untracking must not delete the user's local index"
+        );
+        drop(index);
+        drop(repo);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn untrack_is_a_no_op_on_a_clean_repo() {
+        let dir = tempdir();
+        let repo = Repository::init(&dir).unwrap();
+        std::fs::write(dir.join("note.md"), "hello").unwrap();
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["."].iter(), git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        drop(index);
+
+        assert!(!untrack_mycel_dir(&repo).unwrap());
+        drop(repo);
         std::fs::remove_dir_all(&dir).ok();
     }
 

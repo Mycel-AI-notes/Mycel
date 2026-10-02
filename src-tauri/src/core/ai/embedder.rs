@@ -46,7 +46,10 @@ impl OpenRouterEmbedder {
 #[async_trait]
 impl Embedder for OpenRouterEmbedder {
     async fn embed(&self, inputs: &[String]) -> Result<EmbedBatch> {
-        let resp = self.client.embed(&self.api_key, &self.model, inputs).await?;
+        let resp = self
+            .client
+            .embed(&self.api_key, &self.model, inputs)
+            .await?;
         let tokens_in = if resp.usage.prompt_tokens > 0 {
             resp.usage.prompt_tokens
         } else {
@@ -67,13 +70,10 @@ impl Embedder for OpenRouterEmbedder {
     }
 }
 
-/// USD pricing for `openai/text-embedding-3-small` as of 2026-05. We hard-
-/// code rather than hit a pricing endpoint so the budget check stays
-/// offline-safe; if pricing changes we'll see drift before a real billing
-/// surprise (the OpenRouter dashboard is the source of truth).
-pub fn estimate_cost_usd(tokens: u64) -> f64 {
-    const PRICE_PER_MILLION: f64 = 0.02;
-    (tokens as f64) * PRICE_PER_MILLION / 1_000_000.0
+/// USD cost of embedding `tokens` with `model`. See `super::pricing` — the
+/// rate has to follow the configured model, which this used to ignore.
+pub fn estimate_cost_usd(model: &str, tokens: u64) -> f64 {
+    super::pricing::embedding_cost_usd(model, tokens)
 }
 
 #[cfg(test)]
@@ -140,15 +140,26 @@ mod tests {
 
     #[test]
     fn cost_estimate_matches_pricing_table() {
-        // 1M tokens → $0.02
-        let c = estimate_cost_usd(1_000_000);
+        // 1M tokens of the default embedding model → $0.02
+        let c = estimate_cost_usd(EMBED_MODEL_DEFAULT, 1_000_000);
         assert!((c - 0.02).abs() < 1e-9);
     }
 
     #[test]
     fn small_token_count_costs_pennies() {
         // ~5000 chars / 4 ≈ 1250 tokens → $0.000025
-        let c = estimate_cost_usd(1250);
+        let c = estimate_cost_usd(EMBED_MODEL_DEFAULT, 1250);
         assert!(c < 0.0001);
     }
+
+    #[test]
+    fn cost_follows_the_configured_model() {
+        // The point of routing through the pricing table: this used to quote
+        // the cheap rate no matter which model was configured.
+        let cheap = estimate_cost_usd(EMBED_MODEL_DEFAULT, 1_000_000);
+        let dear = estimate_cost_usd("openai/text-embedding-3-large", 1_000_000);
+        assert!(dear > cheap, "{dear} should exceed {cheap}");
+    }
+
+    const EMBED_MODEL_DEFAULT: &str = "openai/text-embedding-3-small";
 }

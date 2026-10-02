@@ -1,7 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 /// Special vault folder where databases and the pages they generate live.
 /// Auto-created on vault open and protected from rename/delete.
@@ -34,7 +34,9 @@ pub fn is_safe_rel_path(rel: &str) -> bool {
         && !rel.starts_with('/')
         && !rel.contains('\\')
         && !rel.contains(':')
-        && rel.split('/').all(|c| !c.is_empty() && c != "." && c != "..")
+        && rel
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..")
 }
 
 /// Registry file under `.mycel/` that remembers the user's manual ordering
@@ -77,7 +79,10 @@ pub struct KbDirsConfig {
 
 impl Default for KbDirsConfig {
     fn default() -> Self {
-        Self { version: 1, dirs: Vec::new() }
+        Self {
+            version: 1,
+            dirs: Vec::new(),
+        }
     }
 }
 
@@ -317,4 +322,321 @@ fn read_dir_recursive(
     }
 
     Ok(entries)
+}
+
+/// Where `note_delete` parks removed entries, under `.mycel/` so it is
+/// invisible in the file tree and excluded from sync.
+pub const TRASH_DIR: &str = "trash";
+
+/// Move `rel` into the vault's trash instead of unlinking it, and return the
+/// absolute path it landed at.
+///
+/// Deleting used to call `remove_file` / `remove_dir_all` straight away, so a
+/// mis-clicked folder deletion took everything under it with no way back. One
+/// `confirm()` is not much of a safety net for an irreversible recursive
+/// delete.
+///
+/// Entries are grouped under a per-deletion timestamp directory and keep their
+/// original relative path inside it, so restoring is a plain move back and two
+/// deletions of the same name never collide.
+pub fn move_to_trash(root: &Path, rel: &str) -> Result<PathBuf> {
+    anyhow::ensure!(is_safe_rel_path(rel), "Invalid path: {rel}");
+    let src = root.join(rel);
+    anyhow::ensure!(src.exists(), "Nothing to delete at {rel}");
+
+    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let mut dest = root.join(".mycel").join(TRASH_DIR).join(&stamp).join(rel);
+
+    // Two deletions inside the same second still have to coexist.
+    if dest.exists() {
+        for n in 2.. {
+            let candidate = root
+                .join(".mycel")
+                .join(TRASH_DIR)
+                .join(format!("{stamp}_{n}"))
+                .join(rel);
+            if !candidate.exists() {
+                dest = candidate;
+                break;
+            }
+        }
+    }
+
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create trash directory {}", parent.display()))?;
+    }
+
+    // A rename is atomic and cheap within one filesystem, which the vault and
+    // its own `.mycel/` always share. Fall back to copy-then-remove only if
+    // the platform refuses it.
+    match std::fs::rename(&src, &dest) {
+        Ok(()) => Ok(dest),
+        Err(_) => {
+            if src.is_dir() {
+                copy_dir_all(&src, &dest)?;
+                std::fs::remove_dir_all(&src)
+                    .with_context(|| format!("Failed to remove {}", src.display()))?;
+            } else {
+                std::fs::copy(&src, &dest)
+                    .with_context(|| format!("Failed to copy {}", src.display()))?;
+                std::fs::remove_file(&src)
+                    .with_context(|| format!("Failed to remove {}", src.display()))?;
+            }
+            Ok(dest)
+        }
+    }
+}
+
+fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_all(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Walk the vault without descending into dot-directories.
+///
+/// Every full-vault command used a bare `WalkDir::new(root)` and filtered
+/// hidden paths *after* the fact, so each call recursed through `.git` — tens
+/// of thousands of objects on a synced vault — and through `.mycel` before
+/// discarding the results. `notes_list`, `backlinks_get`, `notes_by_tag`,
+/// `graph_data` and `dbs_list` all pay this on every invocation, and the
+/// backlinks panel fires on every save.
+pub fn walk_vault(root: &Path) -> impl Iterator<Item = walkdir::DirEntry> + '_ {
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| {
+            e.depth() == 0
+                || !e
+                    .file_name()
+                    .to_str()
+                    .map(|n| n.starts_with('.'))
+                    .unwrap_or(false)
+        })
+        .filter_map(|e| e.ok())
+}
+
+/// True for a path Mycel treats as a note: `.md`, or `.md.age` when encrypted.
+pub fn is_note_path(rel: &str) -> bool {
+    rel.ends_with(".md") || rel.ends_with(".md.age")
+}
+
+/// Vault-relative paths of every note, dot-directories excluded.
+pub fn note_paths(root: &Path) -> Vec<String> {
+    walk_vault(root)
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| {
+            let rel = e.path().strip_prefix(root).ok()?;
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            is_note_path(&rel).then_some(rel)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write(root: &Path, rel: &str, body: &str) {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+
+    #[test]
+    fn safe_rel_path_accepts_ordinary_note_paths() {
+        assert!(is_safe_rel_path("note.md"));
+        assert!(is_safe_rel_path("projects/roadmap.md"));
+        assert!(is_safe_rel_path("a/b/c/deep.md"));
+        assert!(is_safe_rel_path("secret.md.age"));
+    }
+
+    #[test]
+    fn safe_rel_path_rejects_escapes() {
+        assert!(!is_safe_rel_path(""));
+        assert!(!is_safe_rel_path("/etc/passwd"));
+        assert!(!is_safe_rel_path("../outside.md"));
+        assert!(!is_safe_rel_path("a/../../b.md"));
+        assert!(!is_safe_rel_path("./a.md"));
+        assert!(!is_safe_rel_path("a//b.md"));
+        assert!(!is_safe_rel_path("a\\b.md"));
+        assert!(!is_safe_rel_path("C:/notes.md"));
+    }
+
+    #[test]
+    fn trash_moves_a_file_out_of_the_vault_tree() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "keep me");
+
+        let dest = move_to_trash(root, "note.md").unwrap();
+
+        assert!(!root.join("note.md").exists(), "source should be gone");
+        assert!(dest.starts_with(root.join(".mycel").join(TRASH_DIR)));
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "keep me");
+    }
+
+    #[test]
+    fn trash_preserves_the_original_relative_path() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "projects/deep/note.md", "body");
+
+        let dest = move_to_trash(root, "projects/deep/note.md").unwrap();
+
+        assert!(
+            dest.ends_with("projects/deep/note.md"),
+            "restoring should be a plain move back, so keep the shape: {dest:?}"
+        );
+    }
+
+    #[test]
+    fn trash_keeps_a_whole_folder_recoverable() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "folder/a.md", "a");
+        write(root, "folder/nested/b.md", "b");
+
+        let dest = move_to_trash(root, "folder").unwrap();
+
+        assert!(!root.join("folder").exists());
+        assert_eq!(std::fs::read_to_string(dest.join("a.md")).unwrap(), "a");
+        assert_eq!(
+            std::fs::read_to_string(dest.join("nested/b.md")).unwrap(),
+            "b"
+        );
+    }
+
+    #[test]
+    fn trashing_the_same_name_twice_does_not_clobber() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+
+        write(root, "note.md", "first");
+        let first = move_to_trash(root, "note.md").unwrap();
+        write(root, "note.md", "second");
+        let second = move_to_trash(root, "note.md").unwrap();
+
+        assert_ne!(first, second, "two deletions must not share a destination");
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "first");
+        assert_eq!(std::fs::read_to_string(&second).unwrap(), "second");
+    }
+
+    #[test]
+    fn trash_refuses_paths_outside_the_vault() {
+        let dir = TempDir::new().unwrap();
+        assert!(move_to_trash(dir.path(), "../escape.md").is_err());
+        assert!(move_to_trash(dir.path(), "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn trash_reports_a_missing_source() {
+        let dir = TempDir::new().unwrap();
+        assert!(move_to_trash(dir.path(), "nope.md").is_err());
+    }
+
+    #[test]
+    fn open_creates_the_managed_folders() {
+        let dir = TempDir::new().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        assert!(vault.root.join(KNOWLEDGE_BASE_DIR).is_dir());
+        assert!(vault.root.join(QUICK_NOTES_DIR).is_dir());
+        assert!(vault.root.join(".mycel").join("config.json").is_file());
+    }
+
+    #[test]
+    fn file_tree_lists_notes_and_hides_dot_dirs() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "");
+        write(root, "secret.md.age", "");
+        write(root, "notes.txt", "");
+        write(root, ".hidden/b.md", "");
+        let vault = Vault::open(root).unwrap();
+
+        let tree = vault.file_tree().unwrap();
+        let names: Vec<&str> = tree.iter().map(|e| e.name.as_str()).collect();
+
+        assert!(names.contains(&"a.md"));
+        assert!(names.contains(&"secret.md.age"));
+        assert!(
+            !names.contains(&"notes.txt"),
+            "only notes belong in the tree"
+        );
+        assert!(!names.contains(&".hidden"));
+        let enc = tree.iter().find(|e| e.name == "secret.md.age").unwrap();
+        assert!(enc.is_encrypted);
+    }
+
+    #[test]
+    fn note_paths_lists_both_note_kinds() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "");
+        write(root, "deep/b.md", "");
+        write(root, "secret.md.age", "");
+        write(root, "readme.txt", "");
+
+        let mut got = note_paths(root);
+        got.sort();
+        assert_eq!(got, vec!["a.md", "deep/b.md", "secret.md.age"]);
+    }
+
+    #[test]
+    fn note_paths_never_descends_into_dot_directories() {
+        // The point of the shared walker: `.git` on a synced vault holds tens
+        // of thousands of objects, and every full-vault command used to
+        // recurse through all of them before discarding the results.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "");
+        write(root, ".git/objects/pack/x.md", "");
+        write(root, ".mycel/trash/2026/old.md", "");
+        write(root, ".obsidian/plugins/p.md", "");
+
+        assert_eq!(note_paths(root), vec!["note.md"]);
+    }
+
+    #[test]
+    fn walk_vault_still_yields_the_root() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "note.md", "");
+        // The root itself is `.`-free only by luck of the temp name, so the
+        // filter has to exempt depth 0 or the walk yields nothing.
+        assert!(walk_vault(dir.path()).count() >= 2);
+    }
+
+    #[test]
+    fn is_note_path_recognises_both_extensions() {
+        assert!(is_note_path("a.md"));
+        assert!(is_note_path("a.md.age"));
+        assert!(!is_note_path("a.txt"));
+        assert!(!is_note_path("a.markdown"));
+    }
+
+    #[test]
+    fn file_tree_hides_the_trash() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "x");
+        move_to_trash(root, "note.md").unwrap();
+        let vault = Vault::open(root).unwrap();
+
+        let tree = vault.file_tree().unwrap();
+        assert!(
+            tree.iter()
+                .all(|e| e.name != ".mycel" && e.name != TRASH_DIR),
+            "trash lives under .mycel and must stay out of the sidebar"
+        );
+    }
 }

@@ -38,8 +38,7 @@ impl Detector for SimilarNotesDetector {
         // Only notes with enough indexed text take part. Short stubs (just a
         // title and a line or two) produce noisy, unreliable matches — we
         // skip any pair that touches one by filtering them out up front.
-        let substantial =
-            substantial_notes(ctx, ctx.settings.similar_notes_min_words as usize)?;
+        let substantial = substantial_notes(ctx, ctx.settings.similar_notes_min_words as usize)?;
         if substantial.len() < 2 {
             return Ok(Vec::new());
         }
@@ -47,8 +46,7 @@ impl Detector for SimilarNotesDetector {
         // Thresholds as 0.0-1.0 fractions. Clamp the stored percentages so a
         // corrupt settings file can't make the detector reject (or accept)
         // everything in a way the UI never showed.
-        let min_similarity =
-            (ctx.settings.similar_notes_min_similarity.min(100) as f32) / 100.0;
+        let min_similarity = (ctx.settings.similar_notes_min_similarity.min(100) as f32) / 100.0;
         let duplicate_similarity =
             (ctx.settings.similar_notes_duplicate_similarity.min(100) as f32) / 100.0;
 
@@ -158,9 +156,7 @@ fn substantial_notes(
     ctx.store.with_conn(|c| {
         let mut stmt = c.prepare("SELECT note_path, text FROM chunks")?;
         let rows = stmt
-            .query_map([], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-            })?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
             .filter_map(|r| r.ok());
 
         let mut words: HashMap<String, usize> = HashMap::new();
@@ -336,7 +332,10 @@ mod tests {
             .run(&ctx(&store, dir.path(), &strict))
             .await
             .unwrap();
-        assert!(got.is_empty(), "short notes must be skipped by the word gate");
+        assert!(
+            got.is_empty(),
+            "short notes must be skipped by the word gate"
+        );
 
         // Drop the gate and the very same pair surfaces.
         let lenient = test_settings();
@@ -396,5 +395,4 @@ mod tests {
         assert_eq!(second.len(), 1);
         assert_eq!(first[0].id, second[0].id, "id must be stable across runs");
     }
-
 }

@@ -46,7 +46,12 @@ pub async fn semantic_search(
     // would tip us into a hard ban. We use the same 1-token-per-4-chars
     // rule the indexer uses.
     let est_tokens = (trimmed.chars().count() / 4).max(1) as u64;
-    budget::check(store, daily_budget_usd, model, estimate_cost_usd(est_tokens))?;
+    budget::check(
+        store,
+        daily_budget_usd,
+        model,
+        estimate_cost_usd(model, est_tokens),
+    )?;
 
     let batch = embedder.embed(&[trimmed.to_string()]).await?;
     anyhow::ensure!(
@@ -60,7 +65,7 @@ pub async fn semantic_search(
         "query embedding dim mismatch"
     );
 
-    let cost = estimate_cost_usd(batch.tokens_in);
+    let cost = estimate_cost_usd(model, batch.tokens_in);
     budget::record(store, model, batch.tokens_in, 0, cost)?;
 
     // Ask for 3× headroom so dedupe-by-note doesn't return fewer notes
@@ -206,7 +211,9 @@ mod tests {
         )
         .await;
         let embedder = StubEmbedder::new(EMBED_DIM);
-        let hits = semantic_search(&store, &embedder, "alpha", 5, 10.0, "m").await.unwrap();
+        let hits = semantic_search(&store, &embedder, "alpha", 5, 10.0, "m")
+            .await
+            .unwrap();
         // Each note appears at most once even though long.md has many chunks.
         let paths: Vec<_> = hits.iter().map(|h| &h.note_path).collect();
         let unique: std::collections::HashSet<_> = paths.iter().collect();
@@ -220,11 +227,16 @@ mod tests {
         let files: Vec<(String, String)> = (0..10)
             .map(|i| (format!("n{i}.md"), format!("content number {i}")))
             .collect();
-        let refs: Vec<(&str, &str)> = files.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let refs: Vec<(&str, &str)> = files
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
         seed(dir.path(), &store, &refs).await;
 
         let embedder = StubEmbedder::new(EMBED_DIM);
-        let hits = semantic_search(&store, &embedder, "content", 3, 10.0, "m").await.unwrap();
+        let hits = semantic_search(&store, &embedder, "content", 3, 10.0, "m")
+            .await
+            .unwrap();
         assert_eq!(hits.len(), 3);
     }
 

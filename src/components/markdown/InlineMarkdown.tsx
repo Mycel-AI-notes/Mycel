@@ -149,6 +149,11 @@ function renderToken(t: Token, key: number): ReactNode {
         <span
           key={key}
           className="cm-wikilink"
+          // Carry the destination even though this span handles no clicks of
+          // its own: the editor-level handler falls back to a `.cm-wikilink`
+          // element's text when no target is present, and that text is the
+          // alias. Every `.cm-wikilink` in the app states its target.
+          data-target={t.target}
           title={t.target === t.label ? t.target : `${t.label} → ${t.target}`}
           onMouseDown={(e) => e.stopPropagation()}
         >

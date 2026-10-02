@@ -83,9 +83,10 @@ npm run tauri build
 ### Writing & navigation
 
 - ✍️  **CodeMirror 6 editor** with Markdown syntax, inline preview decorations, fenced code blocks with per-language highlighting, and autocomplete.
-- 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you.
+- 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you. Renaming a note **rewrites every link to it** across the vault — aliases, anchors, embeds and folder paths included — so a rename never leaves a trail of broken references.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
 - 📊 **Editable GFM tables** rendered as styled blocks; inline Markdown (links, wikilinks, bold) renders *inside* cells and stays clickable.
+- 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
@@ -102,6 +103,7 @@ npm run tauri build
 
 - 🧱 **Inline databases.** Notion-style fenced `mycel-db` blocks render typed tables (text, number, date, select, multi-select, checkbox, page link…) right in the note.
 - 🗃️ **Vault picker with recents.** Switch between vaults; Mycel remembers your last one and the last few you used.
+- 🗑️ **Recoverable deletes.** Deleting a note or folder moves it to `.mycel/trash/<timestamp>/`, keeping its original path — restoring is a move back. Nothing is unlinked outright.
 
 ### Sync & sharing
 
@@ -169,7 +171,7 @@ npm run tauri build
 
 ```
 my-vault/
-├── .mycel/              # Mycel's working files (add to .gitignore)
+├── .mycel/              # Mycel's working files (gitignored automatically)
 ├── quick/
 │   └── 2026-05-11/
 │       └── 14-32-08.md  # quick notes are filed by date and time
@@ -178,7 +180,11 @@ my-vault/
 └── inbox.md
 ```
 
-The `.mycel/` folder holds app metadata. Add it to `.gitignore` if you sync the vault with Git separately.
+The `.mycel/` folder holds app metadata: the AI index, the insights store,
+Garden data, and the trash. Mycel's own GitHub sync adds it to `.gitignore`
+for you — nothing in there belongs on a remote, and the AI index in
+particular holds your notes' text in the clear. If you sync the vault with
+Git **separately**, add `.mycel/` to `.gitignore` yourself.
 
 ### Note format
 
@@ -299,8 +305,18 @@ Good first issues:
 git clone https://github.com/<you>/Mycel.git
 cd Mycel && npm install
 npm run tauri dev      # iterate
-npm run lint           # before pushing
+
+# before pushing — CI runs all of these on every PR
+npm run lint
+npm test
+npm run build
+cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
+
+On Linux the Rust checks need Tauri's system libraries (`libgtk-3-dev`,
+`libwebkit2gtk-4.1-dev` and friends) — without them the build fails inside
+`gdk-sys` with a `pkg-config` error that gives no hint a system package is
+what's missing. See `.github/workflows/ci.yml` for the exact list.
 
 Open a PR against `main` with a short summary of *why* the change matters. Commits roughly follow Conventional Commits (`feat(editor): …`, `fix(graph): …`).
 

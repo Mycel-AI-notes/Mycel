@@ -168,8 +168,7 @@ pub struct EdgesStatus {
 /// never run the pass for this vault).
 pub fn status(store: &AiStore) -> Result<EdgesStatus> {
     store.with_conn(|c| {
-        let total: i64 =
-            c.query_row("SELECT COUNT(*) FROM semantic_edges", [], |r| r.get(0))?;
+        let total: i64 = c.query_row("SELECT COUNT(*) FROM semantic_edges", [], |r| r.get(0))?;
         Ok(EdgesStatus {
             total: total.max(0) as u32,
         })
@@ -191,10 +190,12 @@ fn read_note_vectors(store: &AiStore, note_path: &str) -> Result<Vec<Vec<f32>>> 
         let vecs: Vec<Vec<f32>> = stmt
             .query_map([note_path], |r| {
                 let bytes: Vec<u8> = r.get(0)?;
-                let mut v = Vec::with_capacity(bytes.len() / 4);
-                for chunk in bytes.chunks_exact(4) {
-                    v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-                }
+                let v = bytes
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| f32::from_le_bytes(*c))
+                    .collect();
                 Ok(v)
             })?
             .filter_map(|r| r.ok())
@@ -334,11 +335,7 @@ mod tests {
         seed(
             dir.path(),
             &store,
-            &[
-                ("a.md", "alpha"),
-                ("b.md", "alpha"),
-                ("c.md", "alpha"),
-            ],
+            &[("a.md", "alpha"), ("b.md", "alpha"), ("c.md", "alpha")],
         )
         .await;
         let _ = recompute(&store, |_| {}).unwrap();

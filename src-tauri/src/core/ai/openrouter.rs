@@ -153,7 +153,10 @@ impl<T: HttpTransport> OpenRouterClient<T> {
         inputs: &[String],
     ) -> Result<EmbedResponse> {
         let url = format!("{}/embeddings", self.base_url);
-        let req = EmbedRequest { model, input: inputs };
+        let req = EmbedRequest {
+            model,
+            input: inputs,
+        };
         let body = serde_json::to_value(&req)?;
         let resp = self.transport.post_json(&url, api_key, body).await?;
         parse_response(resp.status, &resp.body, inputs.len())
@@ -217,8 +220,12 @@ fn parse_chat_response(status: u16, body: &str) -> Result<ChatReply> {
         }
         return Err(anyhow!("OpenRouter {}: {}", status, truncate(body, 200)));
     }
-    let parsed: serde_json::Value = serde_json::from_str(body)
-        .with_context(|| format!("Failed to parse OpenRouter response: {}", truncate(body, 200)))?;
+    let parsed: serde_json::Value = serde_json::from_str(body).with_context(|| {
+        format!(
+            "Failed to parse OpenRouter response: {}",
+            truncate(body, 200)
+        )
+    })?;
     let content = parsed
         .get("choices")
         .and_then(|c| c.get(0))
@@ -252,8 +259,12 @@ fn parse_response(status: u16, body: &str, expected_count: usize) -> Result<Embe
         }
         return Err(anyhow!("OpenRouter {}: {}", status, truncate(body, 200)));
     }
-    let parsed: EmbedResponse = serde_json::from_str(body)
-        .with_context(|| format!("Failed to parse OpenRouter response: {}", truncate(body, 200)))?;
+    let parsed: EmbedResponse = serde_json::from_str(body).with_context(|| {
+        format!(
+            "Failed to parse OpenRouter response: {}",
+            truncate(body, 200)
+        )
+    })?;
     if parsed.data.len() != expected_count {
         return Err(anyhow!(
             "OpenRouter returned {} embeddings, expected {}",
@@ -299,8 +310,7 @@ mod tests {
             bearer: &str,
             body: serde_json::Value,
         ) -> Result<HttpResponse> {
-            *self.last_call.lock().unwrap() =
-                Some((url.to_string(), bearer.to_string(), body));
+            *self.last_call.lock().unwrap() = Some((url.to_string(), bearer.to_string(), body));
             self.responses
                 .lock()
                 .unwrap()
@@ -347,11 +357,10 @@ mod tests {
 
     #[tokio::test]
     async fn embed_sends_bearer_and_body() {
-        let transport =
-            std::sync::Arc::new(MockTransport::with_responses(vec![HttpResponse {
-                status: 200,
-                body: ok_body(1),
-            }]));
+        let transport = std::sync::Arc::new(MockTransport::with_responses(vec![HttpResponse {
+            status: 200,
+            body: ok_body(1),
+        }]));
         // Borrow the same instance through both the client and our test
         // assertion. The transport doesn't outlive the test, so a leak-free
         // wrapper isn't necessary — just share via Arc.
@@ -369,7 +378,11 @@ mod tests {
         }
         let client = OpenRouterClient::with_transport(Shared(transport.clone()));
         let _ = client
-            .embed("sk-test-key", "openai/text-embedding-3-small", &["hello".into()])
+            .embed(
+                "sk-test-key",
+                "openai/text-embedding-3-small",
+                &["hello".into()],
+            )
             .await
             .unwrap();
         let call = transport.last_call.lock().unwrap().clone().expect("called");
@@ -397,8 +410,7 @@ mod tests {
     async fn embed_surfaces_structured_error_message() {
         let transport = MockTransport::with_responses(vec![HttpResponse {
             status: 401,
-            body: serde_json::json!({ "error": { "message": "Invalid API key" } })
-                .to_string(),
+            body: serde_json::json!({ "error": { "message": "Invalid API key" } }).to_string(),
         }]);
         let client = OpenRouterClient::with_transport(transport);
         let err = client.embed("k", "m", &["a".into()]).await.unwrap_err();
@@ -426,7 +438,10 @@ mod tests {
             body: ok_body(1),
         }]);
         let client = OpenRouterClient::with_transport(transport);
-        let model = client.test_key("k", "openai/text-embedding-3-small").await.unwrap();
+        let model = client
+            .test_key("k", "openai/text-embedding-3-small")
+            .await
+            .unwrap();
         assert_eq!(model, "openai/text-embedding-3-small");
     }
 }
