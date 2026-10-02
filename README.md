@@ -85,6 +85,7 @@ npm run tauri build
 - ✍️  **CodeMirror 6 editor** with Markdown syntax, inline preview decorations, fenced code blocks with per-language highlighting, and autocomplete.
 - 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you. Renaming a note **rewrites every link to it** across the vault — aliases, anchors, embeds and folder paths included — so a rename never leaves a trail of broken references.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
+- 🧩 **Templates** — drop `.md` files in `templates/` (folder configurable in Settings → Notes), then `/template` or *Insert template…* in the palette inserts one at the cursor. Variables: `{{title}}`, `{{date}}`, `{{time}}`, and `{{date:DD.MM.YYYY HH:mm}}` with the tokens `YYYY MM DD HH mm`.
 - 📊 **Editable GFM tables** rendered as styled blocks; inline Markdown (links, wikilinks, bold) renders *inside* cells and stays clickable.
 - 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
@@ -140,7 +141,7 @@ npm run tauri build
 | `⌘/Ctrl + I` | Garden quick capture |
 | `⌘/Ctrl + Shift + A` | Garden: Next Actions |
 | `` ⌘/Ctrl + ` `` | Garden: toggle the sidebar section |
-| `/` in the editor | Slash command menu |
+| `/` in the editor | Slash command menu (`/template` inserts a template) |
 | `[[` in the editor | Wikilink autocomplete |
 | Double-click a tab | Pin a preview tab |
 | Double-click sidebar resize handle | Reset sidebar width |

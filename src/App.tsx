@@ -28,6 +28,7 @@ import { isInsightsTabPath } from '@/lib/insights-tab';
 import { InsightsView } from '@/components/insights/InsightsView';
 import { isAttachmentPath } from '@/lib/note-name';
 import { CommandPalette } from '@/components/search/CommandPalette';
+import { TemplatePicker } from '@/components/editor/TemplatePicker';
 import { getAppCommands, QUICK_NOTE_GLOBAL_SHORTCUT } from '@/lib/app-commands';
 import { commandForHotkey, eventToHotkey, formatHotkey } from '@/lib/commands';
 import { isMac } from '@/lib/platform';
@@ -66,6 +67,7 @@ export default function App() {
   const gardenEnabled = useUIStore((s) => s.features.garden);
   const openSettings = useUIStore((s) => s.openSettings);
   const paletteOpen = useUIStore((s) => s.paletteOpen);
+  const templatePickerOpen = useUIStore((s) => s.templatePickerOpen);
   const quickSwitcherOpen = useUIStore((s) => s.quickSwitcherOpen);
   const setQuickSwitcherOpen = useUIStore((s) => s.setQuickSwitcherOpen);
   const graphOpen = useUIStore((s) => s.graphOpen);
@@ -361,6 +363,9 @@ export default function App() {
 
       {/* Command palette (⌘P) */}
       {paletteOpen && <CommandPalette />}
+
+      {/* Template picker — palette "Insert template…" and `/template` */}
+      {templatePickerOpen && <TemplatePicker />}
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}

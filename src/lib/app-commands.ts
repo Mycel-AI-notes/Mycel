@@ -137,6 +137,13 @@ export function getAppCommands(): Command[] {
       run: presentActiveNote,
     },
     {
+      id: 'template.insert',
+      title: 'Insert template…',
+      section: 'Notes',
+      enabled: () => !!activeNotePath(),
+      run: () => useUIStore.getState().setTemplatePickerOpen(true),
+    },
+    {
       id: 'graph.toggle',
       title: 'Toggle graph view',
       section: 'Navigation',

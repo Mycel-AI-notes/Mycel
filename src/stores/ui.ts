@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { HotkeyOverrides } from '@/lib/commands';
+import { DEFAULT_TEMPLATES_FOLDER } from '@/lib/templates';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -52,6 +53,9 @@ interface UIState {
    *  differences from the defaults are stored, so a default changed in a
    *  later release still reaches users who never touched that command. */
   hotkeyOverrides: HotkeyOverrides;
+  /** Vault-relative folder whose `.md` files are offered as templates. */
+  templatesFolder: string;
+  templatePickerOpen: boolean;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -67,6 +71,8 @@ interface UIState {
   setGraphOpen: (open: boolean) => void;
   setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
   resetHotkey: (commandId: string) => void;
+  setTemplatesFolder: (folder: string) => void;
+  setTemplatePickerOpen: (open: boolean) => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -87,6 +93,8 @@ export const useUIStore = create<UIState>()(
       quickSwitcherOpen: false,
       graphOpen: false,
       hotkeyOverrides: {},
+      templatesFolder: DEFAULT_TEMPLATES_FOLDER,
+      templatePickerOpen: false,
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -103,6 +111,8 @@ export const useUIStore = create<UIState>()(
       setGraphOpen: (open) => set({ graphOpen: open }),
       setHotkeyOverride: (commandId, hotkey) =>
         set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
+      setTemplatesFolder: (folder) => set({ templatesFolder: folder }),
+      setTemplatePickerOpen: (open) => set({ templatePickerOpen: open }),
       resetHotkey: (commandId) =>
         set((s) => {
           const next = { ...s.hotkeyOverrides };
@@ -118,6 +128,7 @@ export const useUIStore = create<UIState>()(
         palette: s.palette,
         features: s.features,
         hotkeyOverrides: s.hotkeyOverrides,
+        templatesFolder: s.templatesFolder,
       }),
       // Deep-merge feature flags so a flag added after the user's state was
       // saved picks up its default instead of reading as `undefined`.
