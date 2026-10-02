@@ -300,7 +300,12 @@ export const useVaultStore = create<VaultState>((set, get) => ({
    * hash conflict against the file it was supposed to be editing.
    */
   reloadNote: async (path) => {
-    if (!get().noteCache.has(path)) return; // nothing stale to refresh
+    if (!get().noteCache.has(path)) {
+      // Nothing stale to refresh, but the file did change on disk: panels
+      // keyed on `vaultVersion` (backlinks, mentions, local graph) refetch.
+      set((s) => ({ vaultVersion: s.vaultVersion + 1 }));
+      return;
+    }
     const note = await invoke<Note>('note_read', { path });
     const reparsed = reparseBody(note.content);
     set((s) => {

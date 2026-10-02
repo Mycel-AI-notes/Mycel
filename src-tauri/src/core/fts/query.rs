@@ -127,6 +127,22 @@ fn term_expr(term: &Term) -> String {
     }
 }
 
+/// FTS5 MATCH expression for "the body contains any of these phrases", for
+/// internal callers that look notes up by a name rather than by what a user
+/// typed (unlinked mentions). Each phrase goes through the same quoting as
+/// user terms, so a note called `C++ (draft)` or `NEAR` cannot turn into an
+/// operator; the column filter is ours. Phrases with nothing to tokenize are
+/// dropped — `None` when none are left.
+pub fn body_phrases_expr(phrases: &[String]) -> Option<String> {
+    let alts: Vec<String> = phrases
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| has_token_chars(p))
+        .map(|p| format!("body : {}", term_expr(&Term::Phrase(collapse_ws(p)))))
+        .collect();
+    (!alts.is_empty()).then(|| alts.join(" OR "))
+}
+
 /// A term FTS5 would tokenize to nothing (`+++`, `—`, `…`). Dropped up front:
 /// an empty phrase never matches, so keeping one in an AND would make the
 /// whole query return nothing for a reason the user cannot see.
@@ -500,5 +516,22 @@ mod tests {
     fn empty_and_blank_input() {
         assert!(parse_query("").is_empty());
         assert!(parse_query("   \t\n ").is_empty());
+    }
+
+    #[test]
+    fn body_phrases_are_quoted_folded_and_column_scoped() {
+        let expr = body_phrases_expr(&[
+            "Машинное   обучение".into(),
+            "Ёжик".into(),
+            "say \"hi\" NEAR(x)".into(),
+            "+++".into(),
+        ])
+        .unwrap();
+        assert_eq!(
+            expr,
+            r#"body : "Машинное обучение" OR body : "Ежик" OR body : "say ""hi"" NEAR(x)""#
+        );
+        assert_eq!(body_phrases_expr(&["—".into(), " ".into()]), None);
+        assert_eq!(body_phrases_expr(&[]), None);
     }
 }

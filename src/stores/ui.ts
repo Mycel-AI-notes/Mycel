@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { HotkeyOverrides } from '@/lib/commands';
 import { DEFAULT_TEMPLATES_FOLDER } from '@/lib/templates';
 import { DEFAULT_DAILY_FOLDER } from '@/lib/daily-notes';
+import { clampDepth } from '@/lib/local-graph';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -45,7 +46,7 @@ interface UIState {
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   rightPanelCollapsed: boolean;
-  rightPanelTab: 'backlinks' | 'outline' | 'tags';
+  rightPanelTab: 'backlinks' | 'outline' | 'tags' | 'graph';
   features: FeatureFlags;
   settingsOpen: boolean;
   /** Transient overlays. Live in the store rather than `App` state so a
@@ -53,6 +54,12 @@ interface UIState {
   paletteOpen: boolean;
   quickSwitcherOpen: boolean;
   graphOpen: boolean;
+  /** The local graph as a large overlay (palette: "Open local graph"). */
+  localGraphOpen: boolean;
+  /** Hops shown around the active note, 1–3; shared by the panel tab and the
+   *  overlay so switching between them keeps the same view. */
+  localGraphDepth: number;
+  localGraphTags: boolean;
   /** Focus mode: all chrome hidden, only the text — and the paragraph
    *  being written — stays lit. Session-only on purpose. */
   focusMode: boolean;
@@ -81,6 +88,9 @@ interface UIState {
   setPaletteOpen: (open: boolean) => void;
   setQuickSwitcherOpen: (open: boolean) => void;
   setGraphOpen: (open: boolean) => void;
+  setLocalGraphOpen: (open: boolean) => void;
+  setLocalGraphDepth: (depth: number) => void;
+  setLocalGraphTags: (on: boolean) => void;
   toggleFocusMode: () => void;
   setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
   resetHotkey: (commandId: string) => void;
@@ -107,6 +117,9 @@ export const useUIStore = create<UIState>()(
       paletteOpen: false,
       quickSwitcherOpen: false,
       graphOpen: false,
+      localGraphOpen: false,
+      localGraphDepth: 1,
+      localGraphTags: false,
       focusMode: false,
       hotkeyOverrides: {},
       templatesFolder: DEFAULT_TEMPLATES_FOLDER,
@@ -127,6 +140,9 @@ export const useUIStore = create<UIState>()(
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
       setGraphOpen: (open) => set({ graphOpen: open }),
+      setLocalGraphOpen: (open) => set({ localGraphOpen: open }),
+      setLocalGraphDepth: (depth) => set({ localGraphDepth: clampDepth(depth) }),
+      setLocalGraphTags: (on) => set({ localGraphTags: on }),
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
       setHotkeyOverride: (commandId, hotkey) =>
         set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
@@ -152,6 +168,8 @@ export const useUIStore = create<UIState>()(
         templatesFolder: s.templatesFolder,
         dailyFolder: s.dailyFolder,
         dailyTemplate: s.dailyTemplate,
+        localGraphDepth: s.localGraphDepth,
+        localGraphTags: s.localGraphTags,
       }),
       // Deep-merge feature flags so a flag added after the user's state was
       // saved picks up its default instead of reading as `undefined`.

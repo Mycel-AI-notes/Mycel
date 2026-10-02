@@ -21,6 +21,12 @@ export function displayName(path: string): string {
   return stripNoteExt(tail);
 }
 
+/** A note file — plaintext or encrypted — as opposed to a Garden or Insights
+ *  tab, an image, or a database. */
+export function isNotePath(path: string): boolean {
+  return path.endsWith(MD_SUFFIX) || path.endsWith(ENC_SUFFIX);
+}
+
 export function isEncryptedPath(path: string): boolean {
   return path.endsWith(ENC_SUFFIX);
 }

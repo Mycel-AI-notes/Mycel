@@ -19,6 +19,7 @@ import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
 import { GraphView } from '@/components/graph/GraphView';
+import { LocalGraphDialog } from '@/components/graph/LocalGraph';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
 import { QuickCapture } from '@/components/garden/QuickCapture';
@@ -26,7 +27,7 @@ import { SettingsDialog } from '@/components/ui/SettingsDialog';
 import { parseGardenTabPath, isGardenTabPath } from '@/lib/garden-tab';
 import { isInsightsTabPath } from '@/lib/insights-tab';
 import { InsightsView } from '@/components/insights/InsightsView';
-import { isAttachmentPath } from '@/lib/note-name';
+import { isAttachmentPath, isNotePath } from '@/lib/note-name';
 import { CommandPalette } from '@/components/search/CommandPalette';
 import { TemplatePicker } from '@/components/editor/TemplatePicker';
 import { getAppCommands, QUICK_NOTE_GLOBAL_SHORTCUT } from '@/lib/app-commands';
@@ -74,6 +75,15 @@ export default function App() {
   const graphOpen = useUIStore((s) => s.graphOpen);
   const focusMode = useUIStore((s) => s.focusMode);
   const setGraphOpen = useUIStore((s) => s.setGraphOpen);
+  const localGraphOpen = useUIStore((s) => s.localGraphOpen);
+  const setLocalGraphOpen = useUIStore((s) => s.setLocalGraphOpen);
+  const localGraphPath = activeTabPath && isNotePath(activeTabPath) ? activeTabPath : null;
+  // The overlay follows the active note; with no note to centre on (a
+  // Garden tab, the last tab closed) it has nothing to show, so it closes
+  // rather than reappearing out of nowhere on the next note.
+  useEffect(() => {
+    if (localGraphOpen && !localGraphPath) setLocalGraphOpen(false);
+  }, [localGraphOpen, localGraphPath, setLocalGraphOpen]);
 
   // Determine which view to render in the main area: a Garden tab, a note,
   // or the empty state.
@@ -380,6 +390,11 @@ export default function App() {
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}
+
+      {/* Local graph overlay — palette "Open local graph" */}
+      {localGraphOpen && localGraphPath && (
+        <LocalGraphDialog path={localGraphPath} onClose={() => setLocalGraphOpen(false)} />
+      )}
 
       {/* Save-conflict resolution. The store decides whether to render. */}
       <ConflictDialog />

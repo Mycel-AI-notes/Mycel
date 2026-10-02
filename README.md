@@ -101,8 +101,10 @@ npm run tauri build
 ### Sense-making
 
 - 🕸️ **Spore graph view** (`⌘/Ctrl+G`) — full-screen force-directed graph. Folders cluster as spores, wikilinks become edges, tag and structural connections toggle on or off from the toolbar.
+- 🎯 **Local graph** — the current note and its neighbourhood: links *and* backlinks, 1–3 hops out (pick the depth), tags optional. A compact **Graph** tab in the right panel follows whichever note you're on; *Open local graph* in the palette shows the same thing large. Click a node to open that note — the graph re-centres on it. Links resolve exactly as in the global graph, aliases and titles included.
 - 📍 **Live outline panel** — every heading in the current note, click to jump.
 - ↩️ **Backlinks panel** — folder-aware incoming references, plus outgoing wikilinks and external URLs.
+- 🔗 **Unlinked mentions** — under the backlinks, every note that names the current one (title, file name or an alias) in plain text without linking it, with the line and the highlighted phrase. **Link** turns that one mention into `[[Note]]` (or `[[Note|the text as written]]` when the wording differs), **Link all** does a whole note. Whole words only, case- and `ё`/`е`-insensitive, Cyrillic included; text inside links, code, URLs, tags and frontmatter is never touched, and names under 3 characters are ignored. Found through the full-text index, so it's quick on big vaults; encrypted notes aren't scanned.
 - 🏷️ **Tag system** — `#tags` autocomplete in the editor, dedicated tag panel, tag search across the vault, tag nodes in the graph.
 - 📥 **Quick-note auto-filing** — with Insights enabled, Mycel finds the note each quick capture belongs to and offers a one-click, confirmed merge (with a provenance trail). The `quick/` folder stops being a graveyard. See [`docs/specs/quick-note-filing.md`](docs/specs/quick-note-filing.md).
 

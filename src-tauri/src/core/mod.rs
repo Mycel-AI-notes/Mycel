@@ -3,6 +3,7 @@ pub mod crypto;
 pub mod fts;
 pub mod garden;
 pub mod links;
+pub mod mentions;
 pub mod parser;
 pub mod quick_filing;
 pub mod sync;

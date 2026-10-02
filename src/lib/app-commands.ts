@@ -196,6 +196,15 @@ export function getAppCommands(): Command[] {
       },
     },
     {
+      id: 'graph.local',
+      title: 'Open local graph',
+      section: 'Navigation',
+      // Palette-only: Mod+Shift+G is the editor's "find previous", and no
+      // other obvious key is free.
+      enabled: () => !!activeNotePath(),
+      run: () => useUIStore.getState().setLocalGraphOpen(true),
+    },
+    {
       id: 'insights.open',
       title: 'Open Insights',
       section: 'Navigation',
