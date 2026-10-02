@@ -34,6 +34,31 @@ pub struct RelatedHit {
 }
 
 pub fn find_related(store: &AiStore, note_path: &str, k: usize) -> Result<Vec<RelatedHit>> {
+    find_related_where(store, note_path, k, |_| true)
+}
+
+/// Upper bound on the chunk-level kNN when `find_related_where` widens its
+/// search. sqlite-vec is a brute-force scan either way, so the cost of a
+/// bigger `k` is the sort, not the scan — but past a few thousand chunks the
+/// filter is rejecting nearly everything and there is nothing left to find.
+const MAX_CHUNK_K: usize = 4096;
+
+/// `find_related`, keeping only notes for which `keep` is true — and
+/// filtering *before* the top `k` is cut, not after.
+///
+/// The difference matters when the rejected notes crowd the neighbourhood.
+/// Quick-note filing drops every other quick note from the candidates, and
+/// quick notes captured around the same time are short and alike, so they
+/// are each other's nearest neighbours. Taking the top 8 and filtering
+/// afterwards left nothing on a vault with a busy `quick/` folder — exactly
+/// the vault the feature is for. Here the chunk-level kNN widens until `k`
+/// kept notes are found or the table runs out.
+pub fn find_related_where(
+    store: &AiStore,
+    note_path: &str,
+    k: usize,
+    keep: impl Fn(&str) -> bool,
+) -> Result<Vec<RelatedHit>> {
     let vecs = read_note_vectors(store, note_path)?;
     if vecs.is_empty() {
         // Note isn't indexed (encrypted, brand-new, or AI was off when
@@ -45,11 +70,43 @@ pub fn find_related(store: &AiStore, note_path: &str, k: usize) -> Result<Vec<Re
     let json = encode_vec_json(&centroid);
 
     // 6× headroom so dedupe-by-note and self-exclusion don't shrink the
-    // visible list. Capped at 100 — anything past that is pure noise
-    // for the right-sidebar UI.
-    let chunk_k = (k.saturating_mul(6)).min(100).max(k + 1);
+    // visible list. Capped at 100 for the first pass — anything past that
+    // is pure noise for the right-sidebar UI, which keeps every note.
+    let mut chunk_k = (k.saturating_mul(6)).min(100).max(k + 1);
 
-    let raw: Vec<(String, f32)> = store.with_conn(|c| {
+    loop {
+        let raw = nearest_chunks(store, &json, chunk_k)?;
+        let exhausted = raw.len() < chunk_k;
+
+        // Dedupe by note_path; the first occurrence is best (rows already
+        // arrive ordered by distance ASC). Seed the seen set with the self
+        // path so a note never appears as its own neighbor.
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(note_path.to_string());
+        let mut out = Vec::with_capacity(k);
+        for (path, dist) in raw {
+            if seen.insert(path.clone()) && keep(&path) {
+                out.push(RelatedHit {
+                    note_path: path,
+                    distance: dist,
+                });
+                if out.len() >= k {
+                    break;
+                }
+            }
+        }
+
+        if out.len() >= k || exhausted || chunk_k >= MAX_CHUNK_K {
+            return Ok(out);
+        }
+        chunk_k = (chunk_k * 4).min(MAX_CHUNK_K);
+    }
+}
+
+/// The `k` chunks nearest to `json` (a vector literal), as
+/// `(note_path, distance)` ordered by distance.
+fn nearest_chunks(store: &AiStore, json: &str, k: usize) -> Result<Vec<(String, f32)>> {
+    store.with_conn(|c| {
         let mut stmt = c.prepare(
             r#"
             SELECT chunks.note_path, chunks_vec.distance
@@ -60,32 +117,13 @@ pub fn find_related(store: &AiStore, note_path: &str, k: usize) -> Result<Vec<Re
             "#,
         )?;
         let rows = stmt
-            .query_map(rusqlite::params![json, chunk_k as i64], |r| {
+            .query_map(rusqlite::params![json, k as i64], |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)? as f32))
             })?
             .filter_map(|r| r.ok())
             .collect::<Vec<_>>();
         Ok(rows)
-    })?;
-
-    // Dedupe by note_path; the first occurrence is best (rows already
-    // arrive ordered by distance ASC). Seed the seen set with the self
-    // path so a note never appears as its own neighbor.
-    let mut seen = std::collections::HashSet::new();
-    seen.insert(note_path.to_string());
-    let mut out = Vec::with_capacity(k);
-    for (path, dist) in raw {
-        if seen.insert(path.clone()) {
-            out.push(RelatedHit {
-                note_path: path,
-                distance: dist,
-            });
-            if out.len() >= k {
-                break;
-            }
-        }
-    }
-    Ok(out)
+    })
 }
 
 fn read_note_vectors(store: &AiStore, note_path: &str) -> Result<Vec<Vec<f32>>> {
@@ -186,6 +224,27 @@ mod tests {
         let store = AiStore::open(dir.path()).unwrap();
         let hits = find_related(&store, "ghost.md", 5).unwrap();
         assert!(hits.is_empty());
+    }
+
+    #[tokio::test]
+    async fn filter_applies_before_the_cut() {
+        let dir = TempDir::new().unwrap();
+        let store = AiStore::open(dir.path()).unwrap();
+        let mut files: Vec<(String, &str)> = (0..20)
+            .map(|i| (format!("noise/{i:02}.md"), "alpha apple anchor"))
+            .collect();
+        files.push(("src.md".into(), "alpha apple anchor"));
+        files.push(("wanted.md".into(), "alpha apple anchor?"));
+        let refs: Vec<(&str, &str)> = files.iter().map(|(p, c)| (p.as_str(), *c)).collect();
+        seed(dir.path(), &store, &refs).await;
+
+        // Unfiltered, the 20 identical noise notes fill the top 3.
+        let plain = find_related(&store, "src.md", 3).unwrap();
+        assert!(plain.iter().all(|h| h.note_path.starts_with("noise/")));
+
+        let hits = find_related_where(&store, "src.md", 3, |p| !p.starts_with("noise/")).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].note_path, "wanted.md");
     }
 
     #[tokio::test]

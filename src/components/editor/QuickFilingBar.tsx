@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Sparkles, X, FolderInput, PenLine, FilePlus2 } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
@@ -57,12 +57,19 @@ function siblingStems(tree: FileEntry[], parent: string): Set<string> {
 export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: number }) {
   const renameNote = useVaultStore((s) => s.renameNote);
   const createNote = useVaultStore((s) => s.createNote);
+  const deleteNote = useVaultStore((s) => s.deleteNote);
   const [phase, setPhase] = useState<Phase>('hidden');
   const [sugg, setSugg] = useState<Suggestions | null>(null);
-  const [merge, setMerge] = useState<{ target: string; title: string | null } | null>(
-    null,
-  );
+  const [merge, setMerge] = useState<{
+    target: string;
+    title: string | null;
+    /// The bar created `target` just for this merge ("Start …").
+    created?: boolean;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The dialog calls `onClose` after `onResolved` too; only a close without
+  // a merge counts as cancelling.
+  const mergedRef = useRef(false);
   // Internal trigger for suggestions that must survive a remount — e.g.
   // right after the user accepts a rename and the bar reappears under the
   // new path without a fresh save.
@@ -130,7 +137,7 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
     logOutcome('create', path, target);
     try {
       await createNote(target);
-      setMerge({ target, title: sugg?.title ?? null });
+      setMerge({ target, title: sugg?.title ?? null, created: true });
     } catch (e) {
       console.error('Create-note failed:', e);
     } finally {
@@ -232,8 +239,18 @@ export function QuickFilingBar({ path, saveTick }: { path: string; saveTick: num
           source={path}
           target={merge.target}
           sectionTitle={merge.title}
-          onClose={() => setMerge(null)}
+          onClose={() => {
+            // Cancelling "Start …" used to leave the freshly created, empty
+            // note behind. It only ever existed to receive this merge; send
+            // it to the trash (recoverable) rather than the user's tree.
+            if (merge.created && !mergedRef.current) {
+              deleteNote(merge.target).catch(console.error);
+            }
+            mergedRef.current = false;
+            setMerge(null);
+          }}
           onResolved={() => {
+            mergedRef.current = true;
             setMerge(null);
             setPhase('hidden');
           }}

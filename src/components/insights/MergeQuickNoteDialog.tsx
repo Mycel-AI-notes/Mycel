@@ -4,6 +4,7 @@ import { X, Loader2, FolderInput } from 'lucide-react';
 import { useVaultStore } from '@/stores/vault';
 import { useInsightsStore } from '@/stores/insights';
 import { displayName } from '@/lib/note-name';
+import { flushAutosave } from '@/lib/autosave';
 import type { Note } from '@/types';
 
 interface Props {
@@ -32,7 +33,8 @@ export function MergeQuickNoteDialog({
 }: Props) {
   const status = useInsightsStore((s) => s.status);
   const openNote = useVaultStore((s) => s.openNote);
-  const closeTab = useVaultStore((s) => s.closeTab);
+  const forgetNote = useVaultStore((s) => s.forgetNote);
+  const reloadNote = useVaultStore((s) => s.reloadNote);
   const refreshTree = useVaultStore((s) => s.refreshTree);
 
   const [content, setContent] = useState<string | null>(null);
@@ -60,13 +62,25 @@ export function MergeQuickNoteDialog({
     setBusy(true);
     setError(null);
     try {
+      // The backend reads both files from disk. Words typed in the last
+      // second are still only in the editor — write them first, or the merge
+      // files an older version of the note, and the closing tab's flush then
+      // raises a save conflict against a source that no longer exists.
+      await flushAutosave(source);
+      await flushAutosave(target);
       await invoke<string>('quick_note_merge', {
         source,
         target,
         deleteSource,
         sectionTitle: sectionTitle ?? null,
       });
-      if (deleteSource) closeTab(source);
+      if (deleteSource) {
+        forgetNote(source);
+      } else {
+        // Kept sources gain a `filed_to:` frontmatter line.
+        await reloadNote(source).catch(console.error);
+      }
+      await reloadNote(target).catch(console.error);
       await refreshTree();
       await openNote(target).catch(console.error);
       onResolved();

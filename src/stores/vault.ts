@@ -45,6 +45,8 @@ interface VaultState {
    *  wrote, and so the editor isn't holding a stale base that the next
    *  save would write back over the freshly pulled content. */
   reloadFromDisk: () => Promise<void>;
+  reloadNote: (path: string) => Promise<void>;
+  forgetNote: (path: string) => void;
   openNote: (path: string, options?: { preview?: boolean }) => Promise<void>;
   /** Open a Garden view inside the tab strip. Uses the same preview/pin
    *  semantics as notes — single click is a preview tab that the next
@@ -285,6 +287,47 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         }));
       }
     }
+  },
+
+  /**
+   * Re-read one note that something other than its editor just rewrote (a
+   * quick-note merge, for one) and push the new text into the cache and any
+   * open editor. Without this `openNote` serves the stale cached copy — the
+   * merged section is missing from view, and the next autosave runs into a
+   * hash conflict against the file it was supposed to be editing.
+   */
+  reloadNote: async (path) => {
+    if (!get().noteCache.has(path)) return; // nothing stale to refresh
+    const note = await invoke<Note>('note_read', { path });
+    const reparsed = reparseBody(note.content);
+    set((s) => {
+      const next = new Map(s.noteCache);
+      next.set(path, { ...note, parsed: { ...note.parsed, ...reparsed } });
+      return { noteCache: next, vaultVersion: s.vaultVersion + 1 };
+    });
+    if (replaceEditorContent(path, note.content)) {
+      // The dispatch re-armed autosave and marked the tab dirty; the text is
+      // exactly what is on disk, so neither applies.
+      cancelAutosave(path);
+      set((s) => ({
+        openTabs: s.openTabs.map((t) => (t.path === path ? { ...t, isDirty: false } : t)),
+      }));
+    }
+  },
+
+  /**
+   * Drop every trace of a note the backend already removed from disk: pending
+   * autosave, cache entry, tab. The autosave goes first — a flush on tab
+   * close would otherwise write the note straight back.
+   */
+  forgetNote: (path) => {
+    cancelAutosave(path);
+    set((s) => {
+      const next = new Map(s.noteCache);
+      next.delete(path);
+      return { noteCache: next };
+    });
+    get().closeTab(path);
   },
 
   openNote: async (path, options) => {
