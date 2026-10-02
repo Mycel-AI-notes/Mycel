@@ -85,6 +85,7 @@ npm run tauri build
 - ✍️  **CodeMirror 6 editor** with Markdown syntax, inline preview decorations, fenced code blocks with per-language highlighting, and autocomplete.
 - 🔗 **Wikilinks** — `[[Like this]]` autocomplete, click-to-navigate, missing targets are created for you. Renaming a note **rewrites every link to it** across the vault — aliases, anchors, embeds and folder paths included — so a rename never leaves a trail of broken references.
 - ⚡ **Slash menu** — type `/` for quick inserts (tables, code, headings, callouts…).
+- 📅 **Daily notes** (`⌘/Ctrl+Shift+D`) — opens today's `daily/YYYY-MM-DD.md`, creating it from your daily template when it doesn't exist yet (an existing note is never overwritten). *Previous / Next daily note* in the palette step through the days you actually wrote. Folder and template are set in Settings → Notes.
 - 🧩 **Templates** — drop `.md` files in `templates/` (folder configurable in Settings → Notes), then `/template` or *Insert template…* in the palette inserts one at the cursor. Variables: `{{title}}`, `{{date}}`, `{{time}}`, and `{{date:DD.MM.YYYY HH:mm}}` with the tokens `YYYY MM DD HH mm`.
 - 📊 **Editable GFM tables** rendered as styled blocks; inline Markdown (links, wikilinks, bold) renders *inside* cells and stays clickable.
 - 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
@@ -137,6 +138,7 @@ npm run tauri build
 | `⌘/Ctrl + G` | Toggle graph view |
 | `⌘/Ctrl + S` | Save current note (also pins a preview tab) |
 | `⌘/Ctrl + Shift + P` | Present the current note |
+| `⌘/Ctrl + Shift + D` | Open today's daily note |
 | `⌘/Ctrl + ,` | Settings |
 | `⌘/Ctrl + I` | Garden quick capture |
 | `⌘/Ctrl + Shift + A` | Garden: Next Actions |

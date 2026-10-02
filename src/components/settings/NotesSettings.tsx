@@ -59,13 +59,41 @@ function FolderField({ id, label, description, value, fallback, onCommit }: Fold
   );
 }
 
-/** Settings → Notes: where templates (and daily notes) live. */
+/** Settings → Notes: where daily notes and templates live. */
 export function NotesSettings() {
   const templatesFolder = useUIStore((s) => s.templatesFolder);
   const setTemplatesFolder = useUIStore((s) => s.setTemplatesFolder);
+  const dailyFolder = useUIStore((s) => s.dailyFolder);
+  const setDailyFolder = useUIStore((s) => s.setDailyFolder);
+  const dailyTemplate = useUIStore((s) => s.dailyTemplate);
+  const setDailyTemplate = useUIStore((s) => s.setDailyTemplate);
 
   return (
     <div className="flex flex-col gap-5">
+      <FolderField
+        id="daily-folder"
+        label="Daily notes folder"
+        description="“Open today's daily note” creates YYYY-MM-DD.md here."
+        value={dailyFolder}
+        fallback="daily"
+        onCommit={setDailyFolder}
+      />
+      <div className="flex flex-col gap-1">
+        <label htmlFor="daily-template" className="text-sm text-text-primary">
+          Daily note template
+        </label>
+        <input
+          id="daily-template"
+          value={dailyTemplate}
+          onChange={(e) => setDailyTemplate(e.target.value)}
+          placeholder={`${templatesFolder}/daily.md`}
+          className="px-2 py-1 text-sm rounded border border-border bg-surface-0 text-text-primary outline-none focus:border-accent"
+        />
+        <p className="text-xs text-text-muted">
+          Path of a template (inside the templates folder) that new daily notes start from. Leave empty to use a template named
+          “daily” in the templates folder, if there is one; otherwise the note starts blank.
+        </p>
+      </div>
       <FolderField
         id="templates-folder"
         label="Templates folder"

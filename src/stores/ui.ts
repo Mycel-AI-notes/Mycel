@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { HotkeyOverrides } from '@/lib/commands';
 import { DEFAULT_TEMPLATES_FOLDER } from '@/lib/templates';
+import { DEFAULT_DAILY_FOLDER } from '@/lib/daily-notes';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -56,6 +57,11 @@ interface UIState {
   /** Vault-relative folder whose `.md` files are offered as templates. */
   templatesFolder: string;
   templatePickerOpen: boolean;
+  /** Vault-relative folder holding `YYYY-MM-DD.md` daily notes. */
+  dailyFolder: string;
+  /** Template path for new daily notes; empty means "a template named
+   *  `daily` in the templates folder, if there is one". */
+  dailyTemplate: string;
 
   setTheme: (theme: Theme) => void;
   setPalette: (palette: Palette) => void;
@@ -73,6 +79,8 @@ interface UIState {
   resetHotkey: (commandId: string) => void;
   setTemplatesFolder: (folder: string) => void;
   setTemplatePickerOpen: (open: boolean) => void;
+  setDailyFolder: (folder: string) => void;
+  setDailyTemplate: (path: string) => void;
 }
 
 const clampSidebarWidth = (w: number) =>
@@ -95,6 +103,8 @@ export const useUIStore = create<UIState>()(
       hotkeyOverrides: {},
       templatesFolder: DEFAULT_TEMPLATES_FOLDER,
       templatePickerOpen: false,
+      dailyFolder: DEFAULT_DAILY_FOLDER,
+      dailyTemplate: '',
 
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
@@ -113,6 +123,8 @@ export const useUIStore = create<UIState>()(
         set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
       setTemplatesFolder: (folder) => set({ templatesFolder: folder }),
       setTemplatePickerOpen: (open) => set({ templatePickerOpen: open }),
+      setDailyFolder: (folder) => set({ dailyFolder: folder }),
+      setDailyTemplate: (path) => set({ dailyTemplate: path }),
       resetHotkey: (commandId) =>
         set((s) => {
           const next = { ...s.hotkeyOverrides };
@@ -129,6 +141,8 @@ export const useUIStore = create<UIState>()(
         features: s.features,
         hotkeyOverrides: s.hotkeyOverrides,
         templatesFolder: s.templatesFolder,
+        dailyFolder: s.dailyFolder,
+        dailyTemplate: s.dailyTemplate,
       }),
       // Deep-merge feature flags so a flag added after the user's state was
       // saved picks up its default instead of reading as `undefined`.

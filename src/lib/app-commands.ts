@@ -20,6 +20,7 @@ import { isInsightsTabPath } from './insights-tab';
 import { isAttachmentPath } from './note-name';
 import { getEditorView } from './editor-registry';
 import { createQuickNote } from '@/hooks/useQuickNote';
+import { openAdjacentDailyNote, openDailyNote } from './daily-actions';
 import type { GardenView } from '@/types/garden';
 
 /** The OS-wide quick-note shortcut, in the global-shortcut plugin's spelling. */
@@ -135,6 +136,28 @@ export function getAppCommands(): Command[] {
       defaultHotkey: 'Mod+Shift+P',
       enabled: () => !!activeNotePath() || gardenOn(),
       run: presentActiveNote,
+    },
+    {
+      id: 'daily.today',
+      title: "Open today's daily note",
+      section: 'Daily notes',
+      defaultHotkey: 'Mod+Shift+D',
+      enabled: vaultOpen,
+      run: () => void openDailyNote(),
+    },
+    {
+      id: 'daily.previous',
+      title: 'Previous daily note',
+      section: 'Daily notes',
+      enabled: vaultOpen,
+      run: () => void openAdjacentDailyNote(-1),
+    },
+    {
+      id: 'daily.next',
+      title: 'Next daily note',
+      section: 'Daily notes',
+      enabled: vaultOpen,
+      run: () => void openAdjacentDailyNote(1),
     },
     {
       id: 'template.insert',
