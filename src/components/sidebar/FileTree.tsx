@@ -26,7 +26,7 @@ import { useVaultStore } from '@/stores/vault';
 import { useCryptoStore } from '@/stores/crypto';
 import { useInsightsStore } from '@/stores/insights';
 import { stripNoteExt, isAttachmentPath } from '@/lib/note-name';
-import { reach, sproutRow } from '@/lib/spore-fx';
+import { sproutRow } from '@/lib/spore-fx';
 import { KbContextMenu } from '@/components/kb/KbContextMenu';
 
 const DRAG_MIME = 'application/x-mycel-path';
@@ -202,13 +202,8 @@ function FileTreeNode({
       openImageTab(entry.path, { preview: true });
       return;
     }
-    // A hypha grows from the row into the editor and roots the note there.
-    const target = document.querySelector('[data-spore-target]');
-    if (rowRef.current && target && activeTabPath !== entry.path) {
-      void reach(rowRef.current, target);
-    }
     openNote(entry.path, { preview: true });
-  }, [entry, isKbDir, openNote, openImageTab, toggleExpand, activeTabPath]);
+  }, [entry, isKbDir, openNote, openImageTab, toggleExpand]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {

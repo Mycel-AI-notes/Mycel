@@ -24,7 +24,7 @@ const FEATURE_ROWS: FeatureRow[] = [
     key: 'sporeMotion',
     label: 'Spore motion',
     description:
-      'Living animation: spores drifting on the empty screen, a hypha growing into each note you open, new notes and folders germinating into the Mycel mark. Always off when the system asks to reduce motion.',
+      'Living animation: spores drifting on the empty screen, new notes and folders germinating into the Mycel mark. Always off when the system asks to reduce motion.',
   },
 ];
 

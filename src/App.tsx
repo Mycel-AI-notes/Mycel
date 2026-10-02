@@ -335,7 +335,7 @@ export default function App() {
           {!sidebarCollapsed && <Sidebar />}
 
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
-          <main data-spore-target className="flex flex-col flex-1 min-w-0">
+          <main className="flex flex-col flex-1 min-w-0">
             <EditorTabs />
             {activeGardenView ? (
               <GardenView view={activeGardenView} />
