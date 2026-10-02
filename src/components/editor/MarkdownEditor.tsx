@@ -4,9 +4,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
   keymap,
-  lineNumbers,
   highlightActiveLine,
-  highlightActiveLineGutter,
   ViewUpdate,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -75,15 +73,6 @@ const mycelEditorTheme = (dark: boolean) =>
       '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
       '.cm-content': { caretColor: 'var(--color-accent)' },
       '.cm-activeLine': { backgroundColor: 'var(--color-active-line)' },
-      '.cm-activeLineGutter': {
-        backgroundColor: 'var(--color-active-line)',
-        color: 'var(--color-text-secondary)',
-      },
-      '.cm-gutters': {
-        backgroundColor: 'var(--color-surface-1)',
-        borderRight: '1px solid var(--color-border)',
-        color: 'var(--color-text-muted)',
-      },
       '.cm-cursor': { borderLeftColor: 'var(--color-accent)' },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':
         { backgroundColor: 'var(--color-selection)' },
@@ -199,9 +188,7 @@ export function MarkdownEditor({ path }: Props) {
       doc: note.content,
       extensions: [
         history(),
-        lineNumbers(),
         highlightActiveLine(),
-        highlightActiveLineGutter(),
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         search({ top: true, createPanel: mycelSearchPanel }),
         highlightSelectionMatches(),
