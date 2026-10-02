@@ -11,11 +11,14 @@ import { getAppCommands } from '@/lib/app-commands';
 import { formatHotkey } from '@/lib/commands';
 import { useHotkeyBindings } from '@/hooks/useHotkeyBindings';
 import { isMac } from '@/lib/platform';
+import { QUERY_HELP, splitHighlight, type FullTextHit } from '@/lib/fulltext';
+import { getEditorView, scrollEditorToLine } from '@/lib/editor-registry';
 
 /**
- * The one search box (`⌘K`): notes by name, notes by meaning, and every
- * command — in a single list. A leading `>` narrows it to commands, which
- * is how `⌘P` opens it. `⌘O` opens it on notes.
+ * The one search box (`⌘K`): notes by name, by the words inside them
+ * (full-text, with the matching line), by meaning, and every command — in
+ * a single list. A leading `>` narrows it to commands, which is how `⌘P`
+ * opens it; `⌘O` and `⌘⇧F` open it on notes.
  */
 
 interface NoteSummary {
@@ -42,7 +45,33 @@ const SEMANTIC_DEBOUNCE_MS = 250;
 
 // Max notes to show. Small enough to scan, big enough that semantic hits
 // past the keyword top still surface.
-const RESULT_LIMIT = 10;
+const RESULT_LIMIT = 12;
+
+// Full-text is a local SQLite query, so it only has to absorb keystroke
+// bursts — not a network round-trip like the semantic search.
+const FULLTEXT_DEBOUNCE_MS = 150;
+const FULLTEXT_LIMIT = 30;
+
+/** Open `path` and put the caret on `line` (1-based) once the editor mounts. */
+function openAtLine(path: string, line: number | null) {
+  void useVaultStore
+    .getState()
+    .openNote(path)
+    .then(() => {
+      if (line == null) return;
+      // The editor may need a few frames to mount and register its view.
+      let tries = 0;
+      const tryScroll = () => {
+        if (getEditorView(path) || tries > 20) {
+          scrollEditorToLine(path, line - 1);
+          return;
+        }
+        tries++;
+        requestAnimationFrame(tryScroll);
+      };
+      tryScroll();
+    });
+}
 
 /** Commands shown under note results when the query also matches them. */
 const MIXED_COMMAND_LIMIT = 4;
@@ -56,10 +85,13 @@ type Row =
       key: string;
       path: string;
       title: string;
-      /// Source bitmask: 1 = keyword, 2 = semantic. Drives the badge.
+      /// Source bitmask: 1 = name, 2 = meaning, 4 = text. Drives the badge.
       sources: number;
-      /// Snippet shown under the title for content-only hits.
+      /// Line under the title: a full-text snippet (with highlight markers)
+      /// or a semantic chunk; empty → the path is shown.
       snippet: string;
+      /// 1-based line to open at (full-text hits), else the top.
+      line: number | null;
     }
   | {
       kind: 'command';
@@ -75,10 +107,10 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [semantic, setSemantic] = useState<SemanticHit[]>([]);
   const [semanticLoading, setSemanticLoading] = useState(false);
+  const [fulltext, setFulltext] = useState<FullTextHit[]>([]);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { openNote } = useVaultStore();
   const aiStatus = useAiStore((s) => s.status);
   const aiIndex = useAiStore((s) => s.indexStatus);
   const bindings = useHotkeyBindings();
@@ -124,7 +156,7 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
           args: { query: text, k: RESULT_LIMIT },
         });
         if (requestId.current !== id) return;
-        setSemantic(hits);
+        setSemantic(hits ?? []);
       } catch {
         // Silent: search failure shouldn't blank the keyword results.
         if (requestId.current === id) setSemantic([]);
@@ -134,6 +166,29 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
     }, SEMANTIC_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [text, commandMode, semanticAvailable]);
+
+  // Debounced full-text search (words inside notes, with operators).
+  const fulltextId = useRef(0);
+  useEffect(() => {
+    if (!text || commandMode) {
+      setFulltext([]);
+      return;
+    }
+    const id = ++fulltextId.current;
+    const handle = setTimeout(async () => {
+      try {
+        const hits = await invoke<FullTextHit[]>('search_fulltext', {
+          query: text,
+          limit: FULLTEXT_LIMIT,
+        });
+        if (fulltextId.current === id) setFulltext(hits ?? []);
+      } catch {
+        // Half-typed operator syntax and the like — keep the other results.
+        if (fulltextId.current === id) setFulltext([]);
+      }
+    }, FULLTEXT_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [text, commandMode]);
 
   const commands = useMemo(
     () =>
@@ -163,7 +218,15 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
 
     if (!text) {
       return notes.slice(0, RESULT_LIMIT).map(
-        (n): Row => ({ kind: 'note', key: n.path, path: n.path, title: n.title, sources: 1, snippet: '' }),
+        (n): Row => ({
+          kind: 'note',
+          key: n.path,
+          path: n.path,
+          title: n.title,
+          sources: 1,
+          snippet: '',
+          line: null,
+        }),
       );
     }
 
@@ -174,39 +237,50 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
       .slice(0, RESULT_LIMIT * 2); // headroom for RRF
 
     const titles = new Map(notes.map((n) => [n.path, n.title]));
-    const snippets = new Map(semantic.map((h) => [h.note_path, h.chunk_text]));
+    const chunks = new Map(semantic.map((h) => [h.note_path, h.chunk_text]));
+    const textHits = new Map(fulltext.map((h) => [h.path, h]));
 
     const fused: FusedItem<string>[] = reciprocalRankFusion([
       { items: keywordHits.map((n) => ({ key: n.path })) },
       { items: semantic.map((h) => ({ key: h.note_path })) },
+      { items: fulltext.map((h) => ({ key: h.path })) },
     ]);
 
     const noteRows = fused.slice(0, RESULT_LIMIT).map((f): Row => {
       let mask = 0;
       if (f.sources.includes(0)) mask |= 1;
       if (f.sources.includes(1)) mask |= 2;
+      if (f.sources.includes(2)) mask |= 4;
+      const hit = textHits.get(f.key);
+      const snippet = hit?.snippets[0];
       return {
         kind: 'note',
         key: f.key,
         path: f.key,
-        title: titles.get(f.key) ?? f.key,
+        title: titles.get(f.key) ?? hit?.title ?? f.key,
         sources: mask,
-        // Snippet only when the hit came purely from meaning — for keyword
-        // hits the title already tells the user why it matched.
-        snippet: mask === 2 ? trimSnippet(snippets.get(f.key) ?? '') : '',
+        // The matching line when the words are inside the note; the
+        // semantic chunk when only meaning matched; else nothing (the
+        // title says why).
+        snippet: snippet
+          ? snippet.text
+          : mask === 2
+            ? trimSnippet(chunks.get(f.key) ?? '')
+            : '',
+        line: snippet?.line ?? hit?.line ?? null,
       };
     });
 
     return [...noteRows, ...matchCommands(MIXED_COMMAND_LIMIT)];
-  }, [notes, semantic, text, commandMode, commands]);
+  }, [notes, semantic, fulltext, text, commandMode, commands]);
 
   const activate = useCallback(
     (row: Row) => {
       onClose();
-      if (row.kind === 'note') openNote(row.path);
+      if (row.kind === 'note') openAtLine(row.path, row.line);
       else row.run();
     },
-    [openNote, onClose],
+    [onClose],
   );
 
   const handleKeyDown = useCallback(
@@ -309,7 +383,7 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
                           <SourceBadge sources={row.sources} />
                         </div>
                         <div className="text-xs text-text-muted truncate">
-                          {row.snippet || row.path}
+                          {row.snippet ? <Highlighted text={row.snippet} /> : row.path}
                         </div>
                       </div>
                     </>
@@ -334,8 +408,15 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
         </div>
 
         {!commandMode && (
-          <div className="px-4 py-1.5 border-t border-border text-[11px] text-text-muted">
-            Type <kbd className="bg-surface-1 px-1 rounded">&gt;</kbd> for commands only
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-4 py-1.5 border-t border-border text-[11px] text-text-muted">
+            <span>
+              <code className="text-accent">&gt;</code> commands
+            </span>
+            {QUERY_HELP.map((h) => (
+              <span key={h.syntax}>
+                <code className="text-accent">{h.syntax}</code> {h.meaning}
+              </span>
+            ))}
           </div>
         )}
       </div>
@@ -343,24 +424,37 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
   );
 }
 
+function Highlighted({ text }: { text: string }) {
+  return (
+    <>
+      {splitHighlight(text).map((p, i) =>
+        p.hit ? (
+          <mark
+            key={i}
+            className="text-text-primary rounded-sm px-px"
+            style={{ background: 'color-mix(in srgb, var(--color-accent) 30%, transparent)' }}
+          >
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 function SourceBadge({ sources }: { sources: number }) {
-  const isKeyword = (sources & 1) !== 0;
-  const isSemantic = (sources & 2) !== 0;
-  if (isKeyword && isSemantic) {
-    return (
-      <span className="text-[10px] uppercase tracking-wide text-accent shrink-0">
-        name + content
-      </span>
-    );
-  }
-  if (isSemantic) {
+  // Only meaning needs explaining: name and text matches show their reason
+  // (the title, the highlighted line) on their own.
+  const isSemanticOnly = sources === 2;
+  if (isSemanticOnly) {
     return (
       <span className="text-[10px] uppercase tracking-wide text-text-muted shrink-0 inline-flex items-center gap-0.5">
-        <Sparkles size={9} /> content
+        <Sparkles size={9} /> by meaning
       </span>
     );
   }
-  // Keyword-only is the default; no badge needed.
   return null;
 }
 

@@ -127,11 +127,8 @@ export function getAppCommands(): Command[] {
       // Plain Mod+F stays with the editor's in-note find panel.
       defaultHotkey: 'Mod+Shift+F',
       enabled: vaultOpen,
-      run: () => {
-        const ui = useUIStore.getState();
-        ui.setQuickSwitcherOpen(false);
-        ui.setFullTextOpen(true);
-      },
+      // Same box as ⌘K — it searches inside notes too.
+      run: () => useUIStore.getState().setQuickSwitcherOpen(true),
     },
     {
       id: 'note.quick',

@@ -18,7 +18,6 @@ import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
-import { FullTextSearch } from '@/components/search/FullTextSearch';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
@@ -75,8 +74,6 @@ export default function App() {
   const graphOpen = useUIStore((s) => s.graphOpen);
   const focusMode = useUIStore((s) => s.focusMode);
   const setGraphOpen = useUIStore((s) => s.setGraphOpen);
-  const fullTextOpen = useUIStore((s) => s.fullTextOpen);
-  const setFullTextOpen = useUIStore((s) => s.setFullTextOpen);
 
   // Determine which view to render in the main area: a Garden tab, a note,
   // or the empty state.
@@ -242,7 +239,6 @@ export default function App() {
   };
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), [setQuickSwitcherOpen]);
-  const closeFullText = useCallback(() => setFullTextOpen(false), [setFullTextOpen]);
 
   if (!vaultRoot) {
     return (
@@ -376,7 +372,6 @@ export default function App() {
       {paletteOpen && <CommandPalette />}
 
       {/* Full-text search overlay */}
-      {fullTextOpen && <FullTextSearch onClose={closeFullText} />}
 
       {/* Template picker — palette "Insert template…" and `/template` */}
       {templatePickerOpen && <TemplatePicker />}

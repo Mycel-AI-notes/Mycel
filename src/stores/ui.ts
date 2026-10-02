@@ -52,7 +52,6 @@ interface UIState {
    *  command (see `lib/app-commands.ts`) can open them from anywhere. */
   paletteOpen: boolean;
   quickSwitcherOpen: boolean;
-  fullTextOpen: boolean;
   graphOpen: boolean;
   /** Focus mode: all chrome hidden, only the text — and the paragraph
    *  being written — stays lit. Session-only on purpose. */
@@ -81,7 +80,6 @@ interface UIState {
   closeSettings: () => void;
   setPaletteOpen: (open: boolean) => void;
   setQuickSwitcherOpen: (open: boolean) => void;
-  setFullTextOpen: (open: boolean) => void;
   setGraphOpen: (open: boolean) => void;
   toggleFocusMode: () => void;
   setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
@@ -108,7 +106,6 @@ export const useUIStore = create<UIState>()(
       settingsOpen: false,
       paletteOpen: false,
       quickSwitcherOpen: false,
-      fullTextOpen: false,
       graphOpen: false,
       focusMode: false,
       hotkeyOverrides: {},
@@ -129,7 +126,6 @@ export const useUIStore = create<UIState>()(
       closeSettings: () => set({ settingsOpen: false }),
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
-      setFullTextOpen: (open) => set({ fullTextOpen: open }),
       setGraphOpen: (open) => set({ graphOpen: open }),
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
       setHotkeyOverride: (commandId, hotkey) =>
