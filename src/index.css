@@ -585,40 +585,15 @@ body {
 }
 .myc-awaken { animation: myc-awaken 700ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-/* Note opened — the hypha that reached it roots: the text condenses in
- * while a hypha grows along the top edge, its living tip leading. */
+/* Note opened — the hypha that reached it roots and the text condenses in. */
 @keyframes myc-rooted {
   from { opacity: 0; transform: translateY(5px); filter: blur(4px); }
   to   { opacity: 1; transform: none; filter: none; }
-}
-@keyframes myc-hypha-run {
-  0%   { clip-path: inset(0 100% 0 0); opacity: 1; }
-  60%  { clip-path: inset(0 0 0 0);    opacity: 1; }
-  100% { clip-path: inset(0 0 0 0);    opacity: 0; }
 }
 .myc-rooted {
   position: relative;
   animation: myc-rooted 340ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-.myc-rooted::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: 0;
-  right: 0;
-  height: 5px;
-  z-index: 5;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg,
-      transparent,
-      color-mix(in srgb, var(--color-accent) 70%, transparent) 30%,
-      var(--color-accent-bright))
-      center / 100% 1px no-repeat;
-  filter: drop-shadow(0 0 3px var(--color-accent-bright));
-  animation: myc-hypha-run 750ms ease-out both;
-}
-
 /* Row born (new note / folder) — the row swells as its spore germinates. */
 @keyframes myc-sprouted {
   0%   { background-color: color-mix(in srgb, var(--color-accent-bright) 22%, transparent);
@@ -707,7 +682,6 @@ body {
 :root.myc-still .myc-input {
   animation: none;
 }
-:root.myc-still .myc-rooted::before,
 :root.myc-still .myc-grow::before,
 :root.myc-still .myc-shed { display: none; }
 
@@ -716,7 +690,7 @@ body {
   .myc-input, .myc-fade-in {
     animation: none;
   }
-  .myc-rooted::before, .myc-grow::before, .myc-shed { display: none; }
+  .myc-grow::before, .myc-shed { display: none; }
 }
 
 /* Hide gutter (line numbers + active-line tint) for lines under a database
