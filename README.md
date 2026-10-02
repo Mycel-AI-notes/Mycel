@@ -272,16 +272,18 @@ on.
 
 ## 🗺️ Roadmap
 
-The big things on the bench, roughly in priority order:
+The big things on the bench, roughly in priority order (details and rationale in [`docs/roadmap.md`](docs/roadmap.md)):
 
-- 🔎 **Semantic search** — embed your notes locally and search by meaning, not just keywords. "What did I write about Bayesian priors in March?" — works even if the note never used those exact words.
-- 🤖 **Local AI integrations** — pluggable local LLM backends (Ollama, llama.cpp, LM Studio). A proactive assistant that surfaces related notes, suggests links, drafts daily summaries, and answers questions grounded in your vault. Everything runs on your machine by default; bring-your-own cloud key is opt-in.
-- 🔐 **Encrypted notes** *(security-grade)* — per-note encryption to `.md.age` files using [age](https://github.com/FiloSottile/age) with X25519 keys, mastered by a hardware-backed identity (Secure Enclave on macOS, TPM on Windows/Linux, FIDO2/YubiKey as a portable option). The plaintext private key **never** touches disk; decryption happens in-process and is wiped on lock. Optional post-quantum (Kyber) wrapping for long-lived secrets. Encrypted notes still sync as opaque blobs through GitHub.
-- 🧮 **LaTeX support** — inline `$…$` and block `$$…$$` math, rendered with KaTeX. Copy-as-image for sharing, optional MathML output for accessibility.
-- 🌳 **Knowledge-base hierarchy** — first-class nested structure: collapsible KB sections, breadcrumb navigation, parent/child relations surfaced in the graph and backlinks, drag-to-reparent in the sidebar.
-- 🖼️ **Image support** — drag-and-drop / paste images, stored next to the note (or in a configurable `attachments/` folder) and rendered inline.
-- 🎨 **Community themes** — a theme picker open to contributions.
-- 📱 **Mobile companion** — read-only first, capture second.
+1. 🔎 **Full-text search & a real index** — SQLite FTS5 over the vault with `path:` / `tag:` / `-` operators, fed incrementally by the file watcher. Free, offline, and it makes backlinks, tags and the graph queries instead of vault walks.
+2. 🤖 **Local-first AI by default** — embeddings and chat through Ollama / llama.cpp / LM Studio; OpenRouter stays as an opt-in. Ask questions grounded in your vault.
+3. 🔌 **MCP server** — let Claude Code, Codex and other agents search and write your vault, with encrypted notes locked out, writes scoped to chosen folders, and every change recoverable (git + trash).
+4. ⌨️ **Obsidian-user habits** — command palette, configurable hotkeys, daily notes and templates, `![[embeds]]`, aliases, unlinked mentions, local graph, a properties editor.
+5. 📦 **Signed releases & auto-update** — notarized macOS, signed Windows builds, Tauri updater, Obsidian vault import.
+6. 🧱 **Databases, next level** — kanban and calendar views, relations, CSV import.
+7. 🧩 **Plugin API** — slash commands, panels, decorations.
+8. 🌳 **KB hierarchy**, 🎨 **community themes**, 📱 **mobile companion** (read-only + capture first).
+
+✅ **Already shipped** (previously listed here): semantic search, encrypted notes with hardware-backed identity, LaTeX, image support, Garden/GTD, present mode, KB directories, quick-note auto-filing.
 
 📋 **The full roadmap lives in [GitHub Issues](https://github.com/Mycel-AI-notes/Mycel/issues)** — that's where the granular tickets, design discussions, and "good first issue" tags live. **Everyone is invited to contribute** — pick a ticket, drop a comment, send a PR. New ideas welcome too.
 
