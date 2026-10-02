@@ -131,6 +131,19 @@ pub fn capture_timestamp(rel_path: &str) -> Option<String> {
 
     let stem = file.strip_suffix(".md")?;
     let hm = stem.get(0..8)?; // HH-MM-SS, ignore any -n suffix
+                              // Only the collision suffix may follow. A renamed note that happens to
+                              // start with a time ("09-00-00 standup.md") is no longer auto-named —
+                              // treating it as one offered to rename the user's own title away.
+    let suffix_ok = match stem.get(8..) {
+        Some("") => true,
+        Some(rest) => rest
+            .strip_prefix('-')
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())),
+        None => false,
+    };
+    if !suffix_ok {
+        return None;
+    }
     let hm_ok = hm.bytes().enumerate().all(|(i, b)| match i {
         2 | 5 => b == b'-',
         _ => b.is_ascii_digit(),
@@ -317,6 +330,12 @@ mod tests {
             Some("2026-06-09 14:32")
         );
         assert_eq!(capture_timestamp("notes/other.md"), None);
+        // A user title that merely starts with a time is not auto-named.
+        assert_eq!(
+            capture_timestamp("quick/2026-06-09/09-00-00 standup.md"),
+            None
+        );
+        assert_eq!(capture_timestamp("quick/2026-06-09/14-32-08-.md"), None);
         assert_eq!(capture_timestamp("quick/not-a-date/14-32-08.md"), None);
     }
 

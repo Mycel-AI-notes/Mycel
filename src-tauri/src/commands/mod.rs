@@ -2,6 +2,7 @@ pub mod ai;
 pub mod attachments;
 pub mod crypto;
 pub mod database;
+pub mod fulltext;
 pub mod garden;
 pub mod graph;
 pub mod kb;

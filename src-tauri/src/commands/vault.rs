@@ -23,7 +23,28 @@ pub async fn vault_open(
     // new vault's `.mycel/ai/`.
     *state.ai.lock().await = None;
 
-    let new_watcher = start_watcher(app, root);
+    // Full-text index: open it now so the watcher can keep it fresh, and
+    // catch up on whatever changed while Mycel was closed in the background
+    // — the walk is stamp-checked, but a first build on a large vault still
+    // takes a moment the vault-open path should not wait for. A search
+    // issued before it finishes simply runs its own (serialized) sync.
+    let fts = match crate::commands::fulltext::fts_index(&state, &root) {
+        Ok(idx) => {
+            let bg = idx.clone();
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = bg.sync() {
+                    eprintln!("fts: initial sync failed: {e:#}");
+                }
+            });
+            Some(idx)
+        }
+        Err(e) => {
+            eprintln!("fts: failed to open index: {e}");
+            None
+        }
+    };
+
+    let new_watcher = start_watcher(app, root, fts);
     *state.watcher.lock().await = new_watcher;
 
     Ok(tree)

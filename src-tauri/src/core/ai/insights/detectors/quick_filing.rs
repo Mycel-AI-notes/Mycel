@@ -347,6 +347,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn busy_quick_folder_does_not_hide_the_target() {
+        // Regression: the ranking took the 8 nearest notes and only then
+        // dropped the quick notes among them. Same-day captures on one topic
+        // are each other's nearest neighbours, so a busy `quick/` folder
+        // filled all 8 slots and the real target never made the cut.
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = test_settings();
+        let text = "prune the apple trees before spring";
+        let quick: Vec<String> = (0..12)
+            .map(|i| format!("quick/2026-06-09/14-{i:02}-00.md"))
+            .collect();
+        let mut files: Vec<(&str, &str)> = quick.iter().map(|p| (p.as_str(), text)).collect();
+        // Close but not identical, so every quick note outranks it.
+        files.push(("orchard.md", "prune the apple trees before spring!"));
+        seed(dir.path(), &store, &files).await;
+
+        let got = QuickFilingDetector
+            .run(&ctx(&store, dir.path(), &settings))
+            .await
+            .unwrap();
+
+        assert_eq!(got.len(), quick.len(), "every quick note gets a card");
+        for ins in &got {
+            assert_eq!(ins.note_paths[1], "orchard.md");
+        }
+    }
+
+    #[tokio::test]
+    async fn linked_target_gives_way_to_the_next_best() {
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(AiStore::open(dir.path()).unwrap());
+        let settings = test_settings();
+        seed(
+            dir.path(),
+            &store,
+            &[
+                (QUICK, "prune the apple trees [[orchard]]"),
+                ("orchard.md", "prune the apple trees [[orchard]]"),
+                ("garden.md", "prune the apple trees [[orchard]]!"),
+            ],
+        )
+        .await;
+
+        let got = QuickFilingDetector
+            .run(&ctx(&store, dir.path(), &settings))
+            .await
+            .unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].note_paths[1], "garden.md");
+    }
+
+    #[tokio::test]
     async fn skips_filed_and_empty_notes() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(AiStore::open(dir.path()).unwrap());

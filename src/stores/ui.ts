@@ -49,6 +49,7 @@ interface UIState {
    *  command (see `lib/app-commands.ts`) can open them from anywhere. */
   paletteOpen: boolean;
   quickSwitcherOpen: boolean;
+  fullTextOpen: boolean;
   graphOpen: boolean;
   /** User hotkey rebinds by command id; `null` is an explicit unbind. Only
    *  differences from the defaults are stored, so a default changed in a
@@ -74,6 +75,7 @@ interface UIState {
   closeSettings: () => void;
   setPaletteOpen: (open: boolean) => void;
   setQuickSwitcherOpen: (open: boolean) => void;
+  setFullTextOpen: (open: boolean) => void;
   setGraphOpen: (open: boolean) => void;
   setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
   resetHotkey: (commandId: string) => void;
@@ -99,6 +101,7 @@ export const useUIStore = create<UIState>()(
       settingsOpen: false,
       paletteOpen: false,
       quickSwitcherOpen: false,
+      fullTextOpen: false,
       graphOpen: false,
       hotkeyOverrides: {},
       templatesFolder: DEFAULT_TEMPLATES_FOLDER,
@@ -118,6 +121,7 @@ export const useUIStore = create<UIState>()(
       closeSettings: () => set({ settingsOpen: false }),
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
+      setFullTextOpen: (open) => set({ fullTextOpen: open }),
       setGraphOpen: (open) => set({ graphOpen: open }),
       setHotkeyOverride: (commandId, hotkey) =>
         set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),

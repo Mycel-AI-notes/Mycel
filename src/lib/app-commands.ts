@@ -113,6 +113,19 @@ export function getAppCommands(): Command[] {
       run: () => useUIStore.getState().setQuickSwitcherOpen(true),
     },
     {
+      id: 'search.fulltext',
+      title: 'Search in notes (full text)',
+      section: 'Navigation',
+      // Plain Mod+F stays with the editor's in-note find panel.
+      defaultHotkey: 'Mod+Shift+F',
+      enabled: vaultOpen,
+      run: () => {
+        const ui = useUIStore.getState();
+        ui.setQuickSwitcherOpen(false);
+        ui.setFullTextOpen(true);
+      },
+    },
+    {
       id: 'note.quick',
       title: 'New quick note',
       section: 'Notes',

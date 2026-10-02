@@ -93,6 +93,7 @@ npm run tauri build
 - 💾 **Autosave** — edits land on disk about a second after you stop typing, and are flushed when you leave a tab or close the window. `⌘/Ctrl+S` still works and still pins a preview tab; it's just no longer the only thing between a thought and losing it.
 - 🗂️ **Tabs done right** — single click opens a *preview* tab (italic). Switching files replaces it, so you don't drown in junk tabs. Save (`⌘/Ctrl+S`) or double-click to pin.
 - 🔍 **Quick switcher** (`⌘/Ctrl+O`) — fuzzy search across note titles and paths.
+- 🔎 **Full-text search** (`⌘/Ctrl+Shift+F`) — search the *contents* of every note, as you type, fully offline and without an AI key. A local SQLite FTS5 index (`.mycel/search.db`) kept fresh by the file watcher; Cyrillic and Latin alike, accent- and `ё`/`е`-insensitive, prefix matching. Operators: `"exact phrase"`, `-exclude`, `a OR b`, plus `path:`, `file:` and `tag:` filters. Results are grouped by note with highlighted snippets; `Enter` jumps straight to the matching line. Encrypted notes are never indexed.
 - 🎛️ **Command palette** (`⌘/Ctrl+P`) — every action in the app, fuzzy-searchable, with its hotkey shown next to it. Commands and hotkeys come from one registry, so nothing is reachable only by mouse.
 - ⌨️ **Configurable hotkeys** — Settings → Hotkeys: click a shortcut, press the new keys. Conflicts are caught before they happen (you're asked before a key is taken from another command), Backspace unbinds, one click resets to the default. Bindings follow the physical key, so they keep working on a non-Latin keyboard layout. The global quick-note shortcut is fixed.
 - ⚡ **Quick notes** (`⌘/Ctrl+Shift+N`, **global** — works even when the app is minimised) — drops a timestamped note in `quick/YYYY-MM-DD/` so a thought never gets away.
@@ -136,6 +137,7 @@ npm run tauri build
 |---|---|
 | `⌘/Ctrl + P` | Command palette |
 | `⌘/Ctrl + O` | Quick switcher (fuzzy file finder) |
+| `⌘/Ctrl + Shift + F` | Full-text search across note contents |
 | `⌘/Ctrl + Shift + N` | **Quick note** (works globally, even when Mycel is unfocused) |
 | `⌘/Ctrl + G` | Toggle graph view |
 | `⌘/Ctrl + S` | Save current note (also pins a preview tab) |
@@ -159,7 +161,7 @@ Every shortcut except the global quick note can be changed in **Settings → Hot
 | Layer | Tech |
 |---|---|
 | Shell | [Tauri 2](https://tauri.app) |
-| Backend | Rust (parser, file watcher, keyring, Git sync) |
+| Backend | Rust (parser, file watcher, full-text index, keyring, Git sync) |
 | Frontend | React 19 + TypeScript + Vite |
 | Editor | CodeMirror 6 |
 | Graph | `d3-force` |
@@ -375,7 +377,7 @@ File-system commands won't be available (the vault picker needs the Tauri runtim
 │   └── lib/                   # Editor / database helpers
 ├── src-tauri/                 # Rust shell
 │   ├── src/commands/          # Tauri commands (notes, vault, search, graph, sync, database)
-│   └── src/core/              # Vault, parser, file watcher, sync, keyring
+│   └── src/core/              # Vault, parser, file watcher, full-text index, sync, keyring
 └── package.json
 ```
 

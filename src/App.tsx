@@ -18,6 +18,7 @@ import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
+import { FullTextSearch } from '@/components/search/FullTextSearch';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
@@ -53,6 +54,7 @@ import {
   FolderSearch,
   Share2,
   Settings as SettingsIcon,
+  TextSearch,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = QUICK_NOTE_GLOBAL_SHORTCUT;
@@ -72,6 +74,8 @@ export default function App() {
   const setQuickSwitcherOpen = useUIStore((s) => s.setQuickSwitcherOpen);
   const graphOpen = useUIStore((s) => s.graphOpen);
   const setGraphOpen = useUIStore((s) => s.setGraphOpen);
+  const fullTextOpen = useUIStore((s) => s.fullTextOpen);
+  const setFullTextOpen = useUIStore((s) => s.setFullTextOpen);
 
   // Determine which view to render in the main area: a Garden tab, a note,
   // or the empty state.
@@ -237,6 +241,7 @@ export default function App() {
   };
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), [setQuickSwitcherOpen]);
+  const closeFullText = useCallback(() => setFullTextOpen(false), [setFullTextOpen]);
 
   if (!vaultRoot) {
     return (
@@ -286,6 +291,18 @@ export default function App() {
 
           <div className="flex items-center gap-1">
             <LockBadge />
+
+            <button
+              onClick={() => setFullTextOpen(true)}
+              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title={
+                hotkeyLabel('search.fulltext')
+                  ? `Search in notes (${hotkeyLabel('search.fulltext')})`
+                  : 'Search in notes'
+              }
+            >
+              <TextSearch size={16} />
+            </button>
 
             <button
               onClick={() => createQuickNote()}
@@ -363,6 +380,9 @@ export default function App() {
 
       {/* Command palette (⌘P) */}
       {paletteOpen && <CommandPalette />}
+
+      {/* Full-text search overlay */}
+      {fullTextOpen && <FullTextSearch onClose={closeFullText} />}
 
       {/* Template picker — palette "Insert template…" and `/template` */}
       {templatePickerOpen && <TemplatePicker />}

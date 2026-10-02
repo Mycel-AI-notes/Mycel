@@ -14,11 +14,14 @@ use anyhow::Result;
 use serde::Serialize;
 
 use super::insights::detectors::util::{base_name, similarity};
-use super::related::find_related;
+use super::related::find_related_where;
 use super::store::AiStore;
 use crate::core::quick_filing::is_quick_path;
 
-/// Neighbours fetched from the vector index before target filtering.
+/// Neighbours fetched from the vector index. Other quick notes, non-`.md`
+/// paths and notes the quick note already links to are filtered out inside
+/// the kNN, so these are all real candidates; only the similarity threshold
+/// trims further.
 const K: usize = 8;
 
 #[derive(Debug, Clone, Serialize)]
@@ -172,19 +175,15 @@ pub fn rank_targets(
     max: usize,
 ) -> Result<Vec<TargetHit>> {
     let linked = wikilink_basenames(body);
-    let hits = find_related(store, quick_path, K)?;
+    let hits = find_related_where(store, quick_path, K, |p| {
+        !is_quick_path(p) && p.ends_with(".md") && !linked.contains(&base_name(p).to_lowercase())
+    })?;
     let mut out = Vec::new();
     for hit in hits {
-        if is_quick_path(&hit.note_path) || !hit.note_path.ends_with(".md") {
-            continue;
-        }
         let sim = similarity(hit.distance);
         if sim < min_similarity {
             // Hits arrive ordered by distance: everything after is weaker.
             break;
-        }
-        if linked.contains(&base_name(&hit.note_path).to_lowercase()) {
-            continue;
         }
         out.push(TargetHit {
             note_path: hit.note_path,
