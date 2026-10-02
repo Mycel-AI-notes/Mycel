@@ -263,7 +263,8 @@ export default function App() {
             className="flex items-center text-accent pl-0.5 pr-1"
             title="Mycel"
           >
-            <Logo size={20} />
+            <Logo size={20} glow />
+            <span className="ml-1.5 text-[13px] font-medium text-text-primary">Mycel</span>
           </span>
 
           <button
@@ -277,14 +278,14 @@ export default function App() {
           {/* Quick Switcher trigger */}
           <button
             onClick={() => setQuickSwitcherOpen(true)}
-            className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
+            className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-lg myc-pane hover:border-accent/40 text-text-muted text-xs transition-colors"
           >
             <span className="flex-1 text-left truncate">
               {vaultRoot.split('/').pop() ?? vaultRoot}
               <span className="opacity-60"> · search or run a command</span>
             </span>
           {hotkeyLabel('omnibar.open') && (
-            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('omnibar.open')}</kbd>
+            <kbd className="myc-kbd">{hotkeyLabel('omnibar.open')}</kbd>
           )}
           </button>
 

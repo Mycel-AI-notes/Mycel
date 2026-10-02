@@ -278,25 +278,43 @@
   color-scheme: light;
 }
 
+/* The living canvas's glass tint. Follows each palette's deep accent;
+   Moss alone gets the icon's own green so the glass reads alive rather
+   than olive. Declared on the root element, so the var() resolves against
+   whichever palette is active there. */
+:root {
+  --color-living: var(--color-accent-deep);
+}
+:root:not([data-palette]),
+:root[data-palette='moss'] {
+  --color-living: #3E7A1F;
+}
+.dark:not([data-palette]),
+.dark[data-palette='moss'] {
+  --color-living: #2E7A22;
+}
+
 /* Dark theme — the primary Mycel surface. */
 .dark {
-  --color-surface-0:        #090B0F;
-  --color-surface-1:        #11151B;
-  --color-surface-2:        #171C24;
-  --color-surface-hover:    #1E2530;
+  /* Near-black with a faint living-green undertone — the room the glowing
+     mycelium sits in. */
+  --color-surface-0:        #070A08;
+  --color-surface-1:        #0B0F0C;
+  --color-surface-2:        #121813;
+  --color-surface-hover:    #19211A;
 
-  --color-text-primary:     #F3F5F7;
-  --color-text-secondary:   #B5BDC9;
-  --color-text-muted:       #7C8798;
-  --color-text-disabled:    #596170;
+  --color-text-primary:     #F2F5EF;
+  --color-text-secondary:   #B4BDB0;
+  --color-text-muted:       #7D887A;
+  --color-text-disabled:    #565F53;
 
   --color-accent:           #C8F52A;
   --color-accent-bright:    #D7FF3F;
   --color-accent-muted:     #97B91E;
   --color-accent-deep:      #5C7012;
 
-  --color-border:           #232A36;
-  --color-border-strong:    #313A49;
+  --color-border:           #1D251F;
+  --color-border-strong:    #2B362D;
 
   --color-success:          #3DD68C;
   --color-warning:          #FFB84D;
@@ -314,11 +332,11 @@
   --color-tag:              #8BE9FD;
   --color-embedding:        #8BFFB0;
 
-  --color-search-bg:        #121720;
-  --color-search-selected:  #1B2330;
+  --color-search-bg:        #0F1510;
+  --color-search-selected:  #18211A;
   --color-semantic-glow:    rgba(200, 245, 42, 0.18);
 
-  --color-code-bg:          #0F1319;
+  --color-code-bg:          #0E130F;
   --color-inline-code:      #D7FF3F;
 
   --color-selection:        rgba(200, 245, 42, 0.18);
@@ -497,6 +515,127 @@ body {
   background: var(--color-border-strong);
 }
 
+/* ── Living surface ─────────────────────────────────────────────────────
+ * The shared vocabulary of the redesign: frosted glass over the living
+ * canvas, a lit accent button, and an outlined "selected" state. Every
+ * colour comes from the theme tokens, so each palette and both modes get
+ * the same shapes in their own light. Notes themselves stay plain — these
+ * dress the chrome around them. */
+
+.myc-glass {
+  background: color-mix(in srgb, var(--color-surface-0) 66%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 7%, transparent),
+    0 30px 80px -24px rgb(0 0 0 / 0.55);
+}
+
+/* A quieter pane — cards and inputs sitting inside glass. */
+.myc-pane {
+  background: color-mix(in srgb, var(--color-surface-2) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+}
+
+.myc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  transition: background-color 160ms ease, border-color 160ms ease,
+              box-shadow 200ms ease, filter 160ms ease, transform 120ms ease;
+  outline: none;
+}
+.myc-btn:active:not(:disabled) { transform: translateY(1px); }
+.myc-btn:disabled { opacity: 0.5; pointer-events: none; }
+.myc-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-surface-1), 0 0 0 4px var(--color-accent);
+}
+
+/* Lit accent — the one bright action on a screen. Text uses surface-0,
+   which is dark on dark palettes and white on light ones. */
+.myc-btn-primary {
+  color: var(--color-surface-0);
+  background: linear-gradient(180deg, var(--color-accent-bright), var(--color-accent));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.32),
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent),
+    0 8px 28px -8px color-mix(in srgb, var(--color-accent-bright) 70%, transparent);
+}
+.myc-btn-primary:hover {
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 0 0 1px var(--color-accent-bright),
+    0 10px 36px -6px color-mix(in srgb, var(--color-accent-bright) 85%, transparent);
+}
+
+/* Glass outline — the secondary action beside the lit one. */
+.myc-btn-secondary {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-surface-0) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.myc-btn-secondary:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, color-mix(in srgb, var(--color-surface-0) 60%, transparent));
+}
+
+/* Selected — an accent outline with a faint inner light, used for the
+   active file, tab, segment and vault card. */
+.myc-selected {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 55%, transparent),
+    inset 0 0 14px -6px color-mix(in srgb, var(--color-accent-bright) 50%, transparent),
+    0 0 16px -6px color-mix(in srgb, var(--color-accent-bright) 45%, transparent);
+}
+
+/* Small chips: "Local", key hints. */
+.myc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 11px;
+  line-height: 1rem;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+}
+.myc-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.375rem;
+  min-height: 1.25rem;
+  border-radius: 0.375rem;
+  font-size: 10.5px;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-surface-2) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+}
+
+/* Keeps text readable over the canvas: darkens (or lightens) the middle of
+   the room where content sits, leaving the glowing edges alive. */
+.myc-canvas-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 60% 55% at 50% 50%,
+    color-mix(in srgb, var(--color-surface-1) 82%, transparent) 0%,
+    color-mix(in srgb, var(--color-surface-1) 35%, transparent) 60%,
+    transparent 100%);
+}
+
 /* CodeMirror overrides */
 .cm-editor {
   height: 100%;
@@ -636,30 +775,6 @@ body {
 .myc-grow > :nth-child(5) { animation-delay: 120ms; }
 .myc-grow > :nth-child(n+6) { animation-delay: 150ms; }
 
-/* Empty editor — the mark sheds spores that drift off and fade. Each
- * grain carries its own direction in --dx/--dy. */
-@keyframes myc-shed {
-  0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
-  15%  { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1); opacity: 0; }
-}
-.myc-shed {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.myc-shed > i {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 9999px;
-  background: var(--color-accent-bright);
-  box-shadow: 0 0 6px var(--color-accent-bright);
-  animation: myc-shed 5.5s ease-out infinite both;
-}
-
 @keyframes myc-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -682,15 +797,14 @@ body {
 :root.myc-still .myc-input {
   animation: none;
 }
-:root.myc-still .myc-grow::before,
-:root.myc-still .myc-shed { display: none; }
+:root.myc-still .myc-grow::before { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .myc-awaken, .myc-rooted, .myc-sprouted, .myc-grow > *,
   .myc-input, .myc-fade-in {
     animation: none;
   }
-  .myc-grow::before, .myc-shed { display: none; }
+  .myc-grow::before { display: none; }
 }
 
 /* Hide gutter (line numbers + active-line tint) for lines under a database

@@ -155,16 +155,16 @@ export function RightPanel() {
 
   return (
     <aside className="flex flex-col h-full bg-surface-0 border-l border-border w-52 shrink-0 text-sm">
-      <div className="flex border-b border-border">
+      <div className="flex gap-1 p-1.5 border-b border-border">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setRightPanelTab(tab)}
             className={clsx(
-              'flex-1 py-1.5 text-xs capitalize',
+              'flex-1 py-1 rounded-md text-xs capitalize transition-[color,background-color,box-shadow]',
               rightPanelTab === tab
-                ? 'text-text-primary border-b-2 border-accent'
-                : 'text-text-muted hover:text-text-secondary',
+                ? 'myc-selected'
+                : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover',
             )}
           >
             {tab}

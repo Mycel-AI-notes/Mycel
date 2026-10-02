@@ -87,11 +87,11 @@ export function PickerDialog<T extends PickerItem>({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/55"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50 backdrop-blur-[3px]"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-surface-2 rounded-xl shadow-glow border border-border-strong overflow-hidden"
+        className="w-full max-w-lg myc-glass rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
