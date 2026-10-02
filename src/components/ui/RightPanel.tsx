@@ -19,12 +19,10 @@ import { UnlinkedMentions } from '@/components/ui/UnlinkedMentions';
 import { TagSearch } from '@/components/search/TagSearch';
 import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
-import { displayName, isEncryptedPath } from '@/lib/note-name';
+import { displayName, isEncryptedPath, isNotePath } from '@/lib/note-name';
 import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
 import { isImageEmbed } from '@/lib/embed';
-
-/** A real note file (not a Garden/Insights tab or an attachment). */
-const isNotePath = (p: string) => p.endsWith('.md') || p.endsWith('.md.age');
+import { LocalGraph } from '@/components/graph/LocalGraph';
 
 interface Backlink {
   path: string;
@@ -60,7 +58,7 @@ export function RightPanel() {
     !!activeTabPath &&
     !isEncryptedPath(activeTabPath);
 
-  const tabs = ['outline', 'backlinks', 'tags'] as const;
+  const tabs = ['outline', 'backlinks', 'tags', 'graph'] as const;
 
   // Re-fetch backlinks on tab open, on note switch, and after saves in the
   // vault (vaultVersion bumps). Edits-in-progress don't trigger it — backlinks
@@ -165,7 +163,7 @@ export function RightPanel() {
             key={tab}
             onClick={() => setRightPanelTab(tab)}
             className={clsx(
-              'flex-1 py-1.5 text-xs capitalize',
+              'flex-1 py-1.5 text-[11px] capitalize',
               rightPanelTab === tab
                 ? 'text-text-primary border-b-2 border-accent'
                 : 'text-text-muted hover:text-text-secondary',
@@ -343,7 +341,14 @@ export function RightPanel() {
           </div>
         )}
 
-        {!note && rightPanelTab !== 'backlinks' && (
+        {rightPanelTab === 'graph' &&
+          (activeTabPath && isNotePath(activeTabPath) ? (
+            <LocalGraph path={activeTabPath} compact />
+          ) : (
+            <p className="text-text-muted text-xs">Open a note to see its local graph</p>
+          ))}
+
+        {!note && rightPanelTab !== 'backlinks' && rightPanelTab !== 'graph' && (
           <p className="text-text-muted text-xs">Open a note to see details</p>
         )}
       </div>

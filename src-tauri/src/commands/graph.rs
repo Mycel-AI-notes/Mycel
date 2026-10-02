@@ -6,11 +6,11 @@ use crate::core::vault::note_paths;
 use crate::AppState;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::OnceLock;
 use tauri::State;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphNote {
     pub path: String,
     pub title: String,
@@ -32,13 +32,13 @@ pub struct GraphDomain {
     pub count: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GraphTag {
     pub tag: String,
     pub count: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WikiEdge {
     pub from: String,
     pub to: String,
@@ -51,7 +51,7 @@ pub struct ExternalEdge {
     pub count: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TagEdge {
     pub from: String,
     pub tag: String,
@@ -335,6 +335,148 @@ pub fn build_graph(vault_root: &Path) -> GraphData {
     }
 }
 
+/// Deepest neighbourhood the local graph offers. Past three hops a
+/// well-linked vault is most of the global graph again, which the global
+/// view already shows better.
+pub const MAX_LOCAL_DEPTH: u32 = 3;
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LocalNote {
+    pub path: String,
+    pub title: String,
+    pub folder: String,
+    /// Hops from the centre over wikilinks, either direction; 0 = centre.
+    pub depth: u32,
+}
+
+/// The neighbourhood of one note: a slice of [`GraphData`], not a separate
+/// model, so a link counts here exactly when the global graph draws it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LocalGraph {
+    pub center: String,
+    /// Sorted by depth, then title. Empty when the centre is not in the
+    /// graph at all (an encrypted note, or a path that no longer exists).
+    pub notes: Vec<LocalNote>,
+    /// Every wikilink between two notes in the neighbourhood — including the
+    /// ones between two neighbours, which is what makes clusters visible.
+    pub wiki_edges: Vec<WikiEdge>,
+    /// Tags carried by notes in the neighbourhood, counted within it. Empty
+    /// unless asked for: tags are leaves, never a path to more notes.
+    pub tags: Vec<GraphTag>,
+    pub tag_edges: Vec<TagEdge>,
+}
+
+/// Breadth-first neighbourhood of `center` up to `depth` hops (clamped to
+/// 1..=[`MAX_LOCAL_DEPTH`]) over the global graph's wikilink edges, followed
+/// in both directions: a backlink is as much a neighbour as an outgoing link.
+pub fn local_subgraph(g: &GraphData, center: &str, depth: u32, include_tags: bool) -> LocalGraph {
+    let depth = depth.clamp(1, MAX_LOCAL_DEPTH);
+    let mut out = LocalGraph {
+        center: center.to_string(),
+        notes: Vec::new(),
+        wiki_edges: Vec::new(),
+        tags: Vec::new(),
+        tag_edges: Vec::new(),
+    };
+    let by_path: HashMap<&str, &GraphNote> = g.notes.iter().map(|n| (n.path.as_str(), n)).collect();
+    if !by_path.contains_key(center) {
+        return out;
+    }
+
+    let mut adjacent: HashMap<&str, Vec<&str>> = HashMap::new();
+    for e in &g.wiki_edges {
+        adjacent.entry(&e.from).or_default().push(&e.to);
+        adjacent.entry(&e.to).or_default().push(&e.from);
+    }
+
+    let mut dist: HashMap<&str, u32> = HashMap::from([(center, 0)]);
+    let mut queue: VecDeque<&str> = VecDeque::from([center]);
+    while let Some(cur) = queue.pop_front() {
+        let d = dist[cur];
+        if d == depth {
+            continue;
+        }
+        for &next in adjacent.get(cur).map(Vec::as_slice).unwrap_or(&[]) {
+            if !dist.contains_key(next) && by_path.contains_key(next) {
+                dist.insert(next, d + 1);
+                queue.push_back(next);
+            }
+        }
+    }
+
+    out.notes = dist
+        .iter()
+        .map(|(&path, &depth)| {
+            let n = by_path[path];
+            LocalNote {
+                path: n.path.clone(),
+                title: n.title.clone(),
+                folder: n.folder.clone(),
+                depth,
+            }
+        })
+        .collect();
+    out.notes.sort_by(|a, b| {
+        a.depth
+            .cmp(&b.depth)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
+    out.wiki_edges = g
+        .wiki_edges
+        .iter()
+        .filter(|e| dist.contains_key(e.from.as_str()) && dist.contains_key(e.to.as_str()))
+        .cloned()
+        .collect();
+
+    if include_tags {
+        let mut counts: HashMap<&str, u32> = HashMap::new();
+        for e in &g.tag_edges {
+            if dist.contains_key(e.from.as_str()) {
+                *counts.entry(&e.tag).or_insert(0) += 1;
+                out.tag_edges.push(e.clone());
+            }
+        }
+        out.tags = counts
+            .into_iter()
+            .map(|(tag, count)| GraphTag {
+                tag: tag.to_string(),
+                count,
+            })
+            .collect();
+        out.tags
+            .sort_by(|a, b| b.count.cmp(&a.count).then(a.tag.cmp(&b.tag)));
+    }
+    out
+}
+
+/// The neighbourhood of `path`, for the local graph. Builds the full graph
+/// first so resolution (paths, stems, titles, aliases) is exactly the global
+/// graph's — two views that disagree about what links where would be worse
+/// than one that is a little slower on a huge vault.
+#[tauri::command]
+pub async fn graph_local(
+    path: String,
+    depth: Option<u32>,
+    include_tags: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<LocalGraph, String> {
+    let vault_root = {
+        let guard = state.vault.lock().await;
+        guard
+            .as_ref()
+            .map(|v| v.root.clone())
+            .ok_or("No vault open")?
+    };
+    tokio::task::spawn_blocking(move || {
+        let g = build_graph(&vault_root);
+        local_subgraph(&g, &path, depth.unwrap_or(1), include_tags.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -575,5 +717,123 @@ mod tests {
         assert!(g.notes.is_empty());
         assert!(g.wiki_edges.is_empty());
         assert!(g.tags.is_empty());
+    }
+
+    // ---- local graph --------------------------------------------------------
+
+    fn local_paths(l: &LocalGraph) -> Vec<(String, u32)> {
+        l.notes.iter().map(|n| (n.path.clone(), n.depth)).collect()
+    }
+
+    /// a → b → c → d → e, plus x → a (a backlink into the centre).
+    fn chain() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "[[b]] #ideas");
+        write(root, "b.md", "[[c]] #ideas #work");
+        write(root, "c.md", "[[d]]");
+        write(root, "d.md", "[[e]]");
+        write(root, "e.md", "end");
+        write(root, "x.md", "points at [[a]]");
+        write(root, "lonely.md", "nothing");
+        dir
+    }
+
+    #[test]
+    fn depth_one_follows_links_in_both_directions() {
+        let dir = chain();
+        let g = build_graph(dir.path());
+        let l = local_subgraph(&g, "a.md", 1, false);
+        assert_eq!(
+            local_paths(&l),
+            vec![("a.md".into(), 0), ("b.md".into(), 1), ("x.md".into(), 1)]
+        );
+        assert_eq!(l.wiki_edges.len(), 2);
+        assert!(l.tags.is_empty() && l.tag_edges.is_empty());
+    }
+
+    #[test]
+    fn deeper_levels_reach_further_and_depth_is_clamped() {
+        let dir = chain();
+        let g = build_graph(dir.path());
+        let paths = |d| {
+            let mut p: Vec<String> = local_subgraph(&g, "a.md", d, false)
+                .notes
+                .into_iter()
+                .map(|n| n.path)
+                .collect();
+            p.sort();
+            p
+        };
+        assert_eq!(paths(2), vec!["a.md", "b.md", "c.md", "x.md"]);
+        assert_eq!(paths(3), vec!["a.md", "b.md", "c.md", "d.md", "x.md"]);
+        assert_eq!(paths(9), paths(3));
+        assert_eq!(paths(0), paths(1));
+        let l = local_subgraph(&g, "a.md", 3, false);
+        assert_eq!(l.notes.iter().find(|n| n.path == "d.md").unwrap().depth, 3);
+    }
+
+    #[test]
+    fn edges_between_neighbours_are_kept_and_cycles_terminate() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "[[b]] [[c]]");
+        write(root, "b.md", "[[c]] [[a]]");
+        write(root, "c.md", "[[a]]");
+        let g = build_graph(root);
+        let l = local_subgraph(&g, "a.md", 3, false);
+        assert_eq!(l.notes.len(), 3);
+        // a→b, a→c, b→c, b→a, c→a: all five live inside the neighbourhood.
+        assert_eq!(l.wiki_edges.len(), 5);
+    }
+
+    #[test]
+    fn aliases_and_titles_resolve_like_the_global_graph() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "ml.md", "---\naliases: [Машинное обучение]\n---\n");
+        write(root, "t.md", "---\ntitle: Long Title\n---\n");
+        write(root, "src.md", "[[машинное обучение]] and [[Long Title]]");
+        let g = build_graph(root);
+        let mut p: Vec<String> = local_subgraph(&g, "ml.md", 2, false)
+            .notes
+            .into_iter()
+            .map(|n| n.path)
+            .collect();
+        p.sort();
+        assert_eq!(p, vec!["ml.md", "src.md", "t.md"]);
+    }
+
+    #[test]
+    fn tags_are_optional_leaves_counted_within_the_neighbourhood() {
+        let dir = chain();
+        let g = build_graph(dir.path());
+        let l = local_subgraph(&g, "a.md", 1, true);
+        assert_eq!(
+            l.tags,
+            vec![
+                GraphTag {
+                    tag: "ideas".into(),
+                    count: 2
+                },
+                GraphTag {
+                    tag: "work".into(),
+                    count: 1
+                }
+            ]
+        );
+        assert_eq!(l.tag_edges.len(), 3);
+        // Sharing a tag does not pull in more notes.
+        assert_eq!(l.notes.len(), 3);
+    }
+
+    #[test]
+    fn an_unknown_or_isolated_centre() {
+        let dir = chain();
+        let g = build_graph(dir.path());
+        assert!(local_subgraph(&g, "missing.md", 2, true).notes.is_empty());
+        let l = local_subgraph(&g, "lonely.md", 3, false);
+        assert_eq!(local_paths(&l), vec![("lonely.md".into(), 0)]);
+        assert!(l.wiki_edges.is_empty());
     }
 }

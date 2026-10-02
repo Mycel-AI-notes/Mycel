@@ -54,7 +54,7 @@ Garden/GTD, Present mode, KB-директории, quick-note auto-filing, ко�
 - Командная палитра `⌘P` + настраиваемые хоткеи.
 - Daily notes + шаблоны, `aliases` во frontmatter.
 - Embeds `![[Note]]` (парсер уже умеет, UI пропускает), unlinked mentions ✅,
-  локальный граф, панель unresolved links, закладки.
+  локальный граф ✅, панель unresolved links, закладки.
 - Редактор properties (frontmatter) — особенно ценно в паре с `mycel-db`.
 
 ### Фаза 3 — Агентный слой (2–3 недели) · P1, главный рычаг

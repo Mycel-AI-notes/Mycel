@@ -93,6 +93,7 @@ pub fn run() {
             commands::fulltext::search_fulltext,
             commands::fulltext::search_reindex,
             commands::graph::graph_data,
+            commands::graph::graph_local,
             commands::database::db_read,
             commands::database::db_write,
             commands::database::db_create,
