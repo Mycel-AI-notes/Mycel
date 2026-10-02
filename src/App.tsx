@@ -36,6 +36,7 @@ import { isMac } from '@/lib/platform';
 import { useHotkeyBindings } from '@/hooks/useHotkeyBindings';
 import { PresentationOverlay } from '@/components/presentation/PresentationOverlay';
 import { Logo } from '@/components/brand/Logo';
+import { FocusHint } from '@/components/ui/FocusHint';
 import { Toasts } from '@/components/ui/Toasts';
 import { flushAllAutosaves } from '@/lib/autosave';
 import { LockBadge } from '@/components/crypto/LockBadge';
@@ -73,6 +74,7 @@ export default function App() {
   const quickSwitcherOpen = useUIStore((s) => s.quickSwitcherOpen);
   const setQuickSwitcherOpen = useUIStore((s) => s.setQuickSwitcherOpen);
   const graphOpen = useUIStore((s) => s.graphOpen);
+  const focusMode = useUIStore((s) => s.focusMode);
   const setGraphOpen = useUIStore((s) => s.setGraphOpen);
   const fullTextOpen = useUIStore((s) => s.fullTextOpen);
   const setFullTextOpen = useUIStore((s) => s.setFullTextOpen);
@@ -255,6 +257,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
       <div className="flex flex-col flex-1 min-h-0 myc-awaken">
         {/* Top toolbar */}
+        {!focusMode && (
         <header
           data-tauri-drag-region
           className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
@@ -330,14 +333,15 @@ export default function App() {
             </button>
           </div>
         </header>
+        )}
 
         {/* Main layout */}
         <div className="flex flex-1 min-h-0">
-          {!sidebarCollapsed && <Sidebar />}
+          {!sidebarCollapsed && !focusMode && <Sidebar />}
 
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
           <main className="flex flex-col flex-1 min-w-0">
-            <EditorTabs />
+            {!focusMode && <EditorTabs />}
             {activeGardenView ? (
               <GardenView view={activeGardenView} />
             ) : isInsightsTabPath(activeTabPath) ? (
@@ -353,10 +357,11 @@ export default function App() {
             )}
           </main>
 
-          {!rightPanelCollapsed && <RightPanel />}
+          {!rightPanelCollapsed && !focusMode && <RightPanel />}
         </div>
 
         {/* Bottom status bar — vault + theme + settings */}
+        {!focusMode && (
         <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
           <button
             onClick={closeVault}
@@ -374,6 +379,7 @@ export default function App() {
           </button>
           <PalettePicker />
         </footer>
+        )}
       </div>
 
       {/* Quick Switcher overlay */}
@@ -387,6 +393,8 @@ export default function App() {
 
       {/* Template picker — palette "Insert template…" and `/template` */}
       {templatePickerOpen && <TemplatePicker />}
+
+      {focusMode && <FocusHint hotkey={hotkeyLabel('view.focus')} />}
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}

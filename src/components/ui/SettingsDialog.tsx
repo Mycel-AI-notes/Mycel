@@ -21,6 +21,12 @@ const FEATURE_ROWS: FeatureRow[] = [
       'Show the Garden section in the sidebar and enable Inbox, Next Actions, Projects, Waiting For, and Someday.',
   },
   {
+    key: 'readableWidth',
+    label: 'Readable line width',
+    description:
+      'Keep note text in a centred column of comfortable length instead of stretching across the whole window.',
+  },
+  {
     key: 'sporeMotion',
     label: 'Spore motion',
     description:

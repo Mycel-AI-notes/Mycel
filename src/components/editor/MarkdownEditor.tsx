@@ -17,6 +17,8 @@ import { tags as t } from '@lezer/highlight';
 import { autocompletion } from '@codemirror/autocomplete';
 import 'katex/dist/katex.min.css';
 import { useVaultStore } from '@/stores/vault';
+import { useUIStore } from '@/stores/ui';
+import { focusDim } from '@/lib/codemirror/focus-dim';
 import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
@@ -54,6 +56,8 @@ import {
 } from '@/lib/attachments';
 
 const themeCompartment = new Compartment();
+/** Focus-mode paragraph dimming, switched on and off without rebuilding. */
+const focusCompartment = new Compartment();
 
 /**
  * Mycel editor theme — calm dark workspace with acid-moss accents.
@@ -162,6 +166,8 @@ export function MarkdownEditor({ path }: Props) {
   const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
 
   const note = noteCache.get(path);
+  const focusMode = useUIStore((s) => s.focusMode);
+  const readableWidth = useUIStore((s) => s.features.readableWidth !== false);
 
   // Bumped after every successful save of a quick note; the filing bar
   // below the editor re-asks the backend for suggestions on each bump.
@@ -222,6 +228,7 @@ export function MarkdownEditor({ path }: Props) {
             syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
           ],
         ),
+        focusCompartment.of(useUIStore.getState().focusMode ? focusDim : []),
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
@@ -354,6 +361,12 @@ export function MarkdownEditor({ path }: Props) {
     });
   }, [isDark]);
 
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: focusCompartment.reconfigure(focusMode ? focusDim : []),
+    });
+  }, [focusMode]);
+
   if (!note)
     return (
       <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
@@ -364,41 +377,46 @@ export function MarkdownEditor({ path }: Props) {
   return (
     <div className="flex flex-col h-full myc-rooted">
       {isEncryptedPath(path) && <EncryptedNoteBanner path={path} />}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
-        <span className="text-xs text-text-muted font-mono">{path}</span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() =>
-              usePresentationStore
-                .getState()
-                .start(viewRef.current?.state.doc.toString() ?? note.content, path)
-            }
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Present"
-          >
-            <Play size={12} /> Play
-          </button>
-          <button
-            onClick={() => {
-              slashRangeRef.current = null;
-              setPickerOpen(true);
-            }}
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Insert database"
-          >
-            <Database size={12} /> DB
-          </button>
-          <button
-            onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-            className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Save"
-          >
-            Save
-          </button>
+      {!focusMode && (
+        <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
+          <span className="text-xs text-text-muted font-mono">{path}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() =>
+                usePresentationStore
+                  .getState()
+                  .start(viewRef.current?.state.doc.toString() ?? note.content, path)
+              }
+              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+              title="Present"
+            >
+              <Play size={12} /> Play
+            </button>
+            <button
+              onClick={() => {
+                slashRangeRef.current = null;
+                setPickerOpen(true);
+              }}
+              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+              title="Insert database"
+            >
+              <Database size={12} /> DB
+            </button>
+            <button
+              onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
+              className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
+              title="Save"
+            >
+              Save
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div ref={editorRef} className="flex-1 overflow-hidden" />
+      <div
+        ref={editorRef}
+        className={`flex-1 overflow-hidden${readableWidth || focusMode ? ' myc-readable' : ''}${focusMode ? ' myc-focus' : ''}`}
+      />
 
       {isQuickNote && <QuickFilingBar path={path} saveTick={saveTick} />}
 

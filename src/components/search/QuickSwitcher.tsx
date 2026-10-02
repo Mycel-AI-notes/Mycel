@@ -93,7 +93,9 @@ export function QuickSwitcher({ onClose, initialQuery = '' }: Props) {
     !!aiStatus?.enabled && !!aiStatus?.has_key && (aiIndex?.chunks_indexed ?? 0) > 0;
 
   useEffect(() => {
-    invoke<NoteSummary[]>('notes_list').then(setNotes).catch(console.error);
+    invoke<NoteSummary[]>('notes_list')
+      .then((n) => setNotes(n ?? []))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {

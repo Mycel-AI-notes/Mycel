@@ -252,6 +252,23 @@ export function getAppCommands(): Command[] {
       run: () => useUIStore.getState().toggleRightPanel(),
     },
     {
+      id: 'view.focus',
+      title: 'Toggle focus mode',
+      section: 'View',
+      defaultHotkey: 'Mod+.',
+      enabled: () => !!activeNotePath() || useUIStore.getState().focusMode,
+      run: () => useUIStore.getState().toggleFocusMode(),
+    },
+    {
+      id: 'view.readableWidth',
+      title: 'Toggle readable line width',
+      section: 'View',
+      run: () => {
+        const ui = useUIStore.getState();
+        ui.setFeature('readableWidth', !ui.features.readableWidth);
+      },
+    },
+    {
       id: 'view.toggleTheme',
       title: 'Toggle light/dark theme',
       section: 'View',
