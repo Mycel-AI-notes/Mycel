@@ -361,6 +361,71 @@ pub fn status(store: &AiStore) -> Result<IndexStatus> {
     })
 }
 
+/// True when the index has nothing to match against yet, so a single-note
+/// pass would be useless and the whole vault has to be walked once.
+///
+/// `quick_note_suggest` used to call `bulk_reindex` unconditionally on every
+/// quick-note save. The reason given was sound — a vault that was never
+/// indexed offers no candidates — but it made the exception the rule: every
+/// capture paid a full walk, reading and hashing every note in the vault,
+/// under the indexing lock. This narrows that to the case it was written for.
+pub fn needs_bootstrap(status: &IndexStatus) -> bool {
+    status.notes_indexed == 0
+}
+
+/// Bring the index up to date far enough for `rel_path` to be matched against
+/// the vault: one note normally, the whole vault on a never-indexed one.
+///
+/// Best-effort — a failure here degrades the suggestions rather than failing
+/// the save that triggered them, so errors are logged and swallowed.
+pub async fn freshen_for_suggest<E: Embedder>(
+    store: &AiStore,
+    embedder: &E,
+    vault_root: &Path,
+    rel_path: &str,
+    daily_budget_usd: f64,
+    model: &str,
+) {
+    let bootstrap = match status(store) {
+        Ok(st) => needs_bootstrap(&st),
+        // Can't tell: take the thorough path rather than return no candidates
+        // at all.
+        Err(e) => {
+            eprintln!("freshen_for_suggest: index status unavailable: {e:#}");
+            true
+        }
+    };
+
+    if bootstrap {
+        if let Err(e) = bulk_reindex(
+            store,
+            embedder,
+            vault_root,
+            daily_budget_usd,
+            model,
+            |_p| {},
+        )
+        .await
+        {
+            eprintln!("freshen_for_suggest: bulk reindex failed: {e:#}");
+        }
+        return;
+    }
+
+    if let Err(e) = index_note(
+        store,
+        embedder,
+        vault_root,
+        rel_path,
+        daily_budget_usd,
+        model,
+    )
+    .await
+    {
+        eprintln!("freshen_for_suggest: indexing {rel_path} failed: {e:#}");
+    }
+}
+
 // ---- internals ----------------------------------------------------------
 
 fn empty_outcome(rel_path: &str) -> IndexOutcome {
@@ -661,5 +726,96 @@ mod tests {
             .unwrap();
         assert!(summary.notes_failed >= 1);
         assert!(summary.notes_ok < 3);
+    }
+
+    #[test]
+    fn bootstrap_is_needed_only_on_an_empty_index() {
+        assert!(needs_bootstrap(&IndexStatus {
+            notes_indexed: 0,
+            chunks_indexed: 0,
+        }));
+        assert!(!needs_bootstrap(&IndexStatus {
+            notes_indexed: 1,
+            chunks_indexed: 3,
+        }));
+    }
+
+    #[tokio::test]
+    async fn freshen_walks_the_whole_vault_when_nothing_is_indexed() {
+        // The case the unconditional reindex was written for: with an empty
+        // index, a single-note pass would leave nothing to match against.
+        let (_d, root) = make_vault();
+        write(&root, "quick/2026-09-30/10-00-00.md", "pruning apple trees");
+        write(&root, "garden.md", "notes about the garden");
+        write(&root, "work.md", "unrelated");
+        let store = AiStore::open(&root).unwrap();
+        let embedder = StubEmbedder::new(EMBED_DIM);
+
+        freshen_for_suggest(
+            &store,
+            &embedder,
+            &root,
+            "quick/2026-09-30/10-00-00.md",
+            10.0,
+            "m",
+        )
+        .await;
+
+        let st = status(&store).unwrap();
+        assert_eq!(st.notes_indexed, 3, "every note should be indexed once");
+    }
+
+    #[tokio::test]
+    async fn freshen_touches_only_the_quick_note_once_the_index_exists() {
+        // The regression: every quick-note save re-walked the whole vault,
+        // reading and hashing every note, under the indexing lock.
+        let (_d, root) = make_vault();
+        write(&root, "garden.md", "notes about the garden");
+        let store = AiStore::open(&root).unwrap();
+        let embedder = StubEmbedder::new(EMBED_DIM);
+
+        // Seed the index so we are past the bootstrap case.
+        index_note(&store, &embedder, &root, "garden.md", 10.0, "m")
+            .await
+            .unwrap();
+        assert_eq!(status(&store).unwrap().notes_indexed, 1);
+
+        // Two notes appear that the quick note is not.
+        write(&root, "work.md", "unrelated work notes");
+        write(&root, "ideas.md", "more unrelated notes");
+        write(&root, "quick/2026-09-30/10-00-00.md", "pruning apple trees");
+
+        freshen_for_suggest(
+            &store,
+            &embedder,
+            &root,
+            "quick/2026-09-30/10-00-00.md",
+            10.0,
+            "m",
+        )
+        .await;
+
+        let st = status(&store).unwrap();
+        assert_eq!(
+            st.notes_indexed, 2,
+            "only the quick note should have been added — garden.md plus it, \
+             not the two unrelated notes a full walk would have picked up"
+        );
+    }
+
+    #[tokio::test]
+    async fn freshen_is_quiet_when_the_note_is_gone() {
+        // A capture deleted between save and suggest must not fail anything.
+        let (_d, root) = make_vault();
+        write(&root, "garden.md", "x");
+        let store = AiStore::open(&root).unwrap();
+        let embedder = StubEmbedder::new(EMBED_DIM);
+        index_note(&store, &embedder, &root, "garden.md", 10.0, "m")
+            .await
+            .unwrap();
+
+        freshen_for_suggest(&store, &embedder, &root, "quick/gone.md", 10.0, "m").await;
+
+        assert_eq!(status(&store).unwrap().notes_indexed, 1);
     }
 }

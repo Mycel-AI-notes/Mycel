@@ -1,0 +1,14 @@
+# Pin the Rust toolchain so local checks and CI agree.
+#
+# `cargo clippy -- -D warnings` on a floating `stable` means a new clippy
+# release can turn CI red on code nobody touched. That already happened: four
+# lints that did not exist in the container's 1.94 fired on the runner's 1.98,
+# so "clippy is clean locally" was not evidence of anything.
+#
+# Pinning makes a toolchain upgrade a deliberate commit — bump the version, fix
+# whatever the new lints find, and land both together — instead of a surprise
+# on an unrelated pull request. rustup installs this automatically, so a
+# contributor needs no extra step.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

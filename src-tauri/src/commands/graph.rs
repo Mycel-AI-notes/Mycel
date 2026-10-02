@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::core::links::note_stem;
 use crate::core::parser::parse_note;
 use crate::core::vault::note_paths;
@@ -97,7 +99,16 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
             .map(|v| v.root.clone())
             .ok_or("No vault open")?
     };
+    Ok(build_graph(&vault_root))
+}
 
+/// Build the graph for a vault: note and folder nodes, wikilink edges, and
+/// external-domain and tag aggregates.
+///
+/// Split out of the command so it can be tested — the resolution order alone
+/// (full path, then bare stem, then frontmatter title) is four behaviours that
+/// had no coverage at all.
+pub fn build_graph(vault_root: &Path) -> GraphData {
     // Pass 1: enumerate notes; index by lowercased stem so wikilinks can
     // resolve `[[Note]]` regardless of folder.
     struct Loaded {
@@ -114,7 +125,7 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
     let mut title_to_path: HashMap<String, String> = HashMap::new();
     let mut rel_to_path: HashMap<String, String> = HashMap::new();
 
-    for rel in note_paths(&vault_root) {
+    for rel in note_paths(vault_root) {
         // The graph reads note bodies for links and tags, which an encrypted
         // note does not give up without the vault unlocked. Its node would
         // then flicker in and out of the graph depending on lock state, so
@@ -303,7 +314,7 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
         .collect();
     tags_out.sort_by(|a, b| b.count.cmp(&a.count).then(a.tag.cmp(&b.tag)));
 
-    Ok(GraphData {
+    GraphData {
         notes: notes_out,
         folders: folders_out,
         domains: domains_out,
@@ -311,8 +322,221 @@ pub async fn graph_data(state: State<'_, AppState>) -> Result<GraphData, String>
         wiki_edges,
         external_edges,
         tag_edges,
-    })
+    }
 }
 
-// Re-import Path here so the `use` above stays clean of conditional cfg.
-use std::path::Path;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn write(root: &Path, rel: &str, body: &str) {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+
+    fn edge_exists(g: &GraphData, from: &str, to: &str) -> bool {
+        g.wiki_edges.iter().any(|e| e.from == from && e.to == to)
+    }
+
+    #[test]
+    fn notes_become_nodes_with_titles_and_folders() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "projects/garden.md", "---\ntitle: The Garden\n---\n");
+
+        let g = build_graph(root);
+
+        assert_eq!(g.notes.len(), 1);
+        assert_eq!(g.notes[0].path, "projects/garden.md");
+        assert_eq!(g.notes[0].title, "The Garden");
+        assert_eq!(g.notes[0].folder, "projects");
+    }
+
+    #[test]
+    fn a_title_only_frontmatter_still_names_the_node() {
+        // Guards the `NoteMeta` serde-default fix from the graph's side: this
+        // showed "garden" before it.
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "garden.md", "---\ntitle: The Garden\n---\n");
+
+        assert_eq!(build_graph(dir.path()).notes[0].title, "The Garden");
+    }
+
+    #[test]
+    fn a_bare_wikilink_resolves_across_folders() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a/source.md", "see [[target]]");
+        write(root, "b/target.md", "# Target");
+
+        assert!(edge_exists(
+            &build_graph(root),
+            "a/source.md",
+            "b/target.md"
+        ));
+    }
+
+    #[test]
+    fn a_path_qualified_wikilink_resolves() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "see [[b/target]]");
+        write(root, "b/target.md", "x");
+
+        assert!(edge_exists(&build_graph(root), "source.md", "b/target.md"));
+    }
+
+    #[test]
+    fn a_wikilink_by_frontmatter_title_resolves() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "see [[The Long Title]]");
+        write(root, "t.md", "---\ntitle: The Long Title\n---\n");
+
+        assert!(edge_exists(&build_graph(root), "source.md", "t.md"));
+    }
+
+    #[test]
+    fn a_heading_anchor_does_not_break_resolution() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "see [[target#Section]]");
+        write(root, "target.md", "x");
+
+        assert!(edge_exists(&build_graph(root), "source.md", "target.md"));
+    }
+
+    #[test]
+    fn repeated_mentions_collapse_into_one_edge() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            "source.md",
+            "[[target]] and [[target]] and [[target|alias]]",
+        );
+        write(root, "target.md", "x");
+
+        let g = build_graph(root);
+        assert_eq!(g.wiki_edges.len(), 1);
+    }
+
+    #[test]
+    fn embeds_do_not_create_edges() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "![[target]]");
+        write(root, "target.md", "x");
+
+        assert!(build_graph(root).wiki_edges.is_empty());
+    }
+
+    #[test]
+    fn a_self_link_creates_no_edge() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "me.md", "I link to [[me]]");
+
+        assert!(build_graph(root).wiki_edges.is_empty());
+    }
+
+    #[test]
+    fn an_unresolved_link_creates_no_edge() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "source.md", "[[nowhere]]");
+
+        assert!(build_graph(dir.path()).wiki_edges.is_empty());
+    }
+
+    #[test]
+    fn encrypted_notes_stay_out_of_the_graph() {
+        // Their bodies need the vault unlocked, so including them would make
+        // nodes appear and vanish with the lock state.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "plain.md", "x");
+        write(root, "secret.md.age", "ciphertext");
+
+        let g = build_graph(root);
+        assert_eq!(g.notes.len(), 1);
+        assert_eq!(g.notes[0].path, "plain.md");
+    }
+
+    #[test]
+    fn dot_directories_are_not_scanned() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "note.md", "x");
+        write(root, ".git/objects/x.md", "x");
+        write(root, ".mycel/trash/2026/old.md", "x");
+
+        assert_eq!(build_graph(root).notes.len(), 1);
+    }
+
+    #[test]
+    fn folders_are_collected_including_the_root() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "top.md", "x");
+        write(root, "a/one.md", "x");
+        write(root, "a/b/two.md", "x");
+
+        let g = build_graph(root);
+        let paths: Vec<&str> = g.folders.iter().map(|f| f.path.as_str()).collect();
+
+        assert!(paths.contains(&""), "the vault root is a folder node");
+        assert!(paths.contains(&"a"));
+        assert!(paths.contains(&"a/b"));
+    }
+
+    #[test]
+    fn external_urls_are_aggregated_by_domain() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            "a.md",
+            "see https://example.com/one and https://example.com/two",
+        );
+        write(root, "b.md", "see https://other.org/page");
+
+        let g = build_graph(root);
+
+        let example = g
+            .domains
+            .iter()
+            .find(|d| d.domain == "example.com")
+            .expect("example.com should be a domain node");
+        assert_eq!(example.count, 2);
+        assert!(g.domains.iter().any(|d| d.domain == "other.org"));
+    }
+
+    #[test]
+    fn tags_are_counted_and_linked_to_their_notes() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "a.md", "about #ml");
+        write(root, "b.md", "also about #ml and #gardening");
+
+        let g = build_graph(root);
+
+        let ml = g.tags.iter().find(|t| t.tag == "ml").unwrap();
+        assert_eq!(ml.count, 2);
+        assert!(g
+            .tag_edges
+            .iter()
+            .any(|e| e.from == "a.md" && e.tag == "ml"));
+        assert!(g.tags.iter().any(|t| t.tag == "gardening"));
+    }
+
+    #[test]
+    fn an_empty_vault_produces_an_empty_graph() {
+        let dir = TempDir::new().unwrap();
+        let g = build_graph(dir.path());
+        assert!(g.notes.is_empty());
+        assert!(g.wiki_edges.is_empty());
+        assert!(g.tags.is_empty());
+    }
+}
