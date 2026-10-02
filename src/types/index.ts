@@ -39,6 +39,8 @@ export interface NoteMeta {
   tags?: string[];
   created?: string;
   modified?: string;
+  /** Frontmatter `aliases` — other names `[[wikilinks]]` resolve by. */
+  aliases?: string[];
 }
 
 export interface Heading {

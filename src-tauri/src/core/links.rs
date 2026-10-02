@@ -17,11 +17,16 @@
 //!   `[[folder/Name]]` links have to follow.
 //! - Renaming a folder never changes any descendant's basename, so again only
 //!   path-qualified links move.
+//! - A link that reaches a note through a frontmatter alias (`[[ML]]` for a
+//!   note declaring `aliases: [ML]`) names no file at all, so it survives
+//!   every rename untouched. Aliases rank after real names — see
+//!   `alias_matches`.
 //!
 //! Every form the link can take is preserved: the `!` of an embed, a
 //! `#heading` anchor, a `|display alias`, an explicit `.md`, and whether the
 //! link was written bare or with a folder path.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::Result;
@@ -69,6 +74,40 @@ pub fn note_stem(rel: &str) -> &str {
     base.strip_suffix(".md.age")
         .or_else(|| base.strip_suffix(".md"))
         .unwrap_or(base)
+}
+
+/// The key a wikilink target is looked up by: heading anchor dropped,
+/// whitespace trimmed, an explicit `.md` stripped, lowercased. `[[ML#Intro]]`
+/// and `[[ml.md]]` both reduce to `ml`.
+pub fn link_key(target: &str) -> String {
+    let head = target.split('#').next().unwrap_or(target).trim();
+    let (path, _) = split_md_ext(head);
+    path.to_lowercase()
+}
+
+/// Every name a note answers to *before* aliases are consulted: its
+/// basename and its extension-less vault path, lowercased. An alias that
+/// collides with one of these never wins — `[[Name]]` goes to the note
+/// actually called `Name`, as it did before aliases existed.
+pub fn real_note_names<'a>(paths: impl IntoIterator<Item = &'a str>) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for rel in paths {
+        out.insert(note_stem(rel).to_lowercase());
+        out.insert(note_path_without_ext(rel).to_lowercase());
+    }
+    out
+}
+
+/// Does a link written as `target` reach a note through one of its
+/// frontmatter `aliases`? Aliases rank after exact paths and basenames, so a
+/// key found in `real_names` (see `real_note_names`) is not an alias match
+/// even when it is listed.
+pub fn alias_matches(target: &str, aliases: &[String], real_names: &HashSet<String>) -> bool {
+    let key = link_key(target);
+    if key.is_empty() || real_names.contains(&key) {
+        return false;
+    }
+    aliases.iter().any(|a| a.trim().to_lowercase() == key)
 }
 
 /// Does the link path `link` (already stripped of `.md`) refer to the note at
@@ -604,6 +643,49 @@ mod tests {
         rename(root, "Old.md", "New.md");
 
         assert_eq!(read(root, "other.md"), "[[ New ]]\n");
+    }
+
+    // ---- aliases ----------------------------------------------------------
+
+    fn names(paths: &[&str]) -> HashSet<String> {
+        real_note_names(paths.iter().copied())
+    }
+
+    #[test]
+    fn link_key_drops_anchor_extension_and_case() {
+        assert_eq!(link_key("ML#Intro"), "ml");
+        assert_eq!(link_key(" Machine Learning.md "), "machine learning");
+        assert_eq!(link_key("folder/Note"), "folder/note");
+    }
+
+    #[test]
+    fn a_link_reaches_a_note_through_its_alias() {
+        let aliases = vec!["ML".to_string(), "Machine learning".to_string()];
+        let real = names(&["Machine Learning Notes.md", "other.md"]);
+        assert!(alias_matches("ml", &aliases, &real));
+        assert!(alias_matches("Machine learning#History", &aliases, &real));
+        assert!(!alias_matches("AI", &aliases, &real));
+    }
+
+    #[test]
+    fn a_real_basename_outranks_an_alias() {
+        // `ML.md` exists, so `[[ML]]` means that note — even though another
+        // note lists `ML` as an alias.
+        let aliases = vec!["ML".to_string()];
+        let real = names(&["ML.md", "Machine Learning.md"]);
+        assert!(!alias_matches("ML", &aliases, &real));
+    }
+
+    #[test]
+    fn a_real_path_outranks_an_alias() {
+        let aliases = vec!["projects/roadmap".to_string()];
+        let real = names(&["projects/Roadmap.md"]);
+        assert!(!alias_matches("projects/Roadmap", &aliases, &real));
+    }
+
+    #[test]
+    fn an_empty_link_matches_no_alias() {
+        assert!(!alias_matches("#heading", &[String::new()], &names(&[])));
     }
 
     #[test]

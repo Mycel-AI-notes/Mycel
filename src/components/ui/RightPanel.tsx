@@ -18,6 +18,7 @@ import { TagSearch } from '@/components/search/TagSearch';
 import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
 import { displayName, isEncryptedPath } from '@/lib/note-name';
+import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
 
 interface Backlink {
   path: string;
@@ -138,11 +139,12 @@ export function RightPanel() {
   );
 
   const openWikilink = (target: string) => {
-    // Strip optional `.md` extension and heading anchor — `[[Note#section]]`.
-    const cleaned = target.split('#')[0].replace(/\.md$/i, '').trim();
-    if (!cleaned) return;
-    const candidate = cleaned.endsWith('.md') ? cleaned : `${cleaned}.md`;
-    openNote(candidate).catch((e) => console.error('Failed to open wikilink', e));
+    // Resolve like the editor does — a bare `[[Note]]` for a note in a
+    // folder, a title or an alias all have to land on the right file.
+    void resolveWikilink(target).then((path) => {
+      if (!path) return;
+      openNote(path).catch((e) => console.error('Failed to open wikilink', e));
+    });
   };
 
   return (

@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use crate::core::crypto::{decrypt_note, Session};
-use crate::core::links::note_stem;
+use crate::core::links::{alias_matches, link_key, note_stem, real_note_names};
 use crate::core::parser::parse_note;
 use crate::core::vault::note_paths;
 use crate::AppState;
@@ -21,6 +21,11 @@ use tauri::State;
 pub struct NoteSummary {
     pub path: String,
     pub title: String,
+    /// Frontmatter `aliases`, so the editor can resolve and autocomplete
+    /// `[[alias]]` without reading every note itself. Empty for encrypted
+    /// notes, whose frontmatter needs the vault unlocked.
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,15 +62,22 @@ pub fn list_notes(root: &Path) -> Vec<NoteSummary> {
         .into_iter()
         .map(|rel| {
             let stem = note_stem(&rel).to_string();
-            let title = if rel.ends_with(".md.age") {
-                stem
+            let meta = if rel.ends_with(".md.age") {
+                None
             } else {
                 std::fs::read_to_string(root.join(&rel))
                     .ok()
-                    .and_then(|content| parse_note(&content).meta.title)
-                    .unwrap_or(stem)
+                    .map(|content| parse_note(&content).meta)
             };
-            NoteSummary { path: rel, title }
+            let (title, aliases) = match meta {
+                Some(m) => (m.title.unwrap_or(stem), m.aliases),
+                None => (stem, Vec::new()),
+            };
+            NoteSummary {
+                path: rel,
+                title,
+                aliases,
+            }
         })
         .collect();
     notes.sort_by(|a, b| a.title.cmp(&b.title));
@@ -103,13 +115,39 @@ fn link_matches(wikilink_target: &str, target_stem: &str) -> bool {
 }
 
 /// Notes that link to `path`, sorted by folder then title.
+///
+/// A link counts when it names the note's basename, or — failing any note
+/// actually carrying that name — one of its frontmatter `aliases`. Embeds
+/// (`![[Note]]`) count like links: they depend on the note just the same.
 pub fn find_backlinks(root: &Path, path: &str, session: &Session) -> Vec<Backlink> {
     // `Path::file_stem` is wrong here: for `Note.md.age` it yields `Note.md`,
     // which matches no wikilink, so an encrypted note never had backlinks.
     let target_stem = note_stem(path).to_lowercase();
     let mut backlinks = Vec::new();
 
-    for rel in note_paths(root) {
+    let paths = note_paths(root);
+    let aliases: Vec<String> = read_note(root, path, session)
+        .map(|content| parse_note(&content).meta.aliases)
+        .unwrap_or_default();
+    let real_names = if aliases.is_empty() {
+        Default::default()
+    } else {
+        real_note_names(paths.iter().map(String::as_str))
+    };
+    let links_here = |target: &str| {
+        link_matches(target, &target_stem) || alias_matches(target, &aliases, &real_names)
+    };
+    // Lowercased `[[name` prefixes that can open a link to this note, for
+    // picking the context line.
+    let mut needles = vec![format!("[[{target_stem}"), format!("[[{path}")];
+    for alias in &aliases {
+        let key = link_key(alias);
+        if !real_names.contains(&key) {
+            needles.push(format!("[[{key}"));
+        }
+    }
+
+    for rel in paths {
         if rel == path {
             continue;
         }
@@ -117,11 +155,7 @@ pub fn find_backlinks(root: &Path, path: &str, session: &Session) -> Vec<Backlin
             continue;
         };
         let parsed = parse_note(&content);
-        if !parsed
-            .wikilinks
-            .iter()
-            .any(|wl| link_matches(&wl.target, &target_stem))
-        {
+        if !parsed.wikilinks.iter().any(|wl| links_here(&wl.target)) {
             continue;
         }
 
@@ -137,7 +171,7 @@ pub fn find_backlinks(root: &Path, path: &str, session: &Session) -> Vec<Backlin
             .lines()
             .find(|line| {
                 let lower = line.to_lowercase();
-                lower.contains(&format!("[[{target_stem}")) || lower.contains(&format!("[[{path}"))
+                needles.iter().any(|n| lower.contains(n.as_str()))
             })
             .unwrap_or("")
             .trim()
@@ -201,7 +235,11 @@ pub fn find_by_tag(root: &Path, tag: &str, session: &Session) -> Vec<NoteSummary
             .title
             .clone()
             .unwrap_or_else(|| note_stem(&rel).to_string());
-        matches.push(NoteSummary { path: rel, title });
+        matches.push(NoteSummary {
+            path: rel,
+            title,
+            aliases: parsed.meta.aliases,
+        });
     }
     matches.sort_by(|a, b| a.title.cmp(&b.title));
     matches
@@ -354,6 +392,62 @@ mod tests {
         let mut paths: Vec<&str> = links.iter().map(|l| l.path.as_str()).collect();
         paths.sort();
         assert_eq!(paths, vec!["a.md", "b.md", "c.md", "d.md"]);
+    }
+
+    #[test]
+    fn backlinks_count_an_embed() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "target.md", "x");
+        write(root, "a.md", "![[target]]\n");
+
+        let links = find_backlinks(root, "target.md", &locked());
+
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].context, "![[target]]");
+    }
+
+    #[test]
+    fn backlinks_follow_a_frontmatter_alias() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            "Machine Learning.md",
+            "---\naliases: [ML, \"Statistical learning\"]\n---\nx",
+        );
+        write(root, "a.md", "intro\nread [[ml#Basics]] first\n");
+        write(root, "b.md", "[[Statistical learning|stats]]\n");
+        write(root, "c.md", "[[Machine Learning]]\n");
+        write(root, "d.md", "[[AI]]\n");
+
+        let links = find_backlinks(root, "Machine Learning.md", &locked());
+        let paths: Vec<&str> = links.iter().map(|b| b.path.as_str()).collect();
+
+        assert_eq!(paths, vec!["a.md", "b.md", "c.md"]);
+        assert_eq!(links[0].context, "read [[ml#Basics]] first");
+    }
+
+    #[test]
+    fn backlinks_ignore_an_alias_shadowed_by_a_real_note() {
+        // `ML.md` exists, so `[[ML]]` goes there, not to the note that
+        // merely lists `ML` among its aliases.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "ML.md", "x");
+        write(root, "Machine Learning.md", "---\naliases: [ML]\n---\nx");
+        write(root, "a.md", "[[ML]]\n");
+
+        assert!(find_backlinks(root, "Machine Learning.md", &locked()).is_empty());
+        assert_eq!(find_backlinks(root, "ML.md", &locked()).len(), 1);
+    }
+
+    #[test]
+    fn list_notes_carries_aliases() {
+        let dir = TempDir::new().unwrap();
+        write(dir.path(), "a.md", "---\naliases: [x, y]\n---\n");
+
+        assert_eq!(list_notes(dir.path())[0].aliases, vec!["x", "y"]);
     }
 
     #[test]

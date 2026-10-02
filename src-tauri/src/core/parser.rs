@@ -19,6 +19,37 @@ pub struct NoteMeta {
     pub created: Option<String>,
     #[serde(default)]
     pub modified: Option<String>,
+    /// Other names the note answers to in `[[wikilinks]]`, Obsidian-style.
+    /// Accepts `aliases: [a, b]`, a YAML block list, or a single string, and
+    /// the singular `alias:` key too. Read through `lenient_string_list` so a
+    /// malformed value (a number, a map) yields no aliases instead of failing
+    /// the whole struct — which would drop the title along with it, the same
+    /// trap `tags` fell into.
+    #[serde(default, alias = "alias", deserialize_with = "lenient_string_list")]
+    pub aliases: Vec<String>,
+}
+
+/// Deserialize a string or a list of scalars into a list of trimmed,
+/// non-empty strings. Never errors: anything else becomes an empty list.
+fn lenient_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde_json::Value;
+    fn scalar(v: &Value) -> Option<String> {
+        match v {
+            Value::String(s) => Some(s.trim().to_string()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Bool(b) => Some(b.to_string()),
+            _ => None,
+        }
+    }
+    let value = Value::deserialize(deserializer).unwrap_or(Value::Null);
+    let list = match &value {
+        Value::Array(items) => items.iter().filter_map(scalar).collect(),
+        other => scalar(other).into_iter().collect::<Vec<_>>(),
+    };
+    Ok(list.into_iter().filter(|s| !s.is_empty()).collect())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +207,47 @@ mod tests {
         let parsed = parse_note("# Just a heading\n\nsome text\n");
         assert_eq!(parsed.meta.title, None);
         assert!(parsed.body.contains("# Just a heading"));
+    }
+
+    // ---- aliases ----------------------------------------------------------
+
+    #[test]
+    fn aliases_read_from_a_flow_list() {
+        let parsed = parse_note("---\naliases: [ML, Machine learning]\n---\nbody\n");
+        assert_eq!(parsed.meta.aliases, vec!["ML", "Machine learning"]);
+    }
+
+    #[test]
+    fn aliases_read_from_a_block_list() {
+        let parsed = parse_note("---\naliases:\n  - ML\n  - \"Machine learning\"\n---\nbody\n");
+        assert_eq!(parsed.meta.aliases, vec!["ML", "Machine learning"]);
+    }
+
+    #[test]
+    fn a_single_string_alias_is_one_alias() {
+        let parsed = parse_note("---\naliases: ML\n---\nbody\n");
+        assert_eq!(parsed.meta.aliases, vec!["ML"]);
+        let parsed = parse_note("---\nalias: ML\n---\nbody\n");
+        assert_eq!(parsed.meta.aliases, vec!["ML"]);
+    }
+
+    #[test]
+    fn a_malformed_aliases_value_does_not_cost_the_title() {
+        let parsed = parse_note("---\ntitle: Kept\naliases:\n  key: value\n---\nbody\n");
+        assert_eq!(parsed.meta.title.as_deref(), Some("Kept"));
+        assert!(parsed.meta.aliases.is_empty());
+    }
+
+    #[test]
+    fn numeric_aliases_and_blank_entries_are_handled() {
+        let parsed = parse_note("---\naliases: [2024, '', ' Q4 ']\n---\nbody\n");
+        assert_eq!(parsed.meta.aliases, vec!["2024", "Q4"]);
+    }
+
+    #[test]
+    fn a_note_without_aliases_has_none() {
+        assert!(parse_note("---\ntitle: T\n---\n").meta.aliases.is_empty());
+        assert!(parse_note("plain\n").meta.aliases.is_empty());
     }
 
     // ---- wikilinks --------------------------------------------------------

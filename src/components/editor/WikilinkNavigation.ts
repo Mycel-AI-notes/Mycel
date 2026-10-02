@@ -1,12 +1,9 @@
 import { EditorView } from '@codemirror/view';
 import { invoke } from '@tauri-apps/api/core';
 import { useVaultStore } from '@/stores/vault';
-import { linkTarget, wikilinkToNotePath } from '@/lib/wikilink-path';
+import { resolveNoteTarget, wikilinkToNotePath, type LinkableNote } from '@/lib/wikilink-path';
 
-interface NoteSummary {
-  path: string;
-  title: string;
-}
+type NoteSummary = LinkableNote;
 
 /**
  * `notes_list` walks and parses the whole vault, so calling it per click was
@@ -18,7 +15,7 @@ interface NoteSummary {
 let notesCache: { notes: NoteSummary[]; version: number; tree: unknown } | null =
   null;
 
-async function listNotes(): Promise<NoteSummary[]> {
+export async function listNotes(): Promise<NoteSummary[]> {
   const { vaultVersion, fileTree } = useVaultStore.getState();
   if (
     notesCache &&
@@ -37,22 +34,11 @@ export function clearWikilinkCache(): void {
   notesCache = null;
 }
 
+/** The vault path a wikilink target points at, or `null` when no note
+ *  answers to it. Precedence rules live in `resolveNoteTarget`. */
 export async function resolveWikilink(target: string): Promise<string | null> {
-  const stem = linkTarget(target).toLowerCase();
-  if (!stem) return null;
   try {
-    const notes = await listNotes();
-    const byFilename = notes.find(
-      (n) => n.path.split('/').pop()?.replace(/\.md$/, '').toLowerCase() === stem,
-    );
-    if (byFilename) return byFilename.path;
-    const byTitle = notes.find((n) => n.title.toLowerCase() === stem);
-    if (byTitle) return byTitle.path;
-    const bySuffix = notes.find((n) =>
-      n.path.toLowerCase().replace(/\.md$/, '').endsWith('/' + stem),
-    );
-    if (bySuffix) return bySuffix.path;
-    return null;
+    return resolveNoteTarget(await listNotes(), target);
   } catch {
     return null;
   }

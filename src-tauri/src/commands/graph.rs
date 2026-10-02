@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::core::links::note_stem;
+use crate::core::links::{link_key, note_stem};
 use crate::core::parser::parse_note;
 use crate::core::vault::note_paths;
 use crate::AppState;
@@ -124,6 +124,9 @@ pub fn build_graph(vault_root: &Path) -> GraphData {
     let mut stem_to_path: HashMap<String, String> = HashMap::new();
     let mut title_to_path: HashMap<String, String> = HashMap::new();
     let mut rel_to_path: HashMap<String, String> = HashMap::new();
+    // Frontmatter `aliases`, consulted last: an alias never shadows a note
+    // that is actually called that.
+    let mut alias_to_path: HashMap<String, String> = HashMap::new();
 
     for rel in note_paths(vault_root) {
         // The graph reads note bodies for links and tags, which an encrypted
@@ -148,6 +151,11 @@ pub fn build_graph(vault_root: &Path) -> GraphData {
             .entry(title.to_lowercase())
             .or_insert_with(|| rel.clone());
         rel_to_path.insert(rel.to_lowercase(), rel.clone());
+        for alias in &parsed_meta.meta.aliases {
+            alias_to_path
+                .entry(alias.to_lowercase())
+                .or_insert_with(|| rel.clone());
+        }
         // Also index the relative path without `.md`, so `[[folder/Note]]`
         // resolves even when the file is `folder/Note.md`.
         let rel_no_ext = rel
@@ -187,6 +195,7 @@ pub fn build_graph(vault_root: &Path) -> GraphData {
             //   1. Full relative path (with or without `.md`).
             //   2. Bare filename stem.
             //   3. Title (from frontmatter or filename stem).
+            //   4. Frontmatter alias.
             let raw = wl.target.split('#').next().unwrap_or(&wl.target).trim();
             let raw_lower = raw.to_lowercase();
             let stem_key = normalize_target(&wl.target);
@@ -194,7 +203,8 @@ pub fn build_graph(vault_root: &Path) -> GraphData {
             let resolved = rel_to_path
                 .get(&raw_lower)
                 .or_else(|| stem_to_path.get(&stem_key))
-                .or_else(|| title_to_path.get(&raw_lower));
+                .or_else(|| title_to_path.get(&raw_lower))
+                .or_else(|| alias_to_path.get(&link_key(&wl.target)));
 
             let Some(target_path) = resolved else {
                 continue;
@@ -421,6 +431,33 @@ mod tests {
 
         let g = build_graph(root);
         assert_eq!(g.wiki_edges.len(), 1);
+    }
+
+    #[test]
+    fn a_link_resolves_through_a_frontmatter_alias() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "see [[ML]]");
+        write(root, "Machine Learning.md", "---\naliases: [ML]\n---\nx");
+
+        assert!(edge_exists(
+            &build_graph(root),
+            "source.md",
+            "Machine Learning.md"
+        ));
+    }
+
+    #[test]
+    fn a_real_note_name_outranks_an_alias() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(root, "source.md", "see [[ML]]");
+        write(root, "ML.md", "x");
+        write(root, "Machine Learning.md", "---\naliases: [ML]\n---\nx");
+
+        let g = build_graph(root);
+        assert!(edge_exists(&g, "source.md", "ML.md"));
+        assert!(!edge_exists(&g, "source.md", "Machine Learning.md"));
     }
 
     #[test]
