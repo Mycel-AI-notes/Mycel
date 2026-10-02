@@ -57,6 +57,14 @@ describe('reloadNote / forgetNote (quick-note merge aftermath)', () => {
     expect(useVaultStore.getState().noteCache.has('other.md')).toBe(false);
   });
 
+  it('still bumps vaultVersion for a note that was never opened', async () => {
+    // A link rewritten into a closed note changes backlinks all the same.
+    disk.set('other.md', 'x');
+    const before = useVaultStore.getState().vaultVersion;
+    await useVaultStore.getState().reloadNote('other.md');
+    expect(useVaultStore.getState().vaultVersion).toBe(before + 1);
+  });
+
   it('forgets a deleted source without flushing its pending edits', () => {
     const path = 'quick/2026-06-09/14-32-08.md';
     useVaultStore.setState({

@@ -44,7 +44,7 @@ use sha2::{Digest, Sha256};
 use crate::core::links::note_stem;
 use crate::core::parser::parse_note;
 use crate::core::vault::walk_vault;
-use query::{fold_yo, parse_query, Filter, ParsedQuery};
+use query::{body_phrases_expr, fold_yo, parse_query, Filter, ParsedQuery};
 use snippet::{snippets_from_highlight, Snippet, HL_END, HL_START};
 
 /// Bump when the schema or what gets indexed changes; an index built by an
@@ -290,6 +290,24 @@ impl FtsIndex {
         }
         let limit = limit.clamp(1, MAX_LIMIT);
         self.with_conn(|conn| run_query(conn, &q, limit))
+    }
+
+    /// Paths of notes whose body contains any of `phrases`, unranked, at most
+    /// `limit`. A cheap candidate filter, not an answer: the tokenizer drops
+    /// punctuation and ignores word order across a line break, so callers
+    /// that need exact matches (unlinked mentions) re-check the file text.
+    pub fn paths_with_any_phrase(&self, phrases: &[String], limit: usize) -> Result<Vec<String>> {
+        let Some(expr) = body_phrases_expr(phrases) else {
+            return Ok(Vec::new());
+        };
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT d.path FROM docs_fts JOIN docs d ON d.id = docs_fts.rowid \
+                 WHERE docs_fts MATCH ?1 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![expr, limit as i64], |r| r.get::<_, String>(0))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
     }
 }
 
@@ -1164,5 +1182,29 @@ mod tests {
         let (_d, idx) = setup(&[("a.md", "x")]);
         assert!(idx.search("", 10).unwrap().is_empty());
         assert!(idx.search("-x", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn phrase_candidates_match_body_only_and_fold_yo() {
+        let (_d, idx) = setup(&[
+            ("a.md", "Я читал про Машинное обучение вчера"),
+            ("b.md", "---\ntitle: машинное обучение\n---\nnothing here"),
+            ("c.md", "ёжик в тумане"),
+            ("d.md", "обучение машинное"),
+        ]);
+        let mut got = idx
+            .paths_with_any_phrase(&["машинное обучение".into(), "Ежик".into()], 50)
+            .unwrap();
+        got.sort();
+        assert_eq!(got, vec!["a.md", "c.md"]);
+        assert!(idx
+            .paths_with_any_phrase(&["+++".into()], 50)
+            .unwrap()
+            .is_empty());
+        // Operator-looking names are plain text, never a syntax error.
+        assert!(idx
+            .paths_with_any_phrase(&["title: NEAR(\"x\" OR".into()], 50)
+            .unwrap()
+            .is_empty());
     }
 }

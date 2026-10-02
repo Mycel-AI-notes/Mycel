@@ -15,12 +15,16 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { DisconnectedSpore } from '@/components/brand/Spore';
+import { UnlinkedMentions } from '@/components/ui/UnlinkedMentions';
 import { TagSearch } from '@/components/search/TagSearch';
 import { insertAtCursor, scrollEditorToLine } from '@/lib/editor-registry';
 import { parseExternalLinks } from '@/lib/markdown-parse';
 import { displayName, isEncryptedPath } from '@/lib/note-name';
 import { resolveWikilink } from '@/components/editor/WikilinkNavigation';
 import { isImageEmbed } from '@/lib/embed';
+
+/** A real note file (not a Garden/Insights tab or an attachment). */
+const isNotePath = (p: string) => p.endsWith('.md') || p.endsWith('.md.age');
 
 interface Backlink {
   path: string;
@@ -242,6 +246,10 @@ export function RightPanel() {
                 </div>
               )}
             </section>
+
+            {activeTabPath && isNotePath(activeTabPath) && (
+              <UnlinkedMentions target={activeTabPath} refreshKey={settledVersion} />
+            )}
 
             {note && outgoingWikilinks.length > 0 && (
               <section>

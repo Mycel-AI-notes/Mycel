@@ -6,6 +6,7 @@ pub mod fulltext;
 pub mod garden;
 pub mod graph;
 pub mod kb;
+pub mod mentions;
 pub mod notes;
 pub mod search;
 pub mod sync;

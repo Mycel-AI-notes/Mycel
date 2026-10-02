@@ -41,7 +41,7 @@ pub struct Backlink {
 /// Read a note's text, decrypting when it is an encrypted one and the vault is
 /// unlocked. `None` when the file is unreadable or still sealed — callers skip
 /// it rather than failing the whole scan, so a locked vault returns what it can.
-fn read_note(root: &Path, rel: &str, session: &Session) -> Option<String> {
+pub(crate) fn read_note(root: &Path, rel: &str, session: &Session) -> Option<String> {
     let abs = root.join(rel);
     if rel.ends_with(".md.age") {
         std::fs::read(&abs)
