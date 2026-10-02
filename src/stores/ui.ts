@@ -29,11 +29,14 @@ export interface FeatureFlags {
   /** Living motion: drifting spores, hyphae growing, notes and folders
    *  germinating into the Mycel mark. */
   sporeMotion: boolean;
+  /** Keep note text in a centred column of comfortable line length. */
+  readableWidth: boolean;
 }
 
 const DEFAULT_FEATURES: FeatureFlags = {
   garden: true,
   sporeMotion: true,
+  readableWidth: true,
 };
 
 interface UIState {
@@ -49,8 +52,10 @@ interface UIState {
    *  command (see `lib/app-commands.ts`) can open them from anywhere. */
   paletteOpen: boolean;
   quickSwitcherOpen: boolean;
-  fullTextOpen: boolean;
   graphOpen: boolean;
+  /** Focus mode: all chrome hidden, only the text — and the paragraph
+   *  being written — stays lit. Session-only on purpose. */
+  focusMode: boolean;
   /** User hotkey rebinds by command id; `null` is an explicit unbind. Only
    *  differences from the defaults are stored, so a default changed in a
    *  later release still reaches users who never touched that command. */
@@ -75,8 +80,8 @@ interface UIState {
   closeSettings: () => void;
   setPaletteOpen: (open: boolean) => void;
   setQuickSwitcherOpen: (open: boolean) => void;
-  setFullTextOpen: (open: boolean) => void;
   setGraphOpen: (open: boolean) => void;
+  toggleFocusMode: () => void;
   setHotkeyOverride: (commandId: string, hotkey: string | null) => void;
   resetHotkey: (commandId: string) => void;
   setTemplatesFolder: (folder: string) => void;
@@ -101,8 +106,8 @@ export const useUIStore = create<UIState>()(
       settingsOpen: false,
       paletteOpen: false,
       quickSwitcherOpen: false,
-      fullTextOpen: false,
       graphOpen: false,
+      focusMode: false,
       hotkeyOverrides: {},
       templatesFolder: DEFAULT_TEMPLATES_FOLDER,
       templatePickerOpen: false,
@@ -121,8 +126,8 @@ export const useUIStore = create<UIState>()(
       closeSettings: () => set({ settingsOpen: false }),
       setPaletteOpen: (open) => set({ paletteOpen: open }),
       setQuickSwitcherOpen: (open) => set({ quickSwitcherOpen: open }),
-      setFullTextOpen: (open) => set({ fullTextOpen: open }),
       setGraphOpen: (open) => set({ graphOpen: open }),
+      toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
       setHotkeyOverride: (commandId, hotkey) =>
         set((s) => ({ hotkeyOverrides: { ...s.hotkeyOverrides, [commandId]: hotkey } })),
       setTemplatesFolder: (folder) => set({ templatesFolder: folder }),

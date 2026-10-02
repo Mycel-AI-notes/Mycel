@@ -18,7 +18,6 @@ import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
 import { QuickSwitcher } from '@/components/search/QuickSwitcher';
-import { FullTextSearch } from '@/components/search/FullTextSearch';
 import { GraphView } from '@/components/graph/GraphView';
 import { ConflictDialog } from '@/components/sync/ConflictDialog';
 import { GardenView } from '@/components/garden/GardenView';
@@ -36,6 +35,7 @@ import { isMac } from '@/lib/platform';
 import { useHotkeyBindings } from '@/hooks/useHotkeyBindings';
 import { PresentationOverlay } from '@/components/presentation/PresentationOverlay';
 import { Logo } from '@/components/brand/Logo';
+import { FocusHint } from '@/components/ui/FocusHint';
 import { Toasts } from '@/components/ui/Toasts';
 import { flushAllAutosaves } from '@/lib/autosave';
 import { LockBadge } from '@/components/crypto/LockBadge';
@@ -54,7 +54,6 @@ import {
   FolderSearch,
   Share2,
   Settings as SettingsIcon,
-  TextSearch,
 } from 'lucide-react';
 
 const QUICK_NOTE_SHORTCUT = QUICK_NOTE_GLOBAL_SHORTCUT;
@@ -73,9 +72,8 @@ export default function App() {
   const quickSwitcherOpen = useUIStore((s) => s.quickSwitcherOpen);
   const setQuickSwitcherOpen = useUIStore((s) => s.setQuickSwitcherOpen);
   const graphOpen = useUIStore((s) => s.graphOpen);
+  const focusMode = useUIStore((s) => s.focusMode);
   const setGraphOpen = useUIStore((s) => s.setGraphOpen);
-  const fullTextOpen = useUIStore((s) => s.fullTextOpen);
-  const setFullTextOpen = useUIStore((s) => s.setFullTextOpen);
 
   // Determine which view to render in the main area: a Garden tab, a note,
   // or the empty state.
@@ -241,7 +239,6 @@ export default function App() {
   };
 
   const closeQuickSwitcher = useCallback(() => setQuickSwitcherOpen(false), [setQuickSwitcherOpen]);
-  const closeFullText = useCallback(() => setFullTextOpen(false), [setFullTextOpen]);
 
   if (!vaultRoot) {
     return (
@@ -255,9 +252,10 @@ export default function App() {
     <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
       <div className="flex flex-col flex-1 min-h-0 myc-awaken">
         {/* Top toolbar */}
+        {!focusMode && (
         <header
           data-tauri-drag-region
-          className={`flex items-center pr-3 py-1.5 border-b border-border bg-surface-0 shrink-0 gap-2 ${
+          className={`flex items-center pr-3 py-1.5 bg-surface-0 shrink-0 gap-2 ${
             isMac ? 'pl-[78px]' : 'pl-3'
           }`}
         >
@@ -281,28 +279,17 @@ export default function App() {
             onClick={() => setQuickSwitcherOpen(true)}
             className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
           >
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left truncate">
               {vaultRoot.split('/').pop() ?? vaultRoot}
+              <span className="opacity-60"> · search or run a command</span>
             </span>
-          {hotkeyLabel('switcher.open') && (
-            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('switcher.open')}</kbd>
+          {hotkeyLabel('omnibar.open') && (
+            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('omnibar.open')}</kbd>
           )}
           </button>
 
           <div className="flex items-center gap-1">
             <LockBadge />
-
-            <button
-              onClick={() => setFullTextOpen(true)}
-              className="p-1.5 rounded hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
-              title={
-                hotkeyLabel('search.fulltext')
-                  ? `Search in notes (${hotkeyLabel('search.fulltext')})`
-                  : 'Search in notes'
-              }
-            >
-              <TextSearch size={16} />
-            </button>
 
             <button
               onClick={() => createQuickNote()}
@@ -329,14 +316,15 @@ export default function App() {
             </button>
           </div>
         </header>
+        )}
 
         {/* Main layout */}
         <div className="flex flex-1 min-h-0">
-          {!sidebarCollapsed && <Sidebar />}
+          {!sidebarCollapsed && !focusMode && <Sidebar />}
 
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
-          <main data-spore-target className="flex flex-col flex-1 min-w-0">
-            <EditorTabs />
+          <main className="flex flex-col flex-1 min-w-0">
+            {!focusMode && <EditorTabs />}
             {activeGardenView ? (
               <GardenView view={activeGardenView} />
             ) : isInsightsTabPath(activeTabPath) ? (
@@ -352,11 +340,12 @@ export default function App() {
             )}
           </main>
 
-          {!rightPanelCollapsed && <RightPanel />}
+          {!rightPanelCollapsed && !focusMode && <RightPanel />}
         </div>
 
         {/* Bottom status bar — vault + theme + settings */}
-        <footer className="flex items-center justify-end gap-1 px-2 py-1 border-t border-border bg-surface-0 text-text-muted text-[11px] shrink-0">
+        {!focusMode && (
+        <footer className="flex items-center justify-end gap-1 px-2 py-1 bg-surface-0 text-text-muted text-[11px] shrink-0">
           <button
             onClick={closeVault}
             className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"
@@ -373,6 +362,7 @@ export default function App() {
           </button>
           <PalettePicker />
         </footer>
+        )}
       </div>
 
       {/* Quick Switcher overlay */}
@@ -382,10 +372,11 @@ export default function App() {
       {paletteOpen && <CommandPalette />}
 
       {/* Full-text search overlay */}
-      {fullTextOpen && <FullTextSearch onClose={closeFullText} />}
 
       {/* Template picker — palette "Insert template…" and `/template` */}
       {templatePickerOpen && <TemplatePicker />}
+
+      {focusMode && <FocusHint hotkey={hotkeyLabel('view.focus')} />}
 
       {/* Graph view overlay */}
       {graphOpen && <GraphView onClose={() => setGraphOpen(false)} />}

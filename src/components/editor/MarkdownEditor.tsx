@@ -4,9 +4,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
   keymap,
-  lineNumbers,
   highlightActiveLine,
-  highlightActiveLineGutter,
   ViewUpdate,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -19,6 +17,9 @@ import { tags as t } from '@lezer/highlight';
 import { autocompletion } from '@codemirror/autocomplete';
 import 'katex/dist/katex.min.css';
 import { useVaultStore } from '@/stores/vault';
+import { useUIStore } from '@/stores/ui';
+import { focusDim } from '@/lib/codemirror/focus-dim';
+import { ghostLinks } from '@/lib/codemirror/ghost-link';
 import { wikilinkCompletions } from './WikilinkCompletion';
 import { slashCompletions } from './SlashCompletion';
 import { markdownPreviewPlugin, markdownPreviewTheme } from './MarkdownDecorations';
@@ -45,6 +46,7 @@ import { EncryptedNoteBanner } from '@/components/crypto/EncryptedNoteBanner';
 import { isEncryptedPath } from '@/lib/note-name';
 import { QUICK_NOTES_DIR } from '@/types';
 import { QuickFilingBar } from './QuickFilingBar';
+import { MyceliumMargin } from './MyceliumMargin';
 import { usePresentationStore } from '@/stores/presentation';
 import { SAVE_EVENT } from '@/lib/app-commands';
 import {
@@ -56,6 +58,8 @@ import {
 } from '@/lib/attachments';
 
 const themeCompartment = new Compartment();
+/** Focus-mode paragraph dimming, switched on and off without rebuilding. */
+const focusCompartment = new Compartment();
 
 /**
  * Mycel editor theme — calm dark workspace with acid-moss accents.
@@ -75,15 +79,6 @@ const mycelEditorTheme = (dark: boolean) =>
       '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },
       '.cm-content': { caretColor: 'var(--color-accent)' },
       '.cm-activeLine': { backgroundColor: 'var(--color-active-line)' },
-      '.cm-activeLineGutter': {
-        backgroundColor: 'var(--color-active-line)',
-        color: 'var(--color-text-secondary)',
-      },
-      '.cm-gutters': {
-        backgroundColor: 'var(--color-surface-1)',
-        borderRight: '1px solid var(--color-border)',
-        color: 'var(--color-text-muted)',
-      },
       '.cm-cursor': { borderLeftColor: 'var(--color-accent)' },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection':
         { backgroundColor: 'var(--color-selection)' },
@@ -173,6 +168,18 @@ export function MarkdownEditor({ path }: Props) {
   const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
 
   const note = noteCache.get(path);
+  const focusMode = useUIStore((s) => s.focusMode);
+  // Edit subscribers outside React state, so a keystroke doesn't re-render
+  // this component (the margin debounces on them).
+  const editListeners = useRef(new Set<() => void>());
+  const getView = useCallback(() => viewRef.current, []);
+  const onEdit = useCallback((fn: () => void) => {
+    editListeners.current.add(fn);
+    return () => {
+      editListeners.current.delete(fn);
+    };
+  }, []);
+  const readableWidth = useUIStore((s) => s.features.readableWidth !== false);
 
   // Bumped after every successful save of a quick note; the filing bar
   // below the editor re-asks the backend for suggestions on each bump.
@@ -199,9 +206,7 @@ export function MarkdownEditor({ path }: Props) {
       doc: note.content,
       extensions: [
         history(),
-        lineNumbers(),
         highlightActiveLine(),
-        highlightActiveLineGutter(),
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         search({ top: true, createPanel: mycelSearchPanel }),
         highlightSelectionMatches(),
@@ -235,9 +240,16 @@ export function MarkdownEditor({ path }: Props) {
             syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
           ],
         ),
+        focusCompartment.of(useUIStore.getState().focusMode ? focusDim : []),
+        ghostLinks(
+          () =>
+            useVaultStore.getState().noteCache.get(path)?.parsed?.meta?.title ??
+            path.split('/').pop()?.replace(/\.md$/, ''),
+        ),
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {
             markDirty(path, true);
+            editListeners.current.forEach((fn) => fn());
             // Edits reach disk on their own now. Cmd+S still works and is
             // still the way to pin a preview tab, but it is no longer the
             // only thing standing between a thought and losing it.
@@ -367,6 +379,12 @@ export function MarkdownEditor({ path }: Props) {
     });
   }, [isDark]);
 
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: focusCompartment.reconfigure(focusMode ? focusDim : []),
+    });
+  }, [focusMode]);
+
   if (!note)
     return (
       <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
@@ -377,41 +395,41 @@ export function MarkdownEditor({ path }: Props) {
   return (
     <div className="flex flex-col h-full myc-rooted">
       {isEncryptedPath(path) && <EncryptedNoteBanner path={path} />}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-surface-0 shrink-0">
-        <span className="text-xs text-text-muted font-mono">{path}</span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() =>
-              usePresentationStore
-                .getState()
-                .start(viewRef.current?.state.doc.toString() ?? note.content, path)
-            }
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Present"
-          >
-            <Play size={12} /> Play
-          </button>
-          <button
-            onClick={() => {
-              slashRangeRef.current = null;
-              setPickerOpen(true);
-            }}
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Insert database"
-          >
-            <Database size={12} /> DB
-          </button>
-          <button
-            onClick={() => handleSave(viewRef.current?.state.doc.toString() ?? note.content)}
-            className="text-xs text-text-muted hover:text-text-primary px-2 py-0.5 rounded hover:bg-surface-hover transition-colors"
-            title="Save"
-          >
-            Save
-          </button>
+      {!focusMode && (
+        <div className="group flex items-center justify-between px-4 pt-2 pb-0.5 shrink-0">
+          <Breadcrumb path={path} />
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <button
+              onClick={() =>
+                usePresentationStore
+                  .getState()
+                  .start(viewRef.current?.state.doc.toString() ?? note.content, path)
+              }
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
+              title="Present"
+            >
+              <Play size={13} />
+            </button>
+            <button
+              onClick={() => {
+                slashRangeRef.current = null;
+                setPickerOpen(true);
+              }}
+              className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
+              title="Insert database"
+            >
+              <Database size={13} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div ref={editorRef} className="flex-1 overflow-hidden" />
+      <div
+        ref={editorRef}
+        className={`flex-1 overflow-hidden${readableWidth || focusMode ? ' myc-readable' : ''}${focusMode ? ' myc-focus' : ''}`}
+      />
+
+      {!focusMode && <MyceliumMargin path={path} view={getView} onEdit={onEdit} />}
 
       {isQuickNote && <QuickFilingBar path={path} saveTick={saveTick} />}
 
@@ -437,6 +455,23 @@ export function MarkdownEditor({ path }: Props) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** `folder › sub › Note` — quiet location line above the text. */
+function Breadcrumb({ path }: { path: string }) {
+  const parts = path.split('/');
+  const name = parts.pop()!.replace(/\.md(\.age)?$/, '');
+  return (
+    <div className="flex items-center gap-1 min-w-0 text-[11px] text-text-muted" title={path}>
+      {parts.map((p, i) => (
+        <span key={i} className="flex items-center gap-1 shrink-0">
+          <span className="truncate max-w-[10rem]">{p}</span>
+          <span className="opacity-50">›</span>
+        </span>
+      ))}
+      <span className="truncate text-text-secondary">{name}</span>
     </div>
   );
 }

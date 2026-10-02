@@ -2161,3 +2161,25 @@ body {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ── Reading column ─────────────────────────────────────────────────────
+ * Note text in a centred column of comfortable line length (~70 chars)
+ * rather than the full window width. Tables and database widgets live in
+ * the same column. */
+.myc-readable .cm-content {
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* Focus mode: text starts lower on the page, and the paragraph dimming
+ * (lib/codemirror/focus-dim.ts) replaces the active-line band. */
+.myc-focus .cm-content {
+  padding-top: 14vh;
+  padding-bottom: 40vh;
+}
+.myc-focus .cm-activeLine {
+  background-color: transparent !important;
+}
