@@ -4,10 +4,8 @@ import { useUIStore } from '@/stores/ui';
  * Living FX — glassy bubbles of the same living matter the canvas draws,
  * played out on one full-window overlay:
  *
- *   burst  → a cluster of bubbles buds off a point, rises on a wobble and
- *            pops (a new note or folder, a click on the canvas)
- *   gather → bubbles drift in from a ring and pull together into one
- *            point, which pops (a vault opening, a row being born)
+ *   burst → a cluster of bubbles buds off a point, rises on a wobble and
+ *           pops (a new note or folder, a click on the canvas)
  *
  * Rules, so none of it gets in the way of writing:
  *   - the canvas never takes pointer events;
@@ -83,8 +81,6 @@ interface Bubble {
   ttl: number;
   /** seconds before it appears */
   delay: number;
-  /** gather bubbles home in on this point */
-  to?: { x: number; y: number };
 }
 
 interface Pop {
@@ -93,7 +89,6 @@ interface Pop {
   r: number;
   age: number;
   ttl: number;
-  delay: number;
 }
 
 let canvas: HTMLCanvasElement | null = null;
@@ -186,30 +181,18 @@ function tick(now: number) {
     }
     b.age += dt;
     const t = Math.min(1, b.age / b.ttl);
-    if (b.to) {
-      // Gather: ease toward the point, shrinking as it is absorbed.
-      const k = Math.min(1, dt * (3 + t * 6));
-      b.x += (b.to.x - b.x) * k;
-      b.y += (b.to.y - b.y) * k;
-    } else {
-      b.vy -= 18 * dt; // buoyancy
-      b.vx *= 1 - dt * 1.5;
-      b.x += (b.vx + Math.sin(b.age * 6 + b.phase) * 10) * dt;
-      b.y += b.vy * dt;
-    }
+    b.vy -= 18 * dt; // buoyancy
+    b.vx *= 1 - dt * 1.5;
+    b.x += (b.vx + Math.sin(b.age * 6 + b.phase) * 10) * dt;
+    b.y += b.vy * dt;
     const grow = easeBack(Math.min(1, b.age / 0.22));
-    const shrink = b.to ? 1 - easeOut(t) * 0.85 : 1;
-    const fade = b.to ? 1 : 1 - Math.max(0, (t - 0.7) / 0.3);
-    drawBubble(c, b.x, b.y, b.r * grow * shrink, fade);
-    if (!b.to && t >= 1) pops.push({ x: b.x, y: b.y, r: b.r, age: 0, ttl: 0.3, delay: 0 });
+    const fade = 1 - Math.max(0, (t - 0.7) / 0.3);
+    drawBubble(c, b.x, b.y, b.r * grow, fade);
+    if (t >= 1) pops.push({ x: b.x, y: b.y, r: b.r, age: 0, ttl: 0.3 });
   }
   bubbles = bubbles.filter((b) => b.age < b.ttl);
 
   for (const p of pops) {
-    if (p.delay > 0) {
-      p.delay -= dt;
-      continue;
-    }
     p.age += dt;
     const t = Math.min(1, p.age / p.ttl);
     if (!pal) continue;
@@ -261,49 +244,10 @@ export function bubbleBurst(x: number, y: number, opts: BubbleOptions = {}) {
   start();
 }
 
-/** Bubbles drift in from a ring, pull together into one point and pop. */
-export function bubbleGather(x: number, y: number, opts: BubbleOptions & { radius?: number } = {}) {
-  if (!sporeMotionEnabled() || !ensureCanvas()) return;
-  const size = opts.size ?? 5;
-  const count = opts.count ?? 9;
-  const radius = opts.radius ?? 60;
-  const ttl = 0.6;
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * Math.PI * 2 + Math.random() * 0.5;
-    const d = radius * (0.75 + Math.random() * 0.5);
-    bubbles.push({
-      x: x + Math.cos(a) * d,
-      y: y + Math.sin(a) * d,
-      vx: 0,
-      vy: 0,
-      r: size * (0.6 + Math.random() * 0.7),
-      phase: 0,
-      age: 0,
-      ttl,
-      delay: Math.random() * 0.12,
-      to: { x, y },
-    });
-  }
-  pops.push({ x, y, r: size * 1.6, age: 0, ttl: 0.45, delay: ttl + 0.05 });
-  start();
-}
-
 /** Bubble out of an element's entry icon (or the element itself). */
 export function bubbleAt(el: Element, opts?: BubbleOptions) {
   const { x, y } = centerOf(iconOf(el));
   bubbleBurst(x, y, opts);
-}
-
-/**
- * The vault opens: living matter gathers in the middle of the window,
- * then a cloud of bubbles rises off it while the workspace fades in.
- */
-export function awaken() {
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 2;
-  const m = Math.min(window.innerWidth, window.innerHeight);
-  bubbleGather(cx, cy, { radius: m * 0.22, size: 9, count: 14 });
-  window.setTimeout(() => bubbleBurst(cx, cy, { size: 8, count: 12 }), 620);
 }
 
 /**

@@ -6,7 +6,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
 import { useSporeMotionRootClass } from '@/hooks/useSporeMotion';
-import { awaken } from '@/lib/spore-fx';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useRecentVaults } from '@/stores/recentVaults';
@@ -229,11 +228,6 @@ export default function App() {
     };
   }, [vaultRoot]);
 
-  // Each time a vault opens, living matter gathers and bubbles up while the
-  // workspace fades in.
-  useEffect(() => {
-    if (vaultRoot) awaken();
-  }, [vaultRoot]);
 
   /** Tooltip / badge text for a command's current hotkey ('' when unbound). */
   const hotkeyLabel = (id: string) => {

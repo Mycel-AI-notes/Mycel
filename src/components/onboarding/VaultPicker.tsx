@@ -157,8 +157,11 @@ export function VaultPicker() {
                       aria-selected={isSel}
                       tabIndex={isSel ? 0 : -1}
                       title={path}
-                      onClick={() => setSelected(path)}
-                      onDoubleClick={() => void handleOpen(path)}
+                      onClick={() => {
+                        if (busy) return;
+                        setSelected(path);
+                        void handleOpen(path);
+                      }}
                       className={clsx(
                         'group relative h-[132px] rounded-2xl p-4 flex flex-col justify-end overflow-hidden cursor-pointer outline-none transition-[box-shadow,background-color,border-color]',
                         isSel

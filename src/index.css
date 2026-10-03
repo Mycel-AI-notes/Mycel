@@ -525,34 +525,32 @@ body {
   background: var(--color-border-strong);
 }
 
-/* App background — the gutter the rounded panes float on: a shade
-   below the panes in every palette and mode. */
+/* App background — the gutter between the panes. It sits in the same
+   tone as the panes themselves, so header, gutter and panes read as one
+   window; thin edges separate the panes, not a drop into another space. */
 :root {
-  --color-app: var(--color-surface-2);
+  --color-app: color-mix(in srgb, var(--color-surface-1) 55%, var(--color-surface-2));
 }
 .dark {
-  --color-app: color-mix(in srgb, var(--color-surface-0) 55%, #000);
+  --color-app: var(--color-surface-0);
 }
 .dark[data-palette='amber'],
 .dark[data-palette='azure'],
 .dark[data-palette='sage'],
 .dark[data-palette='classic'] {
-  --color-app: var(--color-surface-2);
+  --color-app: color-mix(in srgb, var(--color-surface-1) 55%, var(--color-surface-2));
 }
 
 /* A floating pane: sidebar, editor, right panel. */
 .myc-panel {
   border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, #000 25%, transparent),
-    0 18px 40px -18px rgb(0 0 0 / 0.55);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
 }
 
 /* Glass chrome: sidebar and right panel frost the canvas behind them. */
 .myc-panel-glass {
-  background: color-mix(in srgb, var(--color-surface-0) 68%, transparent);
+  background: color-mix(in srgb, var(--color-surface-0) 78%, transparent);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
   backdrop-filter: blur(26px) saturate(150%);
 }
@@ -571,8 +569,9 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.6;
-  filter: blur(24px) saturate(1.1);
+  /* A tint of the room's light, not a scene behind the window. */
+  opacity: 0.28;
+  filter: blur(32px);
 }
 
 /* ── Living surface ─────────────────────────────────────────────────────
