@@ -154,7 +154,7 @@ export function RightPanel() {
   };
 
   return (
-    <aside className="myc-panel flex flex-col h-full bg-surface-0 overflow-hidden w-52 shrink-0 text-sm">
+    <aside className="myc-panel myc-panel-glass flex flex-col h-full overflow-hidden w-52 shrink-0 text-sm">
       <div className="flex gap-1 p-1.5 border-b border-border">
         {tabs.map((tab) => (
           <button

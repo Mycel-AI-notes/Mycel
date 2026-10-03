@@ -65,7 +65,7 @@ export function Sidebar() {
   return (
     <aside
       ref={asideRef}
-      className="myc-panel relative flex flex-col h-full bg-surface-0 overflow-hidden shrink-0"
+      className="myc-panel myc-panel-glass relative flex flex-col h-full overflow-hidden shrink-0"
       style={{ width: `${sidebarWidth}px` }}
     >
       <div className="flex flex-col min-h-0 flex-1">

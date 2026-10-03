@@ -82,7 +82,7 @@ export function GardenSidebar() {
   const isView = (kind: GardenView['kind']) => view?.kind === kind;
 
   return (
-    <div className="border-b border-border bg-surface-0">
+    <div className="border-b border-border">
       <div className="flex items-center justify-between px-2 py-1.5">
         <button
           type="button"

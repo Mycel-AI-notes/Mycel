@@ -15,6 +15,7 @@ import { EditorTabs } from '@/components/editor/EditorTabs';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { ImageViewer } from '@/components/editor/ImageViewer';
 import { EmptyEditor } from '@/components/editor/EmptyEditor';
+import { LivingCanvas } from '@/components/fx/LivingCanvas';
 import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
@@ -251,8 +252,15 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-app text-text-primary">
-      <div className="flex flex-col flex-1 min-h-0 myc-awaken">
+    <div className="relative isolate flex flex-col h-screen bg-app text-text-primary">
+      {/* The living canvas, frozen and defocused, glows through the glass
+          panes. Still, so it costs nothing while you write. */}
+      {!focusMode && (
+        <div className="myc-backdrop" aria-hidden="true">
+          <LivingCanvas still />
+        </div>
+      )}
+      <div className="relative z-10 flex flex-col flex-1 min-h-0 myc-awaken">
         {/* Top toolbar */}
         {!focusMode && (
         <header
@@ -330,8 +338,8 @@ export default function App() {
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
           <main
             className={clsx(
-              'flex flex-col flex-1 min-w-0 bg-surface-1 overflow-hidden',
-              !focusMode && 'myc-panel',
+              'flex flex-col flex-1 min-w-0 overflow-hidden',
+              focusMode ? 'bg-surface-1' : 'myc-panel myc-panel-editor',
             )}
           >
             {!focusMode && <EditorTabs />}
