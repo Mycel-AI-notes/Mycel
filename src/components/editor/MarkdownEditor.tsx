@@ -73,7 +73,7 @@ const mycelEditorTheme = (dark: boolean) =>
         backgroundColor: 'var(--color-surface-1)',
         color: 'var(--color-text-primary)',
         height: '100%',
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontFamily: 'var(--font-text)',
         fontSize: '16px',
       },
       '.cm-scroller': { overflow: 'auto', lineHeight: '1.75', width: '100%' },

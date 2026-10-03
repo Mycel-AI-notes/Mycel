@@ -262,7 +262,7 @@ export const imageDecorationTheme = EditorView.baseTheme({
     padding: '24px',
     textAlign: 'center',
     color: 'var(--color-text-muted)',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     fontSize: '12px',
     border: '1px dashed var(--color-border)',
     borderRadius: '4px',
@@ -276,7 +276,7 @@ export const imageDecorationTheme = EditorView.baseTheme({
   },
   '.cm-image-meta': {
     color: 'var(--color-text-muted)',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',

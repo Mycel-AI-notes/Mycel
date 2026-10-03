@@ -61,7 +61,8 @@ export default {
         '3xl': '1.75rem',
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
+        sans: ['var(--font-ui)'],
+        mono: ['var(--font-mono)'],
       },
     },
   },
