@@ -81,7 +81,9 @@ pub fn start_watcher(
             // frontend coalesces bursts, so one emit per event is fine.
             let reshapes_tree = matches!(
                 event.kind,
-                EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+                EventKind::Create(_)
+                    | EventKind::Remove(_)
+                    | EventKind::Modify(ModifyKind::Name(_))
             );
             if reshapes_tree
                 && event
