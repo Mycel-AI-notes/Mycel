@@ -380,7 +380,7 @@ export const markdownPreviewTheme = EditorView.baseTheme({
     maxWidth: '1024px',
     margin: '0 auto',
     padding: '24px 0',
-    fontFamily: "'Inter', system-ui, sans-serif",
+    fontFamily: 'var(--font-text)',
     boxSizing: 'border-box',
   },
   '.cm-line': { lineHeight: '1.75', fontSize: '16px', padding: '0 24px' },
@@ -412,7 +412,7 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   '.cm-md-italic': { fontStyle: 'italic' },
   '.cm-md-strike': { textDecoration: 'line-through', opacity: '0.6' },
   '.cm-md-code': {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     fontSize: '0.875em',
     backgroundColor: 'var(--color-code-bg)',
     color: 'var(--color-inline-code)',
@@ -441,7 +441,7 @@ export const markdownPreviewTheme = EditorView.baseTheme({
   },
 
   '.cm-md-codeblock-line': {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     fontSize: '0.875em',
     backgroundColor: 'var(--color-code-bg)',
     color: 'var(--color-text-primary)',

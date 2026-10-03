@@ -26,7 +26,7 @@ export function InsightsSidebar() {
   const count = status.pending_count;
 
   return (
-    <div className="border-b border-border bg-surface-0 px-2 py-1.5">
+    <div className="border-b border-border px-2 py-1.5">
       <button
         type="button"
         onClick={() => openInsightsTab({ preview: true })}

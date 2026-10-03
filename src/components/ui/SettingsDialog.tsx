@@ -68,7 +68,7 @@ export function SettingsDialog() {
         // differed; pinning width and height keeps the chrome anchored and
         // lets the right pane scroll inside. `max-*` clamps cover tiny
         // viewports so the dialog still fits on small windows.
-        className="w-[42rem] max-w-[calc(100vw-2rem)] h-[34rem] max-h-[calc(100vh-2rem)] bg-surface-1 border border-border rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        className="w-[42rem] max-w-[calc(100vw-2rem)] h-[34rem] max-h-[calc(100vh-2rem)] bg-surface-1 border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-surface-0">

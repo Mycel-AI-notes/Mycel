@@ -1,11 +1,11 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { clsx } from 'clsx';
 import { useTheme } from '@/hooks/useTheme';
 import { useQuickNote } from '@/hooks/useQuickNote';
 import { useAutoLock } from '@/hooks/useAutoLock';
 import { useSporeMotionRootClass } from '@/hooks/useSporeMotion';
-import { awaken } from '@/lib/spore-fx';
 import { useVaultStore } from '@/stores/vault';
 import { useUIStore } from '@/stores/ui';
 import { useRecentVaults } from '@/stores/recentVaults';
@@ -14,6 +14,7 @@ import { EditorTabs } from '@/components/editor/EditorTabs';
 import { MarkdownEditor } from '@/components/editor/MarkdownEditor';
 import { ImageViewer } from '@/components/editor/ImageViewer';
 import { EmptyEditor } from '@/components/editor/EmptyEditor';
+import { LivingCanvas } from '@/components/fx/LivingCanvas';
 import { RightPanel } from '@/components/ui/RightPanel';
 import { PalettePicker } from '@/components/ui/PalettePicker';
 import { VaultPicker } from '@/components/onboarding/VaultPicker';
@@ -227,10 +228,6 @@ export default function App() {
     };
   }, [vaultRoot]);
 
-  // Each time a vault opens, a spore germinates and the workspace grows in.
-  useEffect(() => {
-    if (vaultRoot) awaken();
-  }, [vaultRoot]);
 
   /** Tooltip / badge text for a command's current hotkey ('' when unbound). */
   const hotkeyLabel = (id: string) => {
@@ -249,13 +246,20 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface-1 text-text-primary">
-      <div className="flex flex-col flex-1 min-h-0 myc-awaken">
+    <div className="relative isolate flex flex-col h-screen bg-app text-text-primary">
+      {/* The living canvas, frozen and defocused, glows through the glass
+          panes. Still, so it costs nothing while you write. */}
+      {!focusMode && (
+        <div className="myc-backdrop" aria-hidden="true">
+          <LivingCanvas still />
+        </div>
+      )}
+      <div className="relative z-10 flex flex-col flex-1 min-h-0 myc-awaken">
         {/* Top toolbar */}
         {!focusMode && (
         <header
           data-tauri-drag-region
-          className={`flex items-center pr-3 py-1.5 bg-surface-0 shrink-0 gap-2 ${
+          className={`flex items-center pr-3 py-1.5 shrink-0 gap-2 ${
             isMac ? 'pl-[78px]' : 'pl-3'
           }`}
         >
@@ -263,7 +267,8 @@ export default function App() {
             className="flex items-center text-accent pl-0.5 pr-1"
             title="Mycel"
           >
-            <Logo size={20} />
+            <Logo size={20} glow />
+            <span className="ml-1.5 text-[13px] font-medium text-text-primary">Mycel</span>
           </span>
 
           <button
@@ -277,14 +282,14 @@ export default function App() {
           {/* Quick Switcher trigger */}
           <button
             onClick={() => setQuickSwitcherOpen(true)}
-            className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-md border border-border bg-surface-1 hover:bg-surface-2 text-text-muted text-xs"
+            className="flex items-center gap-2 flex-1 max-w-sm mx-auto px-3 py-1 rounded-lg myc-pane hover:border-accent/40 text-text-muted text-xs transition-colors"
           >
             <span className="flex-1 text-left truncate">
               {vaultRoot.split('/').pop() ?? vaultRoot}
               <span className="opacity-60"> · search or run a command</span>
             </span>
           {hotkeyLabel('omnibar.open') && (
-            <kbd className="text-[10px] bg-surface-2 px-1 rounded">{hotkeyLabel('omnibar.open')}</kbd>
+            <kbd className="myc-kbd">{hotkeyLabel('omnibar.open')}</kbd>
           )}
           </button>
 
@@ -319,11 +324,18 @@ export default function App() {
         )}
 
         {/* Main layout */}
-        <div className="flex flex-1 min-h-0">
+        {/* Sidebar, editor and right panel float as rounded panes on the
+            app background; focus mode lets the editor go full-bleed. */}
+        <div className={clsx('flex flex-1 min-h-0', !focusMode && 'gap-1.5 px-1.5')}>
           {!sidebarCollapsed && !focusMode && <Sidebar />}
 
           {/* Editor area — Garden tabs and notes share the same tab strip. */}
-          <main className="flex flex-col flex-1 min-w-0">
+          <main
+            className={clsx(
+              'flex flex-col flex-1 min-w-0 overflow-hidden',
+              focusMode ? 'bg-surface-1' : 'myc-panel myc-panel-editor',
+            )}
+          >
             {!focusMode && <EditorTabs />}
             {activeGardenView ? (
               <GardenView view={activeGardenView} />
@@ -345,7 +357,7 @@ export default function App() {
 
         {/* Bottom status bar — vault + theme + settings */}
         {!focusMode && (
-        <footer className="flex items-center justify-end gap-1 px-2 py-1 bg-surface-0 text-text-muted text-[11px] shrink-0">
+        <footer className="flex items-center justify-end gap-1 px-2 py-1 text-text-muted text-[11px] shrink-0">
           <button
             onClick={closeVault}
             className="p-1 rounded hover:bg-surface-hover hover:text-text-primary transition-colors"

@@ -50,9 +50,9 @@ export function EditorTabs() {
           onDoubleClick={() => pinTab(tab.path)}
           title={tab.isPreview ? 'Preview tab — double-click or save to pin' : tab.path}
           className={clsx(
-            'flex items-center gap-1.5 pl-3 pr-1.5 py-1 text-[13px] rounded-md shrink-0 max-w-[200px] group transition-colors',
+            'flex items-center gap-1.5 pl-3 pr-1.5 py-1 text-[13px] rounded-lg shrink-0 max-w-[200px] group transition-[color,background-color,box-shadow]',
             tab.path === activeTabPath
-              ? 'bg-surface-hover text-text-primary'
+              ? 'myc-selected'
               : 'text-text-muted hover:text-text-secondary hover:bg-surface-2',
             tab.isPreview && 'italic',
           )}

@@ -407,18 +407,18 @@ function FileTreeNode({
         onMouseEnter={() => setHoveredPath(entry.path)}
         onMouseLeave={() => setHoveredPath((p) => (p === entry.path ? null : p))}
         className={clsx(
-          'relative flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer text-sm select-none transition-colors outline-none',
+          'relative flex items-center gap-1 mx-1.5 px-2 py-0.5 rounded-md cursor-pointer text-sm select-none transition-colors outline-none',
           'focus-visible:ring-1 focus-visible:ring-accent/60',
           // Hover/focus backgrounds use JS-tracked hover (isHovered) instead of
           // the CSS :hover pseudo-class, which Chromium leaves stuck on every
           // row a drag passed over — causing multiple phantom highlights that
           // accumulate across moves.
-          isHovered && 'bg-surface-hover',
-          isActive && 'bg-accent/12 text-accent',
+          isHovered && !isActive && 'bg-surface-hover',
+          isActive && 'myc-selected',
           !isActive && 'text-text-secondary',
           dropPos === 'inside' && entry.is_dir && 'bg-accent/15 ring-1 ring-accent/40',
         )}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 12 + 2}px` }}
         onClick={() => {
           setFocusedPath(entry.path);
           handleClick();
@@ -972,9 +972,7 @@ export function FileTree() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Files
-        </span>
+        <span className="text-xs font-medium text-text-muted">Files</span>
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => startCreate('note', '')}

@@ -225,11 +225,11 @@ export const mathDecorationTheme = EditorView.baseTheme({
   '.cm-math-error': {
     color: 'var(--color-error)',
     textDecoration: 'underline wavy var(--color-error)',
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     cursor: 'help',
   },
   '.cm-math-source': {
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: 'var(--font-mono)',
     backgroundColor: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
     borderRadius: '3px',
     padding: '0 2px',

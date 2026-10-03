@@ -14,7 +14,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={clsx(
           'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50',
           {
-            'bg-accent text-surface-0 hover:bg-accent-bright shadow-glow-sm': variant === 'default',
+            'myc-btn myc-btn-primary': variant === 'default',
             'hover:bg-surface-hover text-text-secondary hover:text-text-primary': variant === 'ghost',
             'border border-border hover:border-accent/60 hover:bg-surface-hover text-text-secondary hover:text-text-primary': variant === 'outline',
           },
