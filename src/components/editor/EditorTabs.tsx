@@ -16,6 +16,8 @@ import { PulseSpore } from '@/components/brand/Spore';
 import { isEncryptedPath } from '@/lib/note-name';
 import { parseGardenTabPath } from '@/lib/garden-tab';
 import { isInsightsTabPath } from '@/lib/insights-tab';
+import { pageIconOf } from '@/lib/page-meta';
+import { PageIcon } from '@/components/page/PageIcon';
 
 /// Icon for a synthetic (non-note) tab — Garden views and the Insights
 /// inbox. Returns null for ordinary note paths.
@@ -35,7 +37,7 @@ function syntheticTabIcon(path: string): LucideIcon | null {
 }
 
 export function EditorTabs() {
-  const { openTabs, activeTabPath, setActiveTab, closeTab, pinTab } = useVaultStore();
+  const { openTabs, activeTabPath, setActiveTab, closeTab, pinTab, noteCache } = useVaultStore();
 
   if (openTabs.length === 0) return null;
 
@@ -43,6 +45,8 @@ export function EditorTabs() {
     <div className="flex items-center gap-1 px-2 pt-1.5 pb-1 bg-surface-1 overflow-x-auto shrink-0">
       {openTabs.map((tab) => {
         const SyntheticIcon = syntheticTabIcon(tab.path);
+        const content = noteCache.get(tab.path)?.content;
+        const pageIcon = !SyntheticIcon && content ? pageIconOf(content) : null;
         return (
         <button
           key={tab.path}
@@ -64,6 +68,7 @@ export function EditorTabs() {
               aria-hidden="true"
             />
           )}
+          {pageIcon && <PageIcon icon={pageIcon.icon} color={pageIcon.color} size={12} />}
           {isEncryptedPath(tab.path) && (
             <Lock
               size={10}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Database, Play } from 'lucide-react';
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -38,6 +38,8 @@ import {
 } from './decorations/EmbedDecoration';
 import { databaseWidgetPlugin, databaseWidgetTheme } from '@/lib/codemirror/database-widget';
 import { editableTableWidgetPlugin, editableTableWidgetTheme } from '@/lib/codemirror/editable-table-widget';
+import { pageHeaderExtension, pageHeaderTheme } from '@/lib/codemirror/page-header-widget';
+import { findFrontmatter } from '@/lib/page-meta';
 import { registerEditorView, unregisterEditorView } from '@/lib/editor-registry';
 import { flushAutosave, scheduleAutosave } from '@/lib/autosave';
 import { DatabasePicker } from '@/components/database/DatabasePicker';
@@ -203,9 +205,17 @@ export function MarkdownEditor({ path }: Props) {
   useEffect(() => {
     if (!editorRef.current || !note) return;
 
+    // Start below the frontmatter: the page header hides it, and a caret
+    // parked at 0 would type in front of the opening `---`.
+    const fm = findFrontmatter(note.content);
     const state = EditorState.create({
       doc: note.content,
+      selection: fm
+        ? EditorSelection.cursor(Math.min(fm.to + 1, note.content.length))
+        : undefined,
       extensions: [
+        pageHeaderExtension,
+        pageHeaderTheme,
         history(),
         highlightActiveLine(),
         keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
