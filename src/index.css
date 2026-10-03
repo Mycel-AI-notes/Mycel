@@ -11,9 +11,11 @@
 /* Type: one family for the chrome, one for reading and writing notes,
    one for code. Swapping a pairing is a change here only. */
 :root {
-  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-text: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Manrope's soft, rounded forms echo the glass and the drops; Inter is
+     the calmest reader for notes; both are bundled (src/main.tsx). */
+  --font-ui:   'Manrope Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-text: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 /* Light theme — kept as soft variant of the same identity (not the primary mode). */

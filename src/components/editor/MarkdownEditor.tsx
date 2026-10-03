@@ -12,7 +12,7 @@ import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/sea
 import { mycelSearchPanel } from '@/lib/codemirror/search-panel';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { autocompletion } from '@codemirror/autocomplete';
 import 'katex/dist/katex.min.css';
@@ -237,7 +237,7 @@ export function MarkdownEditor({ path }: Props) {
         themeCompartment.of(
           [
             mycelEditorTheme(isDark),
-            syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
+            syntaxHighlighting(mycelHighlightStyle),
           ],
         ),
         focusCompartment.of(useUIStore.getState().focusMode ? focusDim : []),
@@ -374,7 +374,7 @@ export function MarkdownEditor({ path }: Props) {
     view.dispatch({
       effects: themeCompartment.reconfigure([
         mycelEditorTheme(isDark),
-        syntaxHighlighting(isDark ? mycelHighlightStyle : defaultHighlightStyle),
+        syntaxHighlighting(mycelHighlightStyle),
       ]),
     });
   }, [isDark]);
