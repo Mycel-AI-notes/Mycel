@@ -11,8 +11,8 @@ import { bubbleBurst, sporeAirHeld } from '@/lib/spore-fx';
  *   - each body is lit like glass: a glowing inner rim, a darker see-through
  *     core, a soft highlight from the upper left and a halo around it;
  *   - silky veils sweep slowly behind them;
- *   - one closed ring of mycelium frames the room, with a couple of
- *     hyphae reaching inward;
+ *   - two branching colonies on the diagonal, tied together by one long
+ *     hypha through the middle, with drops hanging off their branches;
  *   - small bubbles rise along the sides and fuse into whatever they pass;
  *   - bodies drift and breathe, lean toward the pointer, and the pointer
  *     carries a droplet that fuses into whatever it touches; a click makes
@@ -37,38 +37,53 @@ interface Body {
 }
 
 const BODIES: Body[] = [
-  /* 0 */ { u: 0.05, v: 0.22, r: 0.075, phase: 0.0, drift: 0.014 },
-  /* 1 */ { u: 0.22, v: 0.04, r: 0.045, phase: 1.3, drift: 0.012 },
-  /* 2 */ { u: 0.95, v: 0.16, r: 0.07, phase: 2.1, drift: 0.016 },
-  /* 3 */ { u: 0.78, v: 0.05, r: 0.04, phase: 3.4, drift: 0.012 },
-  /* 4 */ { u: 0.97, v: 0.66, r: 0.085, phase: 4.2, drift: 0.016 },
-  /* 5 */ { u: 0.83, v: 0.94, r: 0.055, phase: 5.0, drift: 0.014 },
-  /* 6 */ { u: 0.07, v: 0.86, r: 0.08, phase: 0.7, drift: 0.014 },
-  /* 7 */ { u: 0.3, v: 0.97, r: 0.04, phase: 2.6, drift: 0.012 },
-  /* 8 */ { u: 0.02, v: 0.55, r: 0.04, phase: 3.9, drift: 0.012 },
-  // knots that close the ring across the top and bottom edges
-  /* 9 */ { u: 0.5, v: 0.02, r: 0.024, phase: 0.4, drift: 0.01 },
-  /* 10 */ { u: 0.56, v: 0.985, r: 0.026, phase: 2.9, drift: 0.01 },
-  // drops at the end of the inward hyphae
-  /* 11 */ { u: 0.84, v: 0.33, r: 0.02, phase: 4.6, drift: 0.02 },
-  /* 12 */ { u: 0.17, v: 0.71, r: 0.022, phase: 5.5, drift: 0.02 },
+  // Colony A — the dense one, bottom left.
+  /* 0 */ { u: 0.08, v: 0.82, r: 0.09, phase: 0.0, drift: 0.012 },
+  /* 1 */ { u: 0.21, v: 0.94, r: 0.05, phase: 1.3, drift: 0.012 },
+  /* 2 */ { u: 0.03, v: 0.6, r: 0.045, phase: 2.1, drift: 0.014 },
+  /* 3 */ { u: 0.25, v: 0.73, r: 0.034, phase: 3.4, drift: 0.016 },
+  // Colony B — top right, answering A across the diagonal.
+  /* 4 */ { u: 0.91, v: 0.17, r: 0.085, phase: 4.2, drift: 0.012 },
+  /* 5 */ { u: 0.78, v: 0.06, r: 0.045, phase: 5.0, drift: 0.012 },
+  /* 6 */ { u: 0.97, v: 0.38, r: 0.05, phase: 0.7, drift: 0.014 },
+  /* 7 */ { u: 0.76, v: 0.27, r: 0.03, phase: 2.6, drift: 0.016 },
+  // Drops hanging off the colonies' hyphae, like the icon's.
+  /* 8 */ { u: 0.37, v: 0.88, r: 0.022, phase: 3.9, drift: 0.02 },
+  /* 9 */ { u: 0.48, v: 0.97, r: 0.03, phase: 0.4, drift: 0.016 },
+  /* 10 */ { u: 0.1, v: 0.41, r: 0.022, phase: 2.9, drift: 0.02 },
+  /* 11 */ { u: 0.62, v: 0.11, r: 0.022, phase: 4.6, drift: 0.02 },
+  /* 12 */ { u: 0.93, v: 0.58, r: 0.032, phase: 5.5, drift: 0.016 },
+  /* 13 */ { u: 0.85, v: 0.73, r: 0.02, phase: 1.9, drift: 0.02 },
+  // A small knot behind the middle — the long hypha between colonies.
+  /* 14 */ { u: 0.52, v: 0.5, r: 0.012, phase: 3.1, drift: 0.02 },
+  // Little pairs in the other two corners.
+  /* 15 */ { u: 0.11, v: 0.1, r: 0.03, phase: 0.9, drift: 0.018 },
+  /* 16 */ { u: 0.2, v: 0.17, r: 0.017, phase: 2.2, drift: 0.022 },
+  /* 17 */ { u: 0.86, v: 0.91, r: 0.034, phase: 4.0, drift: 0.018 },
+  /* 18 */ { u: 0.95, v: 0.83, r: 0.019, phase: 5.2, drift: 0.022 },
 ];
 
-/** Hyphae between bodies: [from, to, bow]. One closed ring plus two spurs. */
+/**
+ * Hyphae between bodies: [from, to, bow]. Two branching colonies on the
+ * diagonal, tied together by one long thin hypha through the middle.
+ */
 const NECKS: ReadonlyArray<[number, number, number]> = [
-  [0, 1, 0.12],
-  [1, 9, -0.08],
-  [9, 3, 0.08],
-  [3, 2, -0.12],
-  [2, 4, 0.1],
+  [0, 1, 0.1],
+  [0, 2, -0.12],
+  [0, 3, 0.08],
+  [1, 8, -0.14],
+  [8, 9, 0.12],
+  [2, 10, 0.14],
+  [3, 14, -0.1],
+  [14, 7, 0.1],
   [4, 5, -0.1],
-  [5, 10, 0.08],
-  [10, 7, -0.08],
-  [7, 6, -0.12],
-  [6, 8, 0.1],
-  [8, 0, -0.1],
-  [2, 11, 0.16],
-  [6, 12, -0.16],
+  [4, 6, 0.12],
+  [4, 7, -0.08],
+  [5, 11, 0.14],
+  [6, 12, -0.12],
+  [12, 13, 0.14],
+  [15, 16, 0.18],
+  [17, 18, -0.18],
 ];
 /** Each hypha is a quadratic split into this many tapered capsules. */
 const NECK_SEGS = 5;
@@ -91,8 +106,8 @@ const BUBBLES: ReadonlyArray<[number, number, number, number]> = [
 const PULL_TIME = 1.2;
 const PULL_REACH = 0.42;
 
-const MAX_BALLS = 32;
-const MAX_SEGS = 80;
+const MAX_BALLS = 36;
+const MAX_SEGS = 96;
 const FPS = 30;
 
 const VERT = `
