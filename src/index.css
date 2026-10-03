@@ -515,6 +515,28 @@ body {
   background: var(--color-border-strong);
 }
 
+/* App background — the gutter the rounded panes float on: a shade
+   below the panes in every palette and mode. */
+:root {
+  --color-app: var(--color-surface-2);
+}
+.dark {
+  --color-app: color-mix(in srgb, var(--color-surface-0) 55%, #000);
+}
+.dark[data-palette='amber'],
+.dark[data-palette='azure'],
+.dark[data-palette='sage'],
+.dark[data-palette='classic'] {
+  --color-app: var(--color-surface-2);
+}
+
+/* A floating pane: sidebar, editor, right panel. */
+.myc-panel {
+  border-radius: 1rem;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-text-primary) 3%, transparent) inset;
+}
+
 /* ── Living surface ─────────────────────────────────────────────────────
  * The shared vocabulary of the redesign: frosted glass over the living
  * canvas, a lit accent button, and an outlined "selected" state. Every
@@ -698,10 +720,10 @@ body {
 }
 
 /* ── Spore motion ───────────────────────────────────────────────────────
- * The workspace's motion is one metaphor: the life cycle of the mycelium
- * the logo draws. Spores drift, germinate into the mark, hyphae grow from
- * one place to another and root there. Canvas effects live in
- * lib/spore-fx.ts; these are the CSS-only parts.
+ * The workspace's motion is one metaphor: living glassy matter. It buds
+ * bubbles, pulls together, and hyphae grow from one place to another and
+ * root there. Canvas effects live in lib/spore-fx.ts and the living
+ * canvas; these are the CSS-only parts.
  *
  * Every animation ends in `none` (transform/filter), so nothing lingers
  * that would change stacking or containing blocks for CodeMirror's
@@ -733,7 +755,7 @@ body {
   position: relative;
   animation: myc-rooted 340ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-/* Row born (new note / folder) — the row swells as its spore germinates. */
+/* Row born (new note / folder) — the row swells as it buds. */
 @keyframes myc-sprouted {
   0%   { background-color: color-mix(in srgb, var(--color-accent-bright) 22%, transparent);
          box-shadow: inset 0 0 12px color-mix(in srgb, var(--color-accent-bright) 35%, transparent);

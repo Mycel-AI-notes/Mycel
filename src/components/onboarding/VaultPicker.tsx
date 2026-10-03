@@ -16,7 +16,6 @@ import {
 import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
 import { useRecentVaults, vaultDisplayName } from '@/stores/recentVaults';
-import { SporeAir } from '@/components/fx/SporeAir';
 import { LivingCanvas } from '@/components/fx/LivingCanvas';
 import { useSporeMotion } from '@/hooks/useSporeMotion';
 import { Logo } from '@/components/brand/Logo';
@@ -112,7 +111,6 @@ export function VaultPicker() {
   return (
     <div className="relative h-full overflow-hidden bg-surface-1">
       <LivingCanvas still={!sporeMotion} />
-      {sporeMotion && <SporeAir />}
       <div className="myc-canvas-veil" />
 
       <div className="relative z-10 flex flex-col items-center justify-center h-full gap-4 px-6 py-10 overflow-y-auto pointer-events-none">

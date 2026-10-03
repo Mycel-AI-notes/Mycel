@@ -65,7 +65,7 @@ export function Sidebar() {
   return (
     <aside
       ref={asideRef}
-      className="relative flex flex-col h-full bg-surface-0 border-r border-border shrink-0"
+      className="myc-panel relative flex flex-col h-full bg-surface-0 overflow-hidden shrink-0"
       style={{ width: `${sidebarWidth}px` }}
     >
       <div className="flex flex-col min-h-0 flex-1">
@@ -76,7 +76,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-t border-border bg-surface-0">
+      <div className="flex items-center justify-end gap-1 px-2 py-1.5 border-t border-border">
         <SyncStatusBadge onClick={() => setSyncOpen(true)} />
       </div>
 
@@ -89,7 +89,7 @@ export function Sidebar() {
         onPointerDown={startResize}
         onDoubleClick={() => setSidebarWidth(224)}
         className={clsx(
-          'absolute top-0 right-0 h-full w-1 -mr-0.5 cursor-col-resize z-10 group',
+          'absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-10 group',
           'hover:bg-accent/40 transition-colors',
           resizing && 'bg-accent/60',
         )}

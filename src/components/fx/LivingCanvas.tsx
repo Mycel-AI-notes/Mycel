@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
-import { sporeAirHeld } from '@/lib/spore-fx';
+import { bubbleBurst, sporeAirHeld } from '@/lib/spore-fx';
 
 /**
  * The living canvas — the app icon's glassy mycelium, grown around the
@@ -11,9 +11,13 @@ import { sporeAirHeld } from '@/lib/spore-fx';
  *   - each body is lit like glass: a glowing inner rim, a darker see-through
  *     core, a soft highlight from the upper left and a halo around it;
  *   - silky veils sweep slowly behind them;
+ *   - one closed ring of mycelium frames the room, with a couple of
+ *     hyphae reaching inward;
+ *   - small bubbles rise along the sides and fuse into whatever they pass;
  *   - bodies drift and breathe, lean toward the pointer, and the pointer
- *     carries a droplet that fuses into whatever it touches; a click swells
- *     the bodies around it.
+ *     carries a droplet that fuses into whatever it touches; a click makes
+ *     the nearest body shoot a hypha to it, which pulls back and lets a
+ *     puff of bubbles go.
  *
  * Drawn by one fragment shader. Every colour comes from the theme tokens
  * (`--color-accent*`, `--color-living`), re-read whenever the palette or mode changes, so it
@@ -34,35 +38,61 @@ interface Body {
 
 const BODIES: Body[] = [
   /* 0 */ { u: 0.05, v: 0.22, r: 0.075, phase: 0.0, drift: 0.014 },
-  /* 1 */ { u: 0.2, v: 0.04, r: 0.045, phase: 1.3, drift: 0.012 },
+  /* 1 */ { u: 0.22, v: 0.04, r: 0.045, phase: 1.3, drift: 0.012 },
   /* 2 */ { u: 0.95, v: 0.16, r: 0.07, phase: 2.1, drift: 0.016 },
-  /* 3 */ { u: 0.79, v: 0.05, r: 0.04, phase: 3.4, drift: 0.012 },
+  /* 3 */ { u: 0.78, v: 0.05, r: 0.04, phase: 3.4, drift: 0.012 },
   /* 4 */ { u: 0.97, v: 0.66, r: 0.085, phase: 4.2, drift: 0.016 },
-  /* 5 */ { u: 0.84, v: 0.93, r: 0.055, phase: 5.0, drift: 0.014 },
+  /* 5 */ { u: 0.83, v: 0.94, r: 0.055, phase: 5.0, drift: 0.014 },
   /* 6 */ { u: 0.07, v: 0.86, r: 0.08, phase: 0.7, drift: 0.014 },
-  /* 7 */ { u: 0.33, v: 0.98, r: 0.04, phase: 2.6, drift: 0.012 },
+  /* 7 */ { u: 0.3, v: 0.97, r: 0.04, phase: 2.6, drift: 0.012 },
   /* 8 */ { u: 0.02, v: 0.55, r: 0.04, phase: 3.9, drift: 0.012 },
-  // loose droplets
-  /* 9 */ { u: 0.31, v: 0.12, r: 0.016, phase: 0.4, drift: 0.03 },
-  /* 10 */ { u: 0.69, v: 0.88, r: 0.018, phase: 2.9, drift: 0.03 },
-  /* 11 */ { u: 0.9, v: 0.4, r: 0.014, phase: 4.6, drift: 0.03 },
+  // knots that close the ring across the top and bottom edges
+  /* 9 */ { u: 0.5, v: 0.02, r: 0.024, phase: 0.4, drift: 0.01 },
+  /* 10 */ { u: 0.56, v: 0.985, r: 0.026, phase: 2.9, drift: 0.01 },
+  // drops at the end of the inward hyphae
+  /* 11 */ { u: 0.84, v: 0.33, r: 0.02, phase: 4.6, drift: 0.02 },
+  /* 12 */ { u: 0.17, v: 0.71, r: 0.022, phase: 5.5, drift: 0.02 },
 ];
 
-/** Hyphae between bodies: [from, to, bow]. */
+/** Hyphae between bodies: [from, to, bow]. One closed ring plus two spurs. */
 const NECKS: ReadonlyArray<[number, number, number]> = [
   [0, 1, 0.12],
-  [0, 8, -0.1],
-  [8, 6, 0.1],
-  [6, 7, -0.12],
-  [5, 4, -0.1],
-  [4, 2, 0.1],
-  [2, 3, -0.12],
+  [1, 9, -0.08],
+  [9, 3, 0.08],
+  [3, 2, -0.12],
+  [2, 4, 0.1],
+  [4, 5, -0.1],
+  [5, 10, 0.08],
+  [10, 7, -0.08],
+  [7, 6, -0.12],
+  [6, 8, 0.1],
+  [8, 0, -0.1],
+  [2, 11, 0.16],
+  [6, 12, -0.16],
 ];
 /** Each hypha is a quadratic split into this many tapered capsules. */
-const NECK_SEGS = 6;
+const NECK_SEGS = 5;
 
-const MAX_BALLS = 16;
-const MAX_SEGS = 48;
+/** Bubbles rising along the sides: [x (0..1), size, speed, offset]. */
+const BUBBLES: ReadonlyArray<[number, number, number, number]> = [
+  [0.04, 0.011, 0.03, 0.1],
+  [0.12, 0.007, 0.045, 0.55],
+  [0.2, 0.009, 0.035, 0.3],
+  [0.26, 0.006, 0.05, 0.8],
+  [0.09, 0.013, 0.025, 0.7],
+  [0.74, 0.008, 0.04, 0.2],
+  [0.8, 0.012, 0.028, 0.65],
+  [0.88, 0.007, 0.05, 0.4],
+  [0.93, 0.01, 0.033, 0.9],
+  [0.97, 0.006, 0.045, 0.05],
+];
+
+/** A click's hypha: grows out to the point, then pulls back. Seconds. */
+const PULL_TIME = 1.2;
+const PULL_REACH = 0.42;
+
+const MAX_BALLS = 32;
+const MAX_SEGS = 80;
 const FPS = 30;
 
 const VERT = `
@@ -152,8 +182,8 @@ void main() {
   // A wide difference step smooths the creases where capsules overlap.
   float e = 2.5;
   vec2 grad = normalize(vec2(
-    scene(p + vec2(e, 0.0)) - scene(p - vec2(e, 0.0)),
-    scene(p + vec2(0.0, e)) - scene(p - vec2(0.0, e))
+    scene(p + vec2(e, 0.0)) - d,
+    scene(p + vec2(0.0, e)) - d
   ) + 1e-6);
 
   float strength = mix(1.0, 0.6, uLight);
@@ -312,7 +342,9 @@ export function LivingCanvas({ className, still = false }: Props) {
     let clock = still ? 8 : 0;
 
     const tip = { x: 0, y: 0, sx: 0, sy: 0, inside: 0, target: 0 };
-    const swells: { x: number; y: number; t: number }[] = [];
+    /** The click's hypha: which body, where to, how far along (0..1). */
+    let pull: { body: number; x: number; y: number; cx: number; cy: number; t: number; puffed: boolean } | null =
+      null;
 
     const applyPalette = () => {
       const pal = readPalette();
@@ -342,13 +374,17 @@ export function LivingCanvas({ className, still = false }: Props) {
           y += dy * k * 0.14;
           r *= 1 + k * 0.1;
         }
-        // Click swells.
-        for (const s of swells) {
-          const d = Math.hypot(x - s.x, y - s.y);
-          const k = Math.exp(-(d * d) / (m * m * 0.12)) * Math.sin(Math.min(1, s.t) * Math.PI);
-          r *= 1 + k * 0.16;
-        }
         pos.push([x, y, r]);
+        balls.set([x, y, r], n * 3);
+        n++;
+      }
+
+      // Rising bubbles; they fuse into bodies and hyphae as they pass.
+      for (const [bu, bs, speed, off] of BUBBLES) {
+        const r = bs * m;
+        const span = h + r * 4;
+        const y = h + r * 2 - ((t * speed * m + off * span) % span);
+        const x = bu * w + Math.sin(t * 0.9 + off * 9) * m * 0.012;
         balls.set([x, y, r], n * 3);
         n++;
       }
@@ -382,6 +418,37 @@ export function LivingCanvas({ className, still = false }: Props) {
           segB.set([p1[0], p1[1], p1[2], 0], sn * 4);
           sn++;
         }
+      }
+      // The click's hypha: out to the point, then back into its body.
+      if (pull) {
+        const [ax, ay, ar] = pos[pull.body];
+        const k = pull.t < 0.38
+          ? 1 - Math.pow(1 - pull.t / 0.38, 3)
+          : 1 - Math.pow((pull.t - 0.38) / 0.62, 2) * (3 - 2 * ((pull.t - 0.38) / 0.62));
+        const ex = ax + (pull.x - ax) * k;
+        const ey = ay + (pull.y - ay) * k;
+        const dx = ex - ax;
+        const dy = ey - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        const qx = (ax + ex) / 2 + (-dy / len) * len * 0.12;
+        const qy = (ay + ey) / 2 + (dx / len) * len * 0.12;
+        const at = (s: number): [number, number, number] => {
+          const o = 1 - s;
+          return [
+            o * o * ax + 2 * o * s * qx + s * s * ex,
+            o * o * ay + 2 * o * s * qy + s * s * ey,
+            m * 0.005 + Math.pow(1 - s, 3) * ar * 0.5,
+          ];
+        };
+        for (let i = 0; i < NECK_SEGS; i++) {
+          const p0 = at(i / NECK_SEGS);
+          const p1 = at((i + 1) / NECK_SEGS);
+          segA.set([p0[0], p0[1], p0[2], i === 0 ? 1 : 0], sn * 4);
+          segB.set([p1[0], p1[1], p1[2], 0], sn * 4);
+          sn++;
+        }
+        balls.set([ex, ey, m * 0.016 * Math.min(1, k * 3)], n * 3);
+        n++;
       }
       return { n, sn, m };
     };
@@ -433,9 +500,14 @@ export function LivingCanvas({ className, still = false }: Props) {
       tip.sx += (tip.x - tip.sx) * Math.min(1, dt * 5);
       tip.sy += (tip.y - tip.sy) * Math.min(1, dt * 5);
       tip.inside += (tip.target - tip.inside) * Math.min(1, dt * 3);
-      for (let i = swells.length - 1; i >= 0; i--) {
-        swells[i].t += dt * 1.2;
-        if (swells[i].t >= 1) swells.splice(i, 1);
+      if (pull) {
+        pull.t += dt / PULL_TIME;
+        // At full stretch the tip lets a puff of bubbles go.
+        if (!pull.puffed && pull.t >= 0.38) {
+          pull.puffed = true;
+          bubbleBurst(pull.cx, pull.cy, { size: 5, count: 6 });
+        }
+        if (pull.t >= 1) pull = null;
       }
       draw();
     };
@@ -455,7 +527,37 @@ export function LivingCanvas({ className, still = false }: Props) {
     };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      swells.push({ ...local(e), t: 0 });
+      const p = local(e);
+      const m = Math.min(w, h);
+      // The body whose surface is nearest reaches for the click.
+      const t = clock;
+      let best = -1;
+      let bestD = Infinity;
+      BODIES.forEach((b, i) => {
+        const bx = b.u * w + Math.sin(t * 0.21 + b.phase) * b.drift * m;
+        const by = b.v * h + Math.cos(t * 0.17 + b.phase * 1.3) * b.drift * m;
+        const d = Math.hypot(p.x - bx, p.y - by) - b.r * m;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      if (best < 0) return;
+      // Out of reach: the hypha stretches as far as it can toward it.
+      const b = BODIES[best];
+      const bx = b.u * w;
+      const by = b.v * h;
+      const dist = Math.hypot(p.x - bx, p.y - by) || 1;
+      const reach = Math.min(1, (PULL_REACH * m) / dist);
+      pull = {
+        body: best,
+        x: bx + (p.x - bx) * reach,
+        y: by + (p.y - by) * reach,
+        cx: e.clientX - (p.x - (bx + (p.x - bx) * reach)),
+        cy: e.clientY - (p.y - (by + (p.y - by) * reach)),
+        t: 0,
+        puffed: false,
+      };
     };
 
     // Palette or mode switched: re-read the tokens and repaint.

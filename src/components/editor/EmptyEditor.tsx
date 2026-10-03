@@ -4,7 +4,6 @@ import { clsx } from 'clsx';
 import { useVaultStore } from '@/stores/vault';
 import { describeError, useToastStore } from '@/stores/toast';
 import { useUIStore } from '@/stores/ui';
-import { SporeAir } from '@/components/fx/SporeAir';
 import { LivingCanvas } from '@/components/fx/LivingCanvas';
 import { useSporeMotion } from '@/hooks/useSporeMotion';
 import { useHotkeyBindings } from '@/hooks/useHotkeyBindings';
@@ -108,7 +107,6 @@ export function EmptyEditor() {
       onDrop={onDrop}
     >
       <LivingCanvas still={!sporeMotion} />
-      {sporeMotion && <SporeAir />}
       <div className="myc-canvas-veil" />
 
       <div className="relative z-10 flex flex-col items-center gap-5 px-6 text-center pointer-events-none">

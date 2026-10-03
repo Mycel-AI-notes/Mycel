@@ -5,6 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        app: 'var(--color-app)',
         surface: {
           0: 'var(--color-surface-0)',
           1: 'var(--color-surface-1)',
@@ -46,6 +47,18 @@ export default {
       boxShadow: {
         glow: 'var(--shadow-glow)',
         'glow-sm': '0 0 12px color-mix(in srgb, var(--color-accent) 22%, transparent)',
+      },
+      // Softer corners across the app: every step of the scale is a notch
+      // rounder than Tailwind's default, so existing `rounded*` classes
+      // pick it up without touching each component.
+      borderRadius: {
+        sm: '0.25rem',
+        DEFAULT: '0.375rem',
+        md: '0.5rem',
+        lg: '0.75rem',
+        xl: '1rem',
+        '2xl': '1.25rem',
+        '3xl': '1.75rem',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
