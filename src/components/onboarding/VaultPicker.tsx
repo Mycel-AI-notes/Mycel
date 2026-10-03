@@ -118,7 +118,7 @@ export function VaultPicker() {
           <header className="flex items-start justify-between gap-4">
             <div className="flex flex-col gap-2 min-w-0">
               <span className="flex items-center gap-1.5 text-accent text-sm">
-                <Logo size={15} />
+                <Logo size={18} />
                 <span className="text-text-primary font-medium">Mycel</span>
               </span>
               <h1 className="text-[34px] leading-tight font-medium tracking-tight text-text-primary">

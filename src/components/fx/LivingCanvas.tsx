@@ -13,6 +13,8 @@ import { bubbleBurst, sporeAirHeld } from '@/lib/spore-fx';
  *   - silky veils sweep slowly behind them;
  *   - two branching colonies on the diagonal, tied together by one long
  *     hypha through the middle, with drops hanging off their branches;
+ *     roots run from them off every edge, so the colonies hang from a
+ *     larger mycelium outside the window;
  *   - small bubbles rise along the sides and fuse into whatever they pass;
  *   - bodies drift and breathe, lean toward the pointer, and the pointer
  *     carries a droplet that fuses into whatever it touches; a click makes
@@ -61,7 +63,20 @@ const BODIES: Body[] = [
   /* 16 */ { u: 0.2, v: 0.17, r: 0.017, phase: 2.2, drift: 0.022 },
   /* 17 */ { u: 0.86, v: 0.91, r: 0.034, phase: 4.0, drift: 0.018 },
   /* 18 */ { u: 0.95, v: 0.83, r: 0.019, phase: 5.2, drift: 0.022 },
+  // Anchors beyond the edges: never seen, they hold the roots that tie
+  // every colony to the world outside the window.
+  /* 19 */ { u: -0.1, v: 1.12, r: 0.06, phase: 0, drift: 0 },
+  /* 20 */ { u: 0.3, v: 1.14, r: 0.05, phase: 0, drift: 0 },
+  /* 21 */ { u: -0.12, v: 0.42, r: 0.05, phase: 0, drift: 0 },
+  /* 22 */ { u: 1.1, v: -0.1, r: 0.06, phase: 0, drift: 0 },
+  /* 23 */ { u: 0.64, v: -0.14, r: 0.05, phase: 0, drift: 0 },
+  /* 24 */ { u: 1.12, v: 0.62, r: 0.05, phase: 0, drift: 0 },
+  /* 25 */ { u: 0.02, v: -0.12, r: 0.045, phase: 0, drift: 0 },
+  /* 26 */ { u: 0.92, v: 1.14, r: 0.045, phase: 0, drift: 0 },
 ];
+
+/** Bodies from this index on are off-screen anchors. */
+const FIRST_ANCHOR = 19;
 
 /**
  * Hyphae between bodies: [from, to, bow]. Two branching colonies on the
@@ -84,9 +99,18 @@ const NECKS: ReadonlyArray<[number, number, number]> = [
   [12, 13, 0.14],
   [15, 16, 0.18],
   [17, 18, -0.18],
+  // Roots running off the screen, pulling each colony toward the edges.
+  [0, 19, 0.06],
+  [9, 20, -0.1],
+  [10, 21, 0.12],
+  [4, 22, -0.06],
+  [11, 23, 0.1],
+  [12, 24, -0.12],
+  [15, 25, 0.14],
+  [17, 26, -0.14],
 ];
 /** Each hypha is a quadratic split into this many tapered capsules. */
-const NECK_SEGS = 5;
+const NECK_SEGS = 4;
 
 /** Bubbles rising along the sides: [x (0..1), size, speed, offset]. */
 const BUBBLES: ReadonlyArray<[number, number, number, number]> = [
@@ -106,8 +130,8 @@ const BUBBLES: ReadonlyArray<[number, number, number, number]> = [
 const PULL_TIME = 1.2;
 const PULL_REACH = 0.42;
 
-const MAX_BALLS = 36;
-const MAX_SEGS = 96;
+const MAX_BALLS = 40;
+const MAX_SEGS = 104;
 const FPS = 30;
 
 const VERT = `
@@ -549,6 +573,7 @@ export function LivingCanvas({ className, still = false }: Props) {
       let best = -1;
       let bestD = Infinity;
       BODIES.forEach((b, i) => {
+        if (i >= FIRST_ANCHOR) return;
         const bx = b.u * w + Math.sin(t * 0.21 + b.phase) * b.drift * m;
         const by = b.v * h + Math.cos(t * 0.17 + b.phase * 1.3) * b.drift * m;
         const d = Math.hypot(p.x - bx, p.y - by) - b.r * m;
