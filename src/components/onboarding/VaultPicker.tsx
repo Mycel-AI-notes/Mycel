@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   ArrowRight,
@@ -282,25 +282,18 @@ function cardId(path: string): string {
   return `vault-card-${encodeURIComponent(path)}`;
 }
 
-/** Soft organic light inside a card — a hint of the canvas behind it. */
-const GLOWS = [
-  'radial-gradient(circle at 78% 22%, var(--g) 0 18%, transparent 46%), radial-gradient(circle at 30% 0%, var(--g) 0 10%, transparent 34%)',
-  'radial-gradient(circle at 85% 70%, var(--g) 0 14%, transparent 42%), radial-gradient(circle at 55% 12%, var(--g) 0 9%, transparent 30%)',
-  'radial-gradient(circle at 18% 18%, var(--g) 0 12%, transparent 38%), radial-gradient(circle at 92% 40%, var(--g) 0 16%, transparent 44%)',
-];
-
+/** A soft light pooled in the card's upper corner — glass catching the glow. */
 function CardGlow({ index, lit }: { index: number; lit: boolean }) {
+  const corner = index % 2 === 0 ? '100% 0%' : '0% 0%';
   return (
     <span
       aria-hidden="true"
       className="absolute inset-0 pointer-events-none transition-opacity duration-300"
-      style={
-        {
-          '--g': `color-mix(in srgb, var(--color-accent) ${lit ? 30 : 14}%, transparent)`,
-          background: GLOWS[index % GLOWS.length],
-          filter: 'blur(6px)',
-        } as CSSProperties
-      }
+      style={{
+        background: `radial-gradient(120% 90% at ${corner}, color-mix(in srgb, var(--color-accent) ${
+          lit ? 22 : 9
+        }%, transparent) 0%, transparent 60%)`,
+      }}
     />
   );
 }

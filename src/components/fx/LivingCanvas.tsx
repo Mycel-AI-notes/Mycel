@@ -65,14 +65,14 @@ const BODIES: Body[] = [
   /* 18 */ { u: 0.95, v: 0.83, r: 0.019, phase: 5.2, drift: 0.022 },
   // Anchors beyond the edges: never seen, they hold the roots that tie
   // every colony to the world outside the window.
-  /* 19 */ { u: -0.1, v: 1.12, r: 0.06, phase: 0, drift: 0 },
-  /* 20 */ { u: 0.3, v: 1.14, r: 0.05, phase: 0, drift: 0 },
-  /* 21 */ { u: -0.12, v: 0.42, r: 0.05, phase: 0, drift: 0 },
-  /* 22 */ { u: 1.1, v: -0.1, r: 0.06, phase: 0, drift: 0 },
-  /* 23 */ { u: 0.64, v: -0.14, r: 0.05, phase: 0, drift: 0 },
-  /* 24 */ { u: 1.12, v: 0.62, r: 0.05, phase: 0, drift: 0 },
-  /* 25 */ { u: 0.02, v: -0.12, r: 0.045, phase: 0, drift: 0 },
-  /* 26 */ { u: 0.92, v: 1.14, r: 0.045, phase: 0, drift: 0 },
+  /* 19 */ { u: -0.1, v: 1.12, r: 0.028, phase: 0, drift: 0 },
+  /* 20 */ { u: 0.3, v: 1.14, r: 0.028, phase: 0, drift: 0 },
+  /* 21 */ { u: -0.12, v: 0.42, r: 0.028, phase: 0, drift: 0 },
+  /* 22 */ { u: 1.1, v: -0.1, r: 0.028, phase: 0, drift: 0 },
+  /* 23 */ { u: 0.64, v: -0.14, r: 0.028, phase: 0, drift: 0 },
+  /* 24 */ { u: 1.12, v: 0.62, r: 0.028, phase: 0, drift: 0 },
+  /* 25 */ { u: 0.02, v: -0.12, r: 0.028, phase: 0, drift: 0 },
+  /* 26 */ { u: 0.92, v: 1.14, r: 0.028, phase: 0, drift: 0 },
 ];
 
 /** Bodies from this index on are off-screen anchors. */
@@ -194,25 +194,53 @@ float scene(vec2 p) {
   return d;
 }
 
-// Silky veils: soft sheets under slow sine curves, with a bright lip.
+// Silky ribbons, like the sheets behind the icon's mycelium: each is a
+// band swept along a slow diagonal curve, filled with a faint gauze and
+// edged with a thin lit lip.
 vec4 veils(vec2 p) {
   vec2 q = p / uM;
-  float hh = uRes.y / uScale / uM;
+  vec2 size = uRes / uScale / uM;
   vec4 acc = vec4(0.0);
   for (int i = 0; i < 3; i++) {
     float fi = float(i);
-    float y = (0.25 + fi * 0.3) * hh
-      + 0.12 * sin(q.x * (1.6 + fi * 0.7) + uTime * (0.05 + fi * 0.02) + fi * 2.1)
-      + 0.05 * sin(q.x * (3.1 - fi) - uTime * 0.04 + fi);
-    float dist = q.y - y;
-    float sheet = smoothstep(0.0, 0.35, dist) * exp(-dist * 1.6) * 0.06;
-    float lip = exp(-abs(dist) * 260.0) * 0.07 + exp(-abs(dist) * 40.0) * 0.03;
-    float a = (sheet + lip) * (0.7 - fi * 0.15);
-    vec3 c = mix(uDeep, uBody, clamp(lip * 3.0, 0.0, 1.0));
-    acc.rgb = acc.rgb * (1.0 - a) + c * a;
+    float ang = -0.45 + fi * 0.5;
+    vec2 c = vec2(0.3 + fi * 0.35, 0.35 + fi * 0.2) * size;
+    vec2 r = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * (q - c);
+    float centre = 0.16 * sin(r.x * (1.3 + fi * 0.4) + uTime * (0.05 + fi * 0.015) + fi * 1.7);
+    float width = 0.09 + 0.05 * sin(r.x * 0.9 + fi * 2.3 + uTime * 0.03);
+    float off = r.y - centre;
+    float inside = smoothstep(width, width * 0.6, abs(off));
+    float gauze = inside * (0.06 + 0.05 * smoothstep(-width, width, off));
+    float lip = exp(-abs(off - width) * 320.0) * 0.14 + exp(-abs(off + width) * 320.0) * 0.06;
+    float a = (gauze + lip) * (0.85 - fi * 0.2);
+    vec3 col = mix(uLiving, uBody, clamp(lip * 4.0, 0.0, 1.0));
+    acc.rgb = acc.rgb * (1.0 - a) + col * a;
     acc.a = acc.a * (1.0 - a) + a;
   }
   return acc;
+}
+
+// Out-of-focus colonies far behind the glass — depth, like a macro lens.
+vec4 depth(vec2 p) {
+  vec2 size = uRes / uScale;
+  float f = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    vec2 c = vec2(
+      fract(0.17 + fi * 0.371) * size.x + sin(uTime * 0.05 + fi * 1.9) * uM * 0.04,
+      fract(0.61 + fi * 0.523) * size.y + cos(uTime * 0.04 + fi * 2.7) * uM * 0.04
+    );
+    float r = uM * (0.07 + 0.05 * fract(fi * 0.618));
+    vec2 dv = (p - c) / r;
+    f += exp(-dot(dv, dv));
+  }
+  float a = smoothstep(0.2, 1.1, f) * 0.2;
+  return vec4(mix(uLiving, uBody, 0.35) * a, a);
+}
+
+// A whisper of grain keeps the dark gradients from banding.
+float grain(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
 }
 
 void main() {
@@ -232,10 +260,12 @@ void main() {
 
   float strength = mix(1.0, 0.6, uLight);
 
-  // Back to front: veils, halo, glass body.
-  vec4 col = veils(p);
+  // Back to front: out-of-focus depth, ribbons, halo, glass body.
+  vec4 col = depth(p);
+  vec4 rib = veils(p);
+  col = rib + col * (1.0 - rib.a);
 
-  float halo = exp(-max(d, 0.0) / (uM * 0.03)) * 0.5 * step(0.0, d);
+  float halo = exp(-max(d, 0.0) / (uM * 0.03)) * 0.4 * step(0.0, d);
   vec3 haloC = mix(uLiving, uBody, 0.5);
   col.rgb = col.rgb * (1.0 - halo) + haloC * halo;
   col.a = col.a * (1.0 - halo) + halo;
@@ -255,19 +285,22 @@ void main() {
     float innerRim = exp(d / (uM * 0.016));
     // Light gathering in the lower body, as in a lit drop of liquid.
     float sss = pow(max(dot(n.xy, vec2(0.45, 0.8)), 0.0), 1.5) * (1.0 - innerRim);
+    // Light that crossed the drop pools on its far (lower right) edge.
+    float caustic = pow(max(dot(n.xy, vec2(0.55, 0.83)), 0.0), 3.0) * innerRim;
 
     // A see-through core: the room shows through, the rim does the glowing.
     vec3 core = mix(uLiving, uBody, 0.1 + 0.28 * diff);
     vec3 glass = core
-      + uBright * (0.85 * innerRim + 0.3 * fres + 0.35 * sss)
+      + uBright * (0.6 * innerRim + 0.28 * fres + 0.45 * sss + 0.6 * caustic)
       + vec3(1.0) * spec * 0.6;
-    float ga = 0.2 + 0.18 * diff + 0.62 * max(innerRim, fres) + 0.25 * sss + spec * 0.4;
+    float ga = 0.18 + 0.16 * diff + 0.6 * max(innerRim, fres) + 0.3 * sss + 0.3 * caustic + spec * 0.4;
     ga = clamp(ga, 0.0, 1.0) * inside;
     col.rgb = col.rgb * (1.0 - ga) + min(glass, vec3(1.0)) * ga;
     col.a = col.a * (1.0 - ga) + ga;
   }
 
   col *= strength;
+  col.rgb += grain(gl_FragCoord.xy) * (1.5 / 255.0) * col.a;
   gl_FragColor = col; // premultiplied
 }
 `;
@@ -407,7 +440,7 @@ export function LivingCanvas({ className, still = false }: Props) {
       for (const b of BODIES) {
         let x = b.u * w + Math.sin(t * 0.21 + b.phase) * b.drift * m;
         let y = b.v * h + Math.cos(t * 0.17 + b.phase * 1.3) * b.drift * m;
-        let r = b.r * m * (1 + Math.sin(t * 0.5 + b.phase) * 0.05);
+        let r = b.r * m * 0.86 * (1 + Math.sin(t * 0.5 + b.phase) * 0.05);
         // Lean toward the pointer.
         if (tip.inside > 0.01) {
           const dx = tip.sx - x;
