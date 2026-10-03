@@ -110,7 +110,7 @@ const NECKS: ReadonlyArray<[number, number, number]> = [
   [17, 26, -0.14],
 ];
 /** Each hypha is a quadratic split into this many tapered capsules. */
-const NECK_SEGS = 4;
+const NECK_SEGS = 6;
 
 /** Bubbles rising along the sides: [x (0..1), size, speed, offset]. */
 const BUBBLES: ReadonlyArray<[number, number, number, number]> = [
@@ -131,7 +131,7 @@ const PULL_TIME = 1.2;
 const PULL_REACH = 0.42;
 
 const MAX_BALLS = 40;
-const MAX_SEGS = 104;
+const MAX_SEGS = 152;
 const FPS = 30;
 
 const VERT = `
@@ -171,7 +171,8 @@ float capsule(vec2 p, vec2 a, vec2 b, float ra, float rb) {
 }
 
 float scene(vec2 p) {
-  float k = uM * 0.05;
+  // Wide blends: hyphae flow into bodies with soft fillets, like goo.
+  float k = uM * 0.07;
   float d = 1e5;
   for (int i = 0; i < ${MAX_BALLS}; i++) {
     if (i >= uBallN) break;
@@ -183,12 +184,12 @@ float scene(vec2 p) {
   for (int i = 0; i < ${MAX_SEGS}; i++) {
     if (i >= uSegN) break;
     if (uSegA[i].w > 0.5 && i > 0) {
-      d = smin(d, h, k * 0.8);
+      d = smin(d, h, k);
       h = 1e5;
     }
     h = min(h, capsule(p, uSegA[i].xy, uSegB[i].xy, uSegA[i].z, uSegB[i].z));
   }
-  d = smin(d, h, k * 0.8);
+  d = smin(d, h, k);
   if (uTip.z > 0.5) d = smin(d, length(p - uTip.xy) - uTip.z, uM * 0.09);
   return d;
 }
@@ -218,12 +219,16 @@ void main() {
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uScale;
 
   float d = scene(p);
-  // A wide difference step smooths the creases where capsules overlap.
-  float e = 2.5;
-  vec2 grad = normalize(vec2(
-    scene(p + vec2(e, 0.0)) - d,
-    scene(p + vec2(0.0, e)) - d
-  ) + 1e-6);
+  // Only the glass needs a surface normal; the room outside just gets the
+  // halo, so most pixels evaluate the scene once.
+  vec2 grad = vec2(0.0, 1.0);
+  if (d < 1.0) {
+    float e = 2.0;
+    grad = normalize(vec2(
+      scene(p + vec2(e, 0.0)) - d,
+      scene(p + vec2(0.0, e)) - d
+    ) + 1e-6);
+  }
 
   float strength = mix(1.0, 0.6, uLight);
 
@@ -440,14 +445,21 @@ export function LivingCanvas({ className, still = false }: Props) {
         const sway = bow + Math.sin(t * 0.3 + a + c) * 0.03;
         const qx = (ax + cx) / 2 + (-dy / len) * sway * len;
         const qy = (ay + cy) / 2 + (dx / len) * sway * len;
-        const neck = m * 0.007 * (1 + Math.sin(t * 0.6 + a) * 0.2);
+        // Elastic profile: thick where it leaves each body, easing down to
+        // a waist that stretches thinner and fattens again over time —
+        // stretched goo rather than a wire between beads. Long hyphae get
+        // a thinner waist, as goo pulled further would.
+        const stretch = Math.min(1, Math.max(0.3, (m * 0.32) / len));
+        const breathe = 1 + Math.sin(t * 0.7 + a * 1.7 + c) * 0.28;
+        const waist = Math.max(m * 0.006, Math.min(ar, cr) * 0.34 * stretch * breathe);
         const at = (s: number): [number, number, number] => {
           const o = 1 - s;
-          const flare = Math.pow(Math.abs(s - 0.5) * 2, 2.5);
+          const ends = Math.pow(1 - Math.sin(Math.PI * s), 1.6);
+          const end = (s < 0.5 ? ar : cr) * 0.55;
           return [
             o * o * ax + 2 * o * s * qx + s * s * cx,
             o * o * ay + 2 * o * s * qy + s * s * cy,
-            neck + flare * (s < 0.5 ? ar : cr) * 0.45,
+            waist + (end - waist) * ends,
           ];
         };
         for (let i = 0; i < NECK_SEGS; i++) {
@@ -515,7 +527,7 @@ export function LivingCanvas({ className, still = false }: Props) {
       w = Math.max(1, r.width);
       h = Math.max(1, r.height);
       // The glass is soft by nature: cap the resolution to keep it cheap.
-      scale = Math.min(window.devicePixelRatio || 1, 1.25);
+      scale = Math.min(window.devicePixelRatio || 1, 1);
       canvas.width = Math.round(w * scale);
       canvas.height = Math.round(h * scale);
       if (!tip.inside) {
