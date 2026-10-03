@@ -97,7 +97,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center myc-scrim" onClick={onClose}>
       <div
         className="bg-surface-1 border border-border rounded-lg p-4 w-full max-w-md flex flex-col gap-2"
         onClick={(e) => e.stopPropagation()}

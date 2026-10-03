@@ -228,6 +228,32 @@ export default function App() {
     };
   }, [vaultRoot]);
 
+  // Files added, removed or renamed outside the app (Finder, git, sync)
+  // land in the sidebar without a manual reload. Bursts — a folder copied
+  // in, a checkout — settle into one tree refresh.
+  useEffect(() => {
+    if (!vaultRoot) return;
+    let unlisten: UnlistenFn | undefined;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const SETTLE_MS = 300;
+
+    void listen('vault:tree-changed', () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        useVaultStore.getState().refreshTree().catch((e) => console.warn('Tree refresh failed:', e));
+      }, SETTLE_MS);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      if (timer) clearTimeout(timer);
+    };
+  }, [vaultRoot]);
 
   /** Tooltip / badge text for a command's current hotkey ('' when unbound). */
   const hotkeyLabel = (id: string) => {

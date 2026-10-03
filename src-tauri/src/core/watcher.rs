@@ -1,5 +1,6 @@
 use crate::core::fts::FtsIndex;
 use crate::core::vault::read_kb_dirs;
+use notify::event::ModifyKind;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -74,6 +75,22 @@ pub fn start_watcher(
                 EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => {}
                 _ => continue,
             }
+            // Files or folders appearing, vanishing or being renamed outside
+            // the app (Finder, `git pull`, sync tools) change the sidebar
+            // tree. Content edits don't, so they stay out of this. The
+            // frontend coalesces bursts, so one emit per event is fine.
+            let reshapes_tree = matches!(
+                event.kind,
+                EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+            );
+            if reshapes_tree
+                && event
+                    .paths
+                    .iter()
+                    .any(|p| is_visible_in_tree(&root_clone, p))
+            {
+                let _ = app.emit("vault:tree-changed", ());
+            }
 
             for path in event.paths {
                 let rel = match path.strip_prefix(&root_clone) {
@@ -128,6 +145,20 @@ pub fn start_watcher(
     });
 
     Some(VaultWatcher { _watcher: watcher })
+}
+
+/// True when `path` lies inside the vault and no component of it is hidden
+/// (`.git`, `.mycel`, `.DS_Store`…) — the same paths the file tree shows.
+fn is_visible_in_tree(root: &Path, path: &Path) -> bool {
+    match path.strip_prefix(root) {
+        Ok(rel) => {
+            !rel.as_os_str().is_empty()
+                && rel
+                    .components()
+                    .all(|c| !c.as_os_str().to_string_lossy().starts_with('.'))
+        }
+        Err(_) => false,
+    }
 }
 
 fn is_db_file(path: &Path) -> bool {

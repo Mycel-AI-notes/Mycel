@@ -58,7 +58,7 @@ function EncryptedNoteInfo({ path, onClose }: { path: string; onClose: () => voi
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-6"
+      className="fixed inset-0 z-40 myc-scrim flex items-center justify-center p-6"
       onClick={onClose}
     >
       <div

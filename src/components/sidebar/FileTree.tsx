@@ -46,6 +46,9 @@ function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
 }
 
+/** Pause after ↑/↓ before the landed-on file opens in the preview tab. */
+const PREVIEW_DELAY_MS = 120;
+
 // Flatten visible (expanded) entries in display order so keyboard nav can
 // move "up/down one row" without re-walking the tree at every keypress.
 function flattenVisible(tree: FileEntry[], expanded: Set<string>): FileEntry[] {
@@ -421,6 +424,10 @@ function FileTreeNode({
         style={{ paddingLeft: `${depth * 12 + 2}px` }}
         onClick={() => {
           setFocusedPath(entry.path);
+          // The click was on the tree, so the tree takes the keyboard:
+          // ↑/↓ then walk the files. WebKit doesn't focus a clicked
+          // tabindex row on its own.
+          rowRef.current?.focus({ preventScroll: true });
           handleClick();
         }}
         onDoubleClick={handleDoubleClick}
@@ -712,6 +719,20 @@ export function FileTree() {
     return flat[0]?.path ?? null;
   })();
 
+  // ↑/↓ preview the file they land on. Deferred so holding a key skims
+  // past rows without loading every note on the way.
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(previewTimer.current), []);
+  const previewEntry = useCallback((entry: FileEntry) => {
+    clearTimeout(previewTimer.current);
+    if (entry.is_dir) return;
+    previewTimer.current = setTimeout(() => {
+      const vault = useVaultStore.getState();
+      if (isAttachmentPath(entry.path)) void vault.openImageTab(entry.path, { preview: true });
+      else void vault.openNote(entry.path, { preview: true });
+    }, PREVIEW_DELAY_MS);
+  }, []);
+
   const onRowKeyDown = useCallback(
     (e: React.KeyboardEvent, entry: FileEntry) => {
       const flat = flattenVisible(fileTree, expanded);
@@ -727,13 +748,19 @@ export function FileTree() {
         case 'ArrowDown': {
           e.preventDefault();
           const next = flat[idx + 1];
-          if (next) moveFocus(next.path);
+          if (next) {
+            moveFocus(next.path);
+            previewEntry(next);
+          }
           break;
         }
         case 'ArrowUp': {
           e.preventDefault();
           const prev = flat[idx - 1];
-          if (prev) moveFocus(prev.path);
+          if (prev) {
+            moveFocus(prev.path);
+            previewEntry(prev);
+          }
           break;
         }
         case 'ArrowRight': {
@@ -795,7 +822,7 @@ export function FileTree() {
         }
       }
     },
-    [fileTree, expanded],
+    [fileTree, expanded, previewEntry],
   );
 
   const openKbMenu = useCallback((x: number, y: number, entry: FileEntry) => {
