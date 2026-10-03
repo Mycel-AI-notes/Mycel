@@ -22,6 +22,12 @@ export const SIDEBAR_MIN_WIDTH = 160;
 export const SIDEBAR_MAX_WIDTH = 600;
 export const SIDEBAR_DEFAULT_WIDTH = 224;
 
+/** Note column width (rem) when readable line width is on. */
+export const READABLE_WIDTH_MIN = 32;
+export const READABLE_WIDTH_MAX = 96;
+export const READABLE_WIDTH_DEFAULT = 46;
+export const READABLE_WIDTH_STEP = 4;
+
 /// Opt-in / opt-out switches for whole features. Persists across sessions
 /// so a user who hides Garden never has to deal with it again.
 export interface FeatureFlags {
@@ -44,6 +50,8 @@ interface UIState {
   palette: Palette;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
+  /** Width of the note column (rem) under readable line width. */
+  readableWidth: number;
   rightPanelCollapsed: boolean;
   rightPanelTab: 'backlinks' | 'outline' | 'tags';
   features: FeatureFlags;
@@ -73,6 +81,7 @@ interface UIState {
   setPalette: (palette: Palette) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  setReadableWidth: (rem: number) => void;
   toggleRightPanel: () => void;
   setRightPanelTab: (tab: UIState['rightPanelTab']) => void;
   setFeature: (key: keyof FeatureFlags, value: boolean) => void;
@@ -90,6 +99,9 @@ interface UIState {
   setDailyTemplate: (path: string) => void;
 }
 
+const clampReadableWidth = (rem: number) =>
+  Math.min(READABLE_WIDTH_MAX, Math.max(READABLE_WIDTH_MIN, Math.round(rem)));
+
 const clampSidebarWidth = (w: number) =>
   Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(w)));
 
@@ -100,6 +112,7 @@ export const useUIStore = create<UIState>()(
       palette: 'moss',
       sidebarCollapsed: false,
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+      readableWidth: READABLE_WIDTH_DEFAULT,
       rightPanelCollapsed: true,
       rightPanelTab: 'backlinks',
       features: DEFAULT_FEATURES,
@@ -118,6 +131,7 @@ export const useUIStore = create<UIState>()(
       setPalette: (palette) => set({ palette }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
+      setReadableWidth: (rem) => set({ readableWidth: clampReadableWidth(rem) }),
       toggleRightPanel: () => set((s) => ({ rightPanelCollapsed: !s.rightPanelCollapsed })),
       setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
       setFeature: (key, value) =>
@@ -145,6 +159,7 @@ export const useUIStore = create<UIState>()(
       name: 'mycel-ui',
       partialize: (s) => ({
         sidebarWidth: s.sidebarWidth,
+        readableWidth: s.readableWidth,
         theme: s.theme,
         palette: s.palette,
         features: s.features,

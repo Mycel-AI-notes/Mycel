@@ -11,7 +11,7 @@
  */
 import type { Command } from './commands';
 import { useVaultStore } from '@/stores/vault';
-import { useUIStore } from '@/stores/ui';
+import { useUIStore, READABLE_WIDTH_STEP } from '@/stores/ui';
 import { useGardenStore } from '@/stores/garden';
 import { useSyncStore } from '@/stores/sync';
 import { usePresentationStore } from '@/stores/presentation';
@@ -70,6 +70,27 @@ function saveActive() {
     return;
   }
   getEditorView(activeTabPath)?.dom.dispatchEvent(new CustomEvent(SAVE_EVENT));
+}
+
+/** Resize the note column, switching readable width on if it was off. */
+function nudgeReadableWidth(delta: number) {
+  const ui = useUIStore.getState();
+  if (!ui.features.readableWidth) ui.setFeature('readableWidth', true);
+  ui.setReadableWidth(ui.readableWidth + delta);
+}
+
+/** Put keyboard focus on the file tree — on the open note's row when it is
+ *  visible, else the first row — so ↑/↓ walk the files. */
+function focusFileTree() {
+  const ui = useUIStore.getState();
+  if (ui.sidebarCollapsed) ui.toggleSidebar();
+  requestAnimationFrame(() => {
+    const active = useVaultStore.getState().activeTabPath;
+    const rows = document.querySelectorAll<HTMLElement>('[data-tree-path]');
+    const row =
+      Array.from(rows).find((r) => r.dataset.treePath === active) ?? rows[0];
+    row?.focus();
+  });
 }
 
 function toggleTheme() {
@@ -242,6 +263,14 @@ export function getAppCommands(): Command[] {
       run: () => useUIStore.getState().toggleSidebar(),
     },
     {
+      id: 'view.focusFileTree',
+      title: 'Focus file tree',
+      section: 'View',
+      defaultHotkey: 'Mod+Shift+E',
+      enabled: vaultOpen,
+      run: focusFileTree,
+    },
+    {
       id: 'view.toggleRightPanel',
       title: 'Toggle right panel',
       section: 'View',
@@ -264,6 +293,18 @@ export function getAppCommands(): Command[] {
         const ui = useUIStore.getState();
         ui.setFeature('readableWidth', !ui.features.readableWidth);
       },
+    },
+    {
+      id: 'view.widerText',
+      title: 'Wider text column',
+      section: 'View',
+      run: () => nudgeReadableWidth(READABLE_WIDTH_STEP),
+    },
+    {
+      id: 'view.narrowerText',
+      title: 'Narrower text column',
+      section: 'View',
+      run: () => nudgeReadableWidth(-READABLE_WIDTH_STEP),
     },
     {
       id: 'view.toggleTheme',

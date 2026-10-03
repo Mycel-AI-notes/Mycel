@@ -108,7 +108,7 @@ function CryptoPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center"
+      className="fixed inset-0 z-40 myc-scrim flex items-center justify-center"
       onClick={onClose}
     >
       <div

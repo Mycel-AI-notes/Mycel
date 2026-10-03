@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { FileText, Keyboard, Sparkles, SlidersHorizontal, X } from 'lucide-react';
-import { useUIStore } from '@/stores/ui';
+import {
+  useUIStore,
+  READABLE_WIDTH_DEFAULT,
+  READABLE_WIDTH_MAX,
+  READABLE_WIDTH_MIN,
+} from '@/stores/ui';
 import type { FeatureFlags } from '@/stores/ui';
 import { AISettings } from '@/components/settings/AISettings';
 import { InsightsSettings } from '@/components/settings/InsightsSettings';
@@ -49,6 +54,8 @@ export function SettingsDialog() {
   const close = useUIStore((s) => s.closeSettings);
   const features = useUIStore((s) => s.features);
   const setFeature = useUIStore((s) => s.setFeature);
+  const readableWidth = useUIStore((s) => s.readableWidth);
+  const setReadableWidth = useUIStore((s) => s.setReadableWidth);
 
   // Per-open tab selection. We deliberately do NOT persist this — opening
   // Settings should put the user back on Features (the canonical first
@@ -59,7 +66,7 @@ export function SettingsDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-center justify-center myc-scrim backdrop-blur-[2px]"
       onClick={close}
     >
       <div
@@ -127,6 +134,35 @@ export function SettingsDialog() {
                     <label htmlFor={`feat-${row.key}`} className="flex-1 cursor-pointer">
                       <div className="text-sm text-text-primary">{row.label}</div>
                       <div className="text-xs text-text-muted mt-0.5">{row.description}</div>
+                      {row.key === 'readableWidth' && features.readableWidth && (
+                        <div className="flex items-center gap-3 mt-2">
+                          <input
+                            type="range"
+                            min={READABLE_WIDTH_MIN}
+                            max={READABLE_WIDTH_MAX}
+                            step={1}
+                            value={readableWidth}
+                            onChange={(e) => setReadableWidth(Number(e.target.value))}
+                            className="flex-1 accent-accent"
+                            aria-label="Text column width"
+                          />
+                          <span className="text-xs text-text-muted tabular-nums w-24 text-right">
+                            {Math.round(readableWidth * 16)}px
+                            {readableWidth !== READABLE_WIDTH_DEFAULT && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setReadableWidth(READABLE_WIDTH_DEFAULT);
+                                }}
+                                className="ml-2 text-accent hover:underline"
+                              >
+                                reset
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      )}
                     </label>
                   </li>
                 ))}

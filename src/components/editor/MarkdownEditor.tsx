@@ -180,6 +180,7 @@ export function MarkdownEditor({ path }: Props) {
     };
   }, []);
   const readableWidth = useUIStore((s) => s.features.readableWidth !== false);
+  const readableWidthRem = useUIStore((s) => s.readableWidth);
 
   // Bumped after every successful save of a quick note; the filing bar
   // below the editor re-asks the backend for suggestions on each bump.
@@ -427,6 +428,7 @@ export function MarkdownEditor({ path }: Props) {
       <div
         ref={editorRef}
         className={`flex-1 overflow-hidden${readableWidth || focusMode ? ' myc-readable' : ''}${focusMode ? ' myc-focus' : ''}`}
+        style={{ '--myc-readable-width': `${readableWidthRem}rem` } as React.CSSProperties}
       />
 
       {!focusMode && <MyceliumMargin path={path} view={getView} onEdit={onEdit} />}

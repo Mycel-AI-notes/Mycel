@@ -541,6 +541,34 @@ body {
   --color-app: color-mix(in srgb, var(--color-surface-1) 55%, var(--color-surface-2));
 }
 
+/* Overlay glass: how see-through a floating dialog is, and what dims the
+   room behind it. Dark rooms take a black scrim and thin glass; light ones
+   would turn muddy grey that way, so they get a soft ink tint and glass
+   that is nearly paper. */
+:root {
+  --glass-alpha: 92%;
+  --scrim: color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+  --glass-shadow: 0 24px 64px -20px rgb(0 0 0 / 0.22);
+}
+.dark {
+  --glass-alpha: 66%;
+  --scrim: rgb(0 0 0 / 0.5);
+  --glass-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.55);
+}
+.dark[data-palette='amber'],
+.dark[data-palette='azure'],
+.dark[data-palette='sage'],
+.dark[data-palette='classic'] {
+  --glass-alpha: 92%;
+  --scrim: color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+  --glass-shadow: 0 24px 64px -20px rgb(0 0 0 / 0.22);
+}
+
+/* The dimmed backdrop behind a modal. */
+.myc-scrim {
+  background: var(--scrim);
+}
+
 /* A floating pane: sidebar, editor, right panel. */
 .myc-panel {
   border-radius: 1rem;
@@ -582,13 +610,13 @@ body {
  * dress the chrome around them. */
 
 .myc-glass {
-  background: color-mix(in srgb, var(--color-surface-0) 66%, transparent);
+  background: color-mix(in srgb, var(--color-surface-0) var(--glass-alpha), transparent);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
   backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 7%, transparent),
-    0 30px 80px -24px rgb(0 0 0 / 0.55);
+    var(--glass-shadow);
 }
 
 /* A quieter pane — cards and inputs sitting inside glass. */
@@ -2340,7 +2368,7 @@ body {
  * rather than the full window width. Tables and database widgets live in
  * the same column. */
 .myc-readable .cm-content {
-  max-width: 46rem;
+  max-width: var(--myc-readable-width, 46rem);
   margin-left: auto;
   margin-right: auto;
   padding-left: 1.5rem;

@@ -87,7 +87,7 @@ export function PickerDialog<T extends PickerItem>({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50 backdrop-blur-[3px]"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] myc-scrim backdrop-blur-[3px]"
       onClick={onClose}
     >
       <div
